@@ -803,78 +803,489 @@
     ))))), blogs.length === 0 ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info" }, "Add your imaglr blog first: use the Blogs button on the page.") : null, problem ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, problem) : null), /* @__PURE__ */ react_default.createElement(Modal.Footer, { className: "imaglr-editor-footer" }, BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: cancelSend }, "Stop sending") : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger mr-auto", onClick: remove, disabled: locked }, removeLabel), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: cancel }, "Cancel"), confirmPublish ? /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-confirm" }, "Posts publicly on ", blog?.label, " right away.", /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setConfirmPublish(false) }, "Cancel"), /* @__PURE__ */ react_default.createElement(Button, { variant: "danger", onClick: send, disabled: busy }, "Publish now")) : /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: send, disabled: locked || !blog || !!problem }, busy ? "Starting\u2026" : sendButtonLabel(sendAction, blog)))));
   }
 
+  // src/ui/lib/sort.ts
+  var ZOOM_WIDTHS = [280, 340, 480, 640];
+  var DEFAULTS = {
+    sort: "added",
+    dir: "desc",
+    search: "",
+    status: "all",
+    types: [],
+    orientation: "any",
+    view: "grid",
+    zoom: 1
+  };
+  var SORTS = {
+    clips: [
+      { key: "added", label: "Added" },
+      { key: "name", label: "Name" },
+      { key: "length", label: "Length" },
+      { key: "size", label: "File size" },
+      { key: "created", label: "Created in Stash" },
+      { key: "date", label: "Scene date" },
+      { key: "dims", label: "Resolution" }
+    ],
+    images: [
+      { key: "added", label: "Added" },
+      { key: "name", label: "Name" },
+      { key: "type", label: "File type" },
+      { key: "size", label: "File size" },
+      { key: "created", label: "Created in Stash" },
+      { key: "date", label: "Image date" },
+      { key: "dims", label: "Resolution" }
+    ]
+  };
+  function num(v) {
+    return typeof v === "number" && isFinite(v) ? v : -1;
+  }
+  function str(v) {
+    return typeof v === "string" ? v.toLowerCase() : "";
+  }
+  function ts(v) {
+    const t = typeof v === "string" ? Date.parse(v) : NaN;
+    return isNaN(t) ? -1 : t;
+  }
+  function pixels(c) {
+    return num(c.width) > 0 && num(c.height) > 0 ? num(c.width) * num(c.height) : -1;
+  }
+  function keyOf(c, key) {
+    switch (key) {
+      case "added":
+        return ts(c.first_seen) >= 0 ? ts(c.first_seen) : ts(c.created_at);
+      case "name":
+        return str(c.title);
+      case "size":
+        return num(c.bytes);
+      case "length":
+        return num(c.duration);
+      case "type":
+        return str(c.format);
+      case "created":
+        return ts(c.created_at);
+      case "date":
+        return ts(c.date);
+      case "dims":
+        return pixels(c);
+    }
+  }
+  function orientationOf(c) {
+    const w = num(c.width), h = num(c.height);
+    if (w <= 0 || h <= 0) return "any";
+    if (Math.abs(w - h) / Math.max(w, h) < 0.02) return "square";
+    return w > h ? "landscape" : "portrait";
+  }
+  function applyControls(list, s) {
+    const q = s.search.trim().toLowerCase();
+    const out = list.filter((c) => {
+      if (q && !`${c.title} ${c.scene_title ?? ""}`.toLowerCase().includes(q)) return false;
+      if (s.status !== "all") {
+        const st = c.status ?? c.item?.status ?? null;
+        if (s.status === "untouched" ? st !== null : st !== s.status) return false;
+      }
+      if (s.types.length && !s.types.includes((c.format ?? "").toUpperCase())) return false;
+      if (s.orientation !== "any" && orientationOf(c) !== s.orientation) return false;
+      return true;
+    });
+    const mult = s.dir === "asc" ? 1 : -1;
+    return out.sort((a, b) => {
+      const ka = keyOf(a, s.sort), kb = keyOf(b, s.sort);
+      let r = typeof ka === "string" && typeof kb === "string" ? ka.localeCompare(kb) : ka - kb;
+      if (r === 0) r = ts(b.first_seen) - ts(a.first_seen);
+      return r * mult;
+    });
+  }
+  function formatsIn(list) {
+    const counts = /* @__PURE__ */ new Map();
+    for (const c of list) {
+      const f = (c.format ?? "").toUpperCase();
+      if (f) counts.set(f, (counts.get(f) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([f]) => f);
+  }
+  var storageKey = (tab) => `imaglr.controls.${tab}`;
+  function loadControls(tab, storage) {
+    try {
+      const raw = (storage ?? localStorage).getItem(storageKey(tab));
+      if (raw) {
+        const saved = { ...DEFAULTS, ...JSON.parse(raw) };
+        saved.zoom = Math.min(Math.max(Number(saved.zoom) || 0, 0), ZOOM_WIDTHS.length - 1);
+        return saved;
+      }
+    } catch {
+    }
+    return { ...DEFAULTS };
+  }
+  function saveControls(tab, s, storage) {
+    try {
+      (storage ?? localStorage).setItem(storageKey(tab), JSON.stringify(s));
+    } catch {
+    }
+  }
+  function filterCount(s) {
+    return (s.status !== "all" ? 1 : 0) + (s.types.length ? 1 : 0) + (s.orientation !== "any" ? 1 : 0);
+  }
+  function cardWidth(containerWidth, zoom) {
+    const preferred = ZOOM_WIDTHS[zoom] ?? ZOOM_WIDTHS[1];
+    if (!containerWidth) return preferred;
+    const usable = containerWidth - 30;
+    return usable / Math.ceil(usable / preferred) - 10;
+  }
+
   // src/ui/queue/ItemCard.tsx
-  function ItemCard({ card, highlighted }) {
-    const { Badge } = PluginApi.libraries.Bootstrap;
-    const ref = react_default.useRef(null);
+  function cardDetail(card) {
     const count = card.members?.length ?? 0;
+    if (count) return `${count} files in one post`;
+    if (card.kind === "clip") {
+      return [`${(card.duration ?? 0).toFixed(1)} s`, fmtDims(card.width, card.height)].filter(Boolean).join(" \xB7 ");
+    }
+    return [card.format?.toUpperCase(), fmtDims(card.width, card.height), card.animated ? "animated" : null].filter(Boolean).join(" \xB7 ");
+  }
+  function CardImage({ card }) {
     const [hover, setHover] = react_default.useState(false);
-    const canHover = typeof window !== "undefined" && window.matchMedia?.("(hover: hover)").matches;
-    react_default.useEffect(() => {
-      if (highlighted) ref.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-    }, [highlighted]);
-    const detail = count ? `${count} files in one post` : card.kind === "clip" ? [`${(card.duration ?? 0).toFixed(1)} s`, fmtDims(card.width, card.height)].filter(Boolean).join(" \xB7 ") : [card.format?.toUpperCase(), fmtDims(card.width, card.height), card.animated ? "animated" : null].filter(Boolean).join(" \xB7 ");
+    const canHover = window.matchMedia?.("(hover: hover)").matches;
+    const portrait = (card.height ?? 0) > (card.width ?? 0);
     return /* @__PURE__ */ react_default.createElement(
       "div",
       {
-        ref,
-        className: `imaglr-card card${count ? " imaglr-card-stack" : ""}${highlighted ? " imaglr-card-highlight" : ""}`
+        className: `image-card-preview${portrait ? " portrait" : ""}`,
+        onMouseEnter: () => canHover && card.preview && setHover(true),
+        onMouseLeave: () => setHover(false)
       },
-      /* @__PURE__ */ react_default.createElement(
-        "div",
-        {
-          className: "imaglr-card-thumb",
-          onMouseEnter: () => canHover && card.preview && setHover(true),
-          onMouseLeave: () => setHover(false)
-        },
-        hover && card.preview ? /* @__PURE__ */ react_default.createElement("video", { src: baseUrl() + card.preview, autoPlay: true, muted: true, loop: true, playsInline: true }) : card.thumb ? /* @__PURE__ */ react_default.createElement("img", { src: baseUrl() + card.thumb, alt: "", loading: "lazy" }) : null,
-        count ? /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-card-count" }, count) : null,
-        /* @__PURE__ */ react_default.createElement(Badge, { variant: STATUS_VARIANTS[card.status], className: "imaglr-card-status" }, STATUS_LABELS[card.status])
-      ),
-      /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-card-body" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-card-title", title: card.title }, card.title), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-card-detail text-muted" }, detail))
+      hover && card.preview ? /* @__PURE__ */ react_default.createElement("video", { className: "image-card-preview-image", src: baseUrl() + card.preview, autoPlay: true, muted: true, loop: true, playsInline: true }) : card.thumb ? /* @__PURE__ */ react_default.createElement("img", { className: "image-card-preview-image", src: baseUrl() + card.thumb, alt: "", loading: "lazy" }) : null
     );
+  }
+  function CardOverlays({ card }) {
+    const { Badge } = PluginApi.libraries.Bootstrap;
+    const count = card.members?.length ?? 0;
+    return /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, count ? /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-card-count", title: `${count} files in one post` }, count) : null, /* @__PURE__ */ react_default.createElement(Badge, { variant: STATUS_VARIANTS[card.status], className: "imaglr-card-status" }, STATUS_LABELS[card.status]));
+  }
+  function FallbackCard({ card, url, width }) {
+    const { Link } = PluginApi.libraries.ReactRouterDOM;
+    return /* @__PURE__ */ react_default.createElement("div", { className: "card grid-card image-card imaglr-grid-card", style: width ? { width } : void 0 }, /* @__PURE__ */ react_default.createElement("div", { className: "thumbnail-section" }, /* @__PURE__ */ react_default.createElement(Link, { to: url, className: "image-card-link" }, /* @__PURE__ */ react_default.createElement(CardImage, { card })), /* @__PURE__ */ react_default.createElement(CardOverlays, { card })), /* @__PURE__ */ react_default.createElement("div", { className: "card-section" }, /* @__PURE__ */ react_default.createElement(Link, { to: url }, /* @__PURE__ */ react_default.createElement("h5", { className: "card-section-title" }, card.title)), /* @__PURE__ */ react_default.createElement("div", { className: "image-card__details" }, /* @__PURE__ */ react_default.createElement("span", null, cardDetail(card)))));
+  }
+
+  // src/ui/queue/Toolbar.tsx
+  var STATUS_FILTERS = ["pending", "ready", "exporting", "sending", "failed"];
+  var ORIENTATIONS = ["portrait", "landscape", "square"];
+  function icon(name) {
+    const { Icon } = PluginApi.components;
+    return /* @__PURE__ */ react_default.createElement(Icon, { icon: PluginApi.libraries.FontAwesomeSolid[name] });
+  }
+  function SearchInput({ value, onChange }) {
+    const { Button, FormControl } = PluginApi.libraries.Bootstrap;
+    const [text, setText] = react_default.useState(value);
+    react_default.useEffect(() => setText(value), [value]);
+    react_default.useEffect(() => {
+      const timer = window.setTimeout(() => text !== value && onChange(text), 300);
+      return () => window.clearTimeout(timer);
+    }, [text]);
+    return /* @__PURE__ */ react_default.createElement("div", { className: "clearable-input-group search-term-input" }, /* @__PURE__ */ react_default.createElement(
+      FormControl,
+      {
+        className: "clearable-text-field",
+        value: text,
+        placeholder: "Search\u2026",
+        "aria-label": "Search",
+        onInput: (e) => setText(e.currentTarget.value),
+        onKeyDown: (e) => e.key === "Escape" && e.currentTarget.blur()
+      }
+    ), text ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", className: "clearable-text-field-clear", title: "Clear", onClick: () => {
+      setText("");
+      onChange("");
+    } }, icon("faTimes")) : null);
+  }
+  function SortBySelect({ tab, controls, onChange }) {
+    const { Dropdown, ButtonGroup, Button, InputGroup, OverlayTrigger, Tooltip } = PluginApi.libraries.Bootstrap;
+    const options = [...SORTS[tab]].sort((a, b) => a.label.localeCompare(b.label));
+    const current = options.find((o) => o.key === controls.sort);
+    const asc = controls.dir === "asc";
+    return /* @__PURE__ */ react_default.createElement(Dropdown, { as: ButtonGroup, className: "sort-by-select" }, /* @__PURE__ */ react_default.createElement(InputGroup.Prepend, null, /* @__PURE__ */ react_default.createElement(Dropdown.Toggle, { variant: "secondary" }, current?.label ?? "")), /* @__PURE__ */ react_default.createElement(Dropdown.Menu, { className: "bg-secondary text-white" }, options.map((o) => /* @__PURE__ */ react_default.createElement(
+      Dropdown.Item,
+      {
+        key: o.key,
+        eventKey: o.key,
+        className: "bg-secondary text-white",
+        onSelect: () => onChange({ ...controls, sort: o.key })
+      },
+      o.label
+    ))), /* @__PURE__ */ react_default.createElement(OverlayTrigger, { overlay: /* @__PURE__ */ react_default.createElement(Tooltip, { id: "imaglr-sort-direction" }, asc ? "Ascending" : "Descending") }, /* @__PURE__ */ react_default.createElement(
+      Button,
+      {
+        variant: "secondary",
+        "aria-label": asc ? "Ascending" : "Descending",
+        onClick: () => onChange({ ...controls, dir: asc ? "desc" : "asc" })
+      },
+      icon(asc ? "faCaretUp" : "faCaretDown")
+    )));
+  }
+  function ViewButtons({ controls, onChange }) {
+    const { ButtonGroup, Button, OverlayTrigger, Tooltip, Form } = PluginApi.libraries.Bootstrap;
+    const modes = [
+      { key: "grid", label: "Grid", icon: "faThLarge" },
+      { key: "list", label: "List", icon: "faList" }
+    ];
+    return /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(ButtonGroup, null, modes.map((m) => /* @__PURE__ */ react_default.createElement(OverlayTrigger, { key: m.key, overlay: /* @__PURE__ */ react_default.createElement(Tooltip, { id: `imaglr-view-${m.key}` }, m.label) }, /* @__PURE__ */ react_default.createElement(
+      Button,
+      {
+        variant: "secondary",
+        active: controls.view === m.key,
+        "aria-label": m.label,
+        onClick: () => onChange({ ...controls, view: m.key })
+      },
+      icon(m.icon)
+    )))), /* @__PURE__ */ react_default.createElement("div", { className: "zoom-slider-container" }, controls.view === "grid" ? /* @__PURE__ */ react_default.createElement(
+      Form.Control,
+      {
+        className: "zoom-slider",
+        type: "range",
+        min: 0,
+        max: ZOOM_WIDTHS.length - 1,
+        value: controls.zoom,
+        "aria-label": "Card size",
+        onChange: (e) => onChange({ ...controls, zoom: Number(e.currentTarget.value) })
+      }
+    ) : null));
+  }
+  function FilterTags({ controls, onChange }) {
+    const { Badge, Button } = PluginApi.libraries.Bootstrap;
+    const tags = [];
+    if (controls.status !== "all") {
+      tags.push({ label: `Status: ${STATUS_LABELS[controls.status] ?? controls.status}`, clear: { status: "all" } });
+    }
+    if (controls.types.length) tags.push({ label: `Type: ${controls.types.join(", ")}`, clear: { types: [] } });
+    if (controls.orientation !== "any") tags.push({ label: `Orientation: ${controls.orientation}`, clear: { orientation: "any" } });
+    if (!tags.length) return null;
+    return /* @__PURE__ */ react_default.createElement("div", { className: "wrap-tags filter-tags" }, tags.map((t) => /* @__PURE__ */ react_default.createElement(Badge, { key: t.label, className: "tag-item", variant: "secondary" }, t.label, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", "aria-label": `Remove ${t.label}`, onClick: () => onChange({ ...controls, ...t.clear }) }, icon("faTimes")))), tags.length > 1 ? /* @__PURE__ */ react_default.createElement(
+      Button,
+      {
+        variant: "link",
+        className: "clear-all-button",
+        onClick: () => onChange({ ...controls, status: "all", types: [], orientation: "any" })
+      },
+      "Clear all"
+    ) : null);
+  }
+  function FilterDialog({ tab, controls, items, onChange, onClose }) {
+    const { Modal, Button, Form } = PluginApi.libraries.Bootstrap;
+    const [draft, setDraft] = react_default.useState(controls);
+    const formats = formatsIn(items);
+    return /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: onClose }, /* @__PURE__ */ react_default.createElement(Modal.Header, { closeButton: true }, /* @__PURE__ */ react_default.createElement(Modal.Title, null, "Filter ", tab)), /* @__PURE__ */ react_default.createElement(Modal.Body, null, /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Status"), /* @__PURE__ */ react_default.createElement(
+      Form.Control,
+      {
+        as: "select",
+        className: "text-input",
+        value: draft.status,
+        onChange: (e) => setDraft({ ...draft, status: e.target.value })
+      },
+      /* @__PURE__ */ react_default.createElement("option", { value: "all" }, "Any"),
+      STATUS_FILTERS.map((s) => /* @__PURE__ */ react_default.createElement("option", { key: s, value: s }, STATUS_LABELS[s]))
+    )), formats.length > 1 ? /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Type"), formats.map((f) => /* @__PURE__ */ react_default.createElement(
+      Form.Check,
+      {
+        key: f,
+        id: `imaglr-type-${f}`,
+        type: "checkbox",
+        label: f,
+        checked: draft.types.includes(f),
+        onChange: (e) => setDraft({
+          ...draft,
+          types: e.target.checked ? [...draft.types, f] : draft.types.filter((t) => t !== f)
+        })
+      }
+    ))) : null, /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Orientation"), /* @__PURE__ */ react_default.createElement(
+      Form.Control,
+      {
+        as: "select",
+        className: "text-input",
+        value: draft.orientation,
+        onChange: (e) => setDraft({ ...draft, orientation: e.target.value })
+      },
+      /* @__PURE__ */ react_default.createElement("option", { value: "any" }, "Any"),
+      ORIENTATIONS.map((o) => /* @__PURE__ */ react_default.createElement("option", { key: o, value: o }, o[0].toUpperCase() + o.slice(1)))
+    ))), /* @__PURE__ */ react_default.createElement(Modal.Footer, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: onClose }, "Cancel"), /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => {
+      onChange(draft);
+      onClose();
+    } }, "Apply")));
+  }
+  function Toolbar(props) {
+    const { ButtonToolbar, ButtonGroup, Button, Badge, Dropdown } = PluginApi.libraries.Bootstrap;
+    const { controls, onChange, selected, selectionActions } = props;
+    const [showFilter, setShowFilter] = react_default.useState(false);
+    const count = filterCount(controls);
+    const buttons = selected ? selectionActions.filter((a) => a.primary) : [];
+    const menu = selected ? selectionActions.filter((a) => !a.primary) : [];
+    return /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(ButtonToolbar, { className: `filtered-list-toolbar${selected ? " has-selection" : ""}` }, selected ? /* @__PURE__ */ react_default.createElement("div", { className: "selected-items-info" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", className: "minimal", title: "Select none", onClick: props.onSelectNone }, icon("faTimes")), /* @__PURE__ */ react_default.createElement("span", { className: "selected-count" }, selected), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", className: "minimal", title: "Select all", onClick: props.onSelectAll }, icon("faSquareCheck"))) : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(SearchInput, { value: controls.search, onChange: (search) => onChange({ ...controls, search }) }), /* @__PURE__ */ react_default.createElement(ButtonGroup, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", className: "filter-button", title: "Filter", onClick: () => setShowFilter(true) }, icon("faFilter"), count ? /* @__PURE__ */ react_default.createElement(Badge, { pill: true, variant: "info" }, count) : null)), /* @__PURE__ */ react_default.createElement(SortBySelect, { tab: props.tab, controls, onChange })), /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "list-operations" }, buttons.map((a) => /* @__PURE__ */ react_default.createElement(Button, { key: a.text, variant: a.danger ? "danger" : "secondary", disabled: a.disabled, onClick: a.onClick }, a.text)), /* @__PURE__ */ react_default.createElement(Dropdown, { as: ButtonGroup }, /* @__PURE__ */ react_default.createElement(Dropdown.Toggle, { variant: "secondary", id: "imaglr-more", "aria-label": "More" }, icon("faEllipsisH")), /* @__PURE__ */ react_default.createElement(Dropdown.Menu, { className: "bg-secondary text-white" }, /* @__PURE__ */ react_default.createElement(Dropdown.Item, { className: "bg-secondary text-white", onClick: props.onSelectAll }, "Select all"), selected ? /* @__PURE__ */ react_default.createElement(Dropdown.Item, { className: "bg-secondary text-white", onClick: props.onSelectNone }, "Select none") : null, menu.map((a) => /* @__PURE__ */ react_default.createElement(Dropdown.Item, { key: a.text, className: "bg-secondary text-white", disabled: a.disabled, onClick: a.onClick }, a.text)), /* @__PURE__ */ react_default.createElement(Dropdown.Item, { className: "bg-secondary text-white", onClick: props.onRefresh }, "Refresh")))), /* @__PURE__ */ react_default.createElement(ViewButtons, { controls, onChange })), /* @__PURE__ */ react_default.createElement(FilterTags, { controls, onChange }), showFilter ? /* @__PURE__ */ react_default.createElement(FilterDialog, { tab: props.tab, controls, items: props.items, onChange, onClose: () => setShowFilter(false) }) : null);
   }
 
   // src/ui/queue/QueueTab.tsx
   var POLL_MS = 2e3;
+  var BUSY2 = ["exporting", "sending"];
   var EMPTY = {
     clips: (tag) => /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("p", null, "No clips waiting."), /* @__PURE__ */ react_default.createElement("p", null, "In Stash, add the tag ", /* @__PURE__ */ react_default.createElement("strong", null, tag), " to a scene marker (on the scene's ", /* @__PURE__ */ react_default.createElement("strong", null, "Markers"), " tab). Its start and end become the clip; you can trim it here.")),
     images: (tag) => /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("p", null, "No images waiting."), /* @__PURE__ */ react_default.createElement("p", null, "In Stash, tag images ", /* @__PURE__ */ react_default.createElement("strong", null, tag), ", or tick images in any image list and choose", " ", /* @__PURE__ */ react_default.createElement("strong", null, "\u22EF \u2192 Add to imaglr"), ". Stills saved from clips appear here too."))
   };
+  function useContainerWidth(ref) {
+    const [width, setWidth] = react_default.useState(0);
+    react_default.useEffect(() => {
+      const el = ref.current;
+      if (!el) return;
+      const observer = new ResizeObserver(() => setWidth(el.clientWidth));
+      observer.observe(el);
+      return () => observer.disconnect();
+    }, [ref]);
+    return width;
+  }
   function QueueTab({ tab, openId }) {
-    const { Button } = PluginApi.libraries.Bootstrap;
+    const { Button, Table, Badge } = PluginApi.libraries.Bootstrap;
+    const { Link, useHistory } = PluginApi.libraries.ReactRouterDOM;
     const { LoadingIndicator } = PluginApi.components;
+    const Toast = PluginApi.hooks.useToast();
+    const history = useHistory();
+    const loading = PluginApi.hooks.useLoadComponents([PluginApi.loadableComponents.SceneCard]);
+    const GridCard = loading ? null : PluginApi.components.GridCard;
     const [data, setData] = react_default.useState(null);
     const [error, setError] = react_default.useState(null);
-    const [loading, setLoading] = react_default.useState(false);
-    const [editing, setEditing] = react_default.useState(openId);
+    const [controls, setControls] = react_default.useState(() => loadControls(tab));
+    const [selected, setSelected] = react_default.useState(/* @__PURE__ */ new Set());
+    const box = react_default.useRef(null);
+    const width = useContainerWidth(box);
+    const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 576px)").matches;
     const load = react_default.useCallback(() => {
-      setLoading(true);
       return runOperation("queue").then((d) => {
         setData(d);
         setError(null);
-      }, (e) => setError(e.message)).finally(() => setLoading(false));
+      }, (e) => setError(e.message));
     }, []);
     react_default.useEffect(() => {
       runOperation("recover").catch(() => void 0).finally(load);
     }, [load]);
-    const items = data?.items.filter((c) => c.tab === tab) ?? [];
-    const inFlight = items.some((c) => c.status === "exporting" || c.status === "sending");
+    function updateControls(next) {
+      setControls(next);
+      saveControls(tab, next);
+    }
+    const all = data?.items.filter((c) => c.tab === tab) ?? [];
+    const items = applyControls(all, controls);
+    const inFlight = all.some((c) => BUSY2.includes(c.status));
     react_default.useEffect(() => {
-      if (!inFlight || editing) return;
+      if (!inFlight || openId) return;
       const timer = window.setTimeout(load, POLL_MS);
       return () => window.clearTimeout(timer);
-    }, [data, inFlight, editing, load]);
-    if (error) {
-      return /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-danger" }, "Couldn't load the queue: ", error, " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0", onClick: load }, "Try again"));
+    }, [data, inFlight, openId, load]);
+    react_default.useEffect(() => {
+      setSelected((s) => new Set([...s].filter((id) => all.some((c) => c.id === id))));
+    }, [data]);
+    function toggle(id, on) {
+      setSelected((s) => {
+        const next = new Set(s);
+        if (on) next.add(id);
+        else next.delete(id);
+        return next;
+      });
     }
-    if (!data) return LoadingIndicator ? /* @__PURE__ */ react_default.createElement(LoadingIndicator, null) : /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Loading\u2026");
-    return /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-toolbar" }, /* @__PURE__ */ react_default.createElement("span", { className: "text-muted" }, items.length, " ", items.length === 1 ? "item" : "items"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", size: "sm", onClick: load, disabled: loading }, loading ? "Refreshing\u2026" : "Refresh")), items.length === 0 ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-empty text-muted" }, EMPTY[tab](data.tags.queue.name)) : /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-grid" }, items.map((card) => /* @__PURE__ */ react_default.createElement("button", { key: card.id, type: "button", className: "imaglr-card-button", onClick: () => setEditing(card.id) }, /* @__PURE__ */ react_default.createElement(ItemCard, { card, highlighted: card.id === openId })))), editing ? /* @__PURE__ */ react_default.createElement(
+    const picked = all.filter((c) => selected.has(c.id));
+    const files = picked.flatMap((c) => c.members?.length ? c.members : [c]);
+    const busyPicked = picked.some((c) => BUSY2.includes(c.status) || c.status === "sent");
+    async function run(action, done) {
+      try {
+        await action();
+        Toast.success(done);
+        setSelected(/* @__PURE__ */ new Set());
+        load();
+      } catch (e) {
+        Toast.error(e);
+      }
+    }
+    const selectionActions = [
+      {
+        text: "Make one post",
+        primary: true,
+        disabled: files.length < 2 || files.length > MAX_POST_FILES || busyPicked,
+        onClick: () => run(
+          () => runOperation("post_create", { item_ids: files.map((f) => f.id) }),
+          `${files.length} files are now one post.`
+        )
+      },
+      {
+        text: "Split into separate posts",
+        disabled: !picked.some((c) => c.kind === "set") || busyPicked,
+        onClick: () => run(() => Promise.all(picked.filter((c) => c.kind === "set").map((c) => runOperation("post_split", { post_id: c.id }))), "Split into separate posts.")
+      },
+      {
+        text: `Remove "${data?.tags.queue.name ?? "imaglr"}" tag`,
+        disabled: busyPicked,
+        onClick: () => {
+          const tag = data?.tags.queue.name ?? "imaglr";
+          if (!window.confirm(`Remove the "${tag}" tag in Stash from ${picked.length} item(s)? They leave this page. Nothing on imaglr is changed and nothing is deleted.`)) return;
+          void run(
+            () => Promise.all(picked.map((c) => runOperation("remove_from_queue", { item_id: c.id }))),
+            "Removed from this page."
+          );
+        }
+      }
+    ];
+    const url = (c) => `${ROUTE}?tab=${tab}&open=${c.id}`;
+    const selecting = selected.size > 0;
+    let body;
+    if (error) {
+      body = /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-danger" }, "Couldn't load the queue: ", error, " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0", onClick: load }, "Try again"));
+    } else if (!data) {
+      body = LoadingIndicator ? /* @__PURE__ */ react_default.createElement(LoadingIndicator, null) : /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Loading\u2026");
+    } else if (all.length === 0) {
+      body = /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-empty text-muted" }, EMPTY[tab](data.tags.queue.name));
+    } else if (items.length === 0) {
+      body = /* @__PURE__ */ react_default.createElement("p", { className: "text-muted imaglr-empty" }, "Nothing matches these filters.");
+    } else if (controls.view === "list") {
+      body = /* @__PURE__ */ react_default.createElement(Table, { striped: true, bordered: true, size: "sm", className: "imaglr-table" }, /* @__PURE__ */ react_default.createElement("tbody", null, items.map((c) => /* @__PURE__ */ react_default.createElement("tr", { key: c.id }, /* @__PURE__ */ react_default.createElement("td", { className: "select-col" }, /* @__PURE__ */ react_default.createElement(
+        "input",
+        {
+          type: "checkbox",
+          className: "mousetrap",
+          checked: selected.has(c.id),
+          "aria-label": `Select ${c.title}`,
+          onChange: (e) => toggle(c.id, e.target.checked)
+        }
+      )), /* @__PURE__ */ react_default.createElement("td", { className: "imaglr-table-thumb" }, /* @__PURE__ */ react_default.createElement(CardImage, { card: c })), /* @__PURE__ */ react_default.createElement("td", null, /* @__PURE__ */ react_default.createElement(Link, { to: url(c) }, c.title), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted" }, cardDetail(c))), /* @__PURE__ */ react_default.createElement("td", { className: "imaglr-table-status" }, /* @__PURE__ */ react_default.createElement(Badge, { variant: STATUS_VARIANTS[c.status] }, STATUS_LABELS[c.status]))))));
+    } else {
+      const w = isMobile ? void 0 : cardWidth(width, controls.zoom);
+      body = /* @__PURE__ */ react_default.createElement("div", { className: "row justify-content-center imaglr-cards" }, items.map(
+        (c) => GridCard ? /* @__PURE__ */ react_default.createElement(
+          GridCard,
+          {
+            key: c.id,
+            className: `image-card zoom-${controls.zoom} imaglr-grid-card${c.id === openId ? " imaglr-card-highlight" : ""}`,
+            linkClassName: "image-card-link",
+            width: w,
+            url: url(c),
+            title: c.title,
+            image: /* @__PURE__ */ react_default.createElement(CardImage, { card: c }),
+            overlays: /* @__PURE__ */ react_default.createElement(CardOverlays, { card: c }),
+            details: /* @__PURE__ */ react_default.createElement("div", { className: "image-card__details" }, /* @__PURE__ */ react_default.createElement("span", null, cardDetail(c))),
+            selecting,
+            selected: selected.has(c.id),
+            onSelectedChanged: (on) => toggle(c.id, on)
+          }
+        ) : /* @__PURE__ */ react_default.createElement(FallbackCard, { key: c.id, card: c, url: url(c), width: w })
+      ));
+    }
+    return /* @__PURE__ */ react_default.createElement("div", { ref: box }, /* @__PURE__ */ react_default.createElement(
+      Toolbar,
+      {
+        tab,
+        controls,
+        items: all,
+        selected: selected.size,
+        selectionActions,
+        onChange: updateControls,
+        onSelectAll: () => setSelected(new Set(items.map((c) => c.id))),
+        onSelectNone: () => setSelected(/* @__PURE__ */ new Set()),
+        onRefresh: load
+      }
+    ), data && all.length ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-count text-center text-muted" }, items.length === all.length ? `${all.length} ${all.length === 1 ? "item" : "items"}` : `${items.length} of ${all.length}`) : null, body, openId ? /* @__PURE__ */ react_default.createElement(
       Editor,
       {
-        itemId: editing,
+        itemId: openId,
         onClose: (changed) => {
-          setEditing(null);
+          history.replace({ search: `?tab=${tab}` });
           if (changed) load();
         }
       }

@@ -9,7 +9,9 @@ export type Orientation = "any" | "portrait" | "landscape" | "square";
 export type StatusFilter = "all" | "untouched" | Status;
 
 export type ViewMode = "grid" | "list";
-export type Density = "s" | "m" | "l";
+
+/** Stash's image-card widths for its zoom slider (ui/v2.5/src/components/Images/ImageCardGrid.tsx). */
+export const ZOOM_WIDTHS = [280, 340, 480, 640];
 
 export interface QueueControlsState {
   sort: SortKey;
@@ -19,14 +21,12 @@ export interface QueueControlsState {
   types: string[]; // upper-case formats, empty = all
   orientation: Orientation;
   view: ViewMode;
-  density: Density;
-  titles: boolean;
-  fit: "contain" | "cover";
+  zoom: number; // index into ZOOM_WIDTHS, like Stash's zoom slider
 }
 
 export const DEFAULTS: QueueControlsState = {
   sort: "added", dir: "desc", search: "", status: "all", types: [], orientation: "any",
-  view: "grid", density: "m", titles: true, fit: "contain",
+  view: "grid", zoom: 1,
 };
 
 export const SORTS: Record<"clips" | "images", { key: SortKey; label: string }[]> = {
@@ -72,7 +72,7 @@ export function applyControls<T extends Candidate>(list: T[], s: QueueControlsSt
   const out = list.filter((c) => {
     if (q && !`${c.title} ${c.scene_title ?? ""}`.toLowerCase().includes(q)) return false;
     if (s.status !== "all") {
-      const st = c.item?.status ?? null;
+      const st = c.status ?? c.item?.status ?? null;
       if (s.status === "untouched" ? st !== null : st !== s.status) return false;
     }
     if (s.types.length && !s.types.includes((c.format ?? "").toUpperCase())) return false;
@@ -106,11 +106,31 @@ const storageKey = (tab: string) => `imaglr.controls.${tab}`;
 export function loadControls(tab: string, storage?: ControlsStorage): QueueControlsState {
   try {
     const raw = (storage ?? localStorage).getItem(storageKey(tab));
-    if (raw) return { ...DEFAULTS, ...JSON.parse(raw) };
+    if (raw) {
+      const saved = { ...DEFAULTS, ...JSON.parse(raw) } as QueueControlsState;
+      saved.zoom = Math.min(Math.max(Number(saved.zoom) || 0, 0), ZOOM_WIDTHS.length - 1);
+      return saved;
+    }
   } catch { /* ignore */ }
   return { ...DEFAULTS };
 }
 
 export function saveControls(tab: string, s: QueueControlsState, storage?: ControlsStorage): void {
   try { (storage ?? localStorage).setItem(storageKey(tab), JSON.stringify(s)); } catch { /* ignore */ }
+}
+
+/** Number of active filters, shown on the Filter button like Stash does. */
+export function filterCount(s: QueueControlsState): number {
+  return (s.status !== "all" ? 1 : 0) + (s.types.length ? 1 : 0) + (s.orientation !== "any" ? 1 : 0);
+}
+
+/**
+ * Card width in px for a container, following Stash's own calculateCardWidth
+ * (ui/v2.5/src/components/Shared/GridCard/GridCard.tsx): fill each row evenly near the preferred width.
+ */
+export function cardWidth(containerWidth: number, zoom: number): number {
+  const preferred = ZOOM_WIDTHS[zoom] ?? ZOOM_WIDTHS[1];
+  if (!containerWidth) return preferred;
+  const usable = containerWidth - 30;
+  return usable / Math.ceil(usable / preferred) - 10;
 }

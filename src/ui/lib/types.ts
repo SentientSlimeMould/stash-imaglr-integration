@@ -16,6 +16,7 @@ export interface Candidate {
   created_at?: string | null;
   date?: string | null;
   first_seen?: string | null;
+  status?: Status;
   item?: { status: Status } | null;
 }
 

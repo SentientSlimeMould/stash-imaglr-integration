@@ -17,6 +17,7 @@ declare global {
       [name: string]: any;
     };
     components: Record<string, any>;
+    loadableComponents: Record<string, () => Promise<unknown>>;
     register: {
       route: (path: string, component: ReactTypes.FC) => void;
     };

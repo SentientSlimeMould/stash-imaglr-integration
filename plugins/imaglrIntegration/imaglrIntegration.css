@@ -23,37 +23,12 @@
   padding: 2rem 0;
   max-width: 36rem;
 }
-.imaglr-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 0.75rem;
-}
-@media (min-width: 768px) {
-  .imaglr-grid {
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  }
-}
-.imaglr-card {
-  overflow: hidden;
-  margin: 0;
-}
-.imaglr-card-thumb {
+.imaglr-grid-card .thumbnail-section {
   position: relative;
-  aspect-ratio: 4 / 5;
-  background: #000;
-}
-.imaglr-card-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-.imaglr-card-stack .imaglr-card-thumb {
-  box-shadow: 4px -4px 0 -1px #394b59, 8px -8px 0 -2px #30404d;
-  margin: 8px 8px 0 0;
 }
 .imaglr-card-count {
   position: absolute;
+  z-index: 1;
   left: 0.4rem;
   bottom: 0.4rem;
   background: rgba(0, 0, 0, 0.7);
@@ -64,21 +39,14 @@
 }
 .imaglr-card-status {
   position: absolute;
+  z-index: 1;
   right: 0.4rem;
   top: 0.4rem;
 }
-.imaglr-card-body {
-  padding: 0.4rem 0.5rem 0.5rem;
-  min-width: 0;
-}
-.imaglr-card-title,
-.imaglr-card-detail {
+.imaglr-card-title {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.imaglr-card-detail {
-  font-size: 0.8rem;
 }
 .imaglr-card-highlight {
   outline: 2px solid #48aff0;
@@ -95,18 +63,6 @@
 }
 .imaglr-footer {
   margin-top: 1.5rem;
-}
-.imaglr-card-button {
-  background: none;
-  border: 0;
-  padding: 0;
-  text-align: left;
-  color: inherit;
-  width: 100%;
-}
-.imaglr-card-button:focus-visible {
-  outline: 2px solid #48aff0;
-  outline-offset: 2px;
 }
 @media (max-width: 575.98px) {
   .imaglr-editor.modal-dialog {
@@ -324,12 +280,6 @@
   min-width: 10.5rem;
   min-height: 38px;
 }
-.imaglr-card-thumb video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
 .imaglr-video video {
   width: 100%;
   height: 100%;
@@ -379,4 +329,34 @@
   .imaglr-time-buttons {
     grid-column: 1 / -1;
   }
+}
+.imaglr-count {
+  margin: 0.5rem 0;
+}
+.imaglr-table td {
+  vertical-align: middle;
+}
+.imaglr-table {
+  table-layout: fixed;
+}
+.imaglr-table .select-col {
+  width: 44px;
+  text-align: center;
+}
+.imaglr-table-thumb {
+  width: 88px;
+}
+.imaglr-table-status {
+  width: 110px;
+  text-align: right;
+}
+.imaglr-table-thumb .image-card-preview-image {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  display: block;
+}
+.imaglr-table .select-col input {
+  width: 22px;
+  height: 22px;
 }

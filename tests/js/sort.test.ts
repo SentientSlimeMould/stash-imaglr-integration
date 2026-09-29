@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applyControls, DEFAULTS, formatsIn, loadControls, orientationOf, saveControls } from "../../src/ui/lib/sort.ts";
+import {
+  applyControls, cardWidth, DEFAULTS, filterCount, formatsIn, loadControls, orientationOf, saveControls,
+} from "../../src/ui/lib/sort.ts";
 import type { Candidate } from "../../src/ui/lib/types.ts";
 
 type Img = Candidate & { id: string };
@@ -72,10 +74,22 @@ test("controls are saved per tab and merged over defaults", () => {
   const store = new Map<string, string>();
   const storage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) };
   assert.deepEqual(loadControls("images", storage), DEFAULTS);
-  saveControls("images", { ...DEFAULTS, sort: "name", density: "l" }, storage);
+  saveControls("images", { ...DEFAULTS, sort: "name", zoom: 3 }, storage);
   assert.deepEqual([...store.keys()], ["imaglr.controls.images"]);
   assert.equal(loadControls("images", storage).sort, "name");
   assert.equal(loadControls("clips", storage).sort, "added");
   store.set("imaglr.controls.clips", "{not json");
   assert.deepEqual(loadControls("clips", storage), DEFAULTS);
+});
+
+test("status can be read straight from a card", () => {
+  const cards = [img({ id: "a", status: "failed" }), img({ id: "b", status: "ready" })];
+  assert.deepEqual(ids(applyControls(cards, { ...DEFAULTS, status: "failed" })), ["a"]);
+});
+
+test("filter count and card width follow Stash", () => {
+  assert.equal(filterCount(DEFAULTS), 0);
+  assert.equal(filterCount({ ...DEFAULTS, status: "failed", orientation: "portrait" }), 2);
+  assert.equal(cardWidth(0, 1), 340);
+  assert.equal(Math.round(cardWidth(1230, 1)), 290); // 4 per row in a 1200px usable width
 });
