@@ -14,6 +14,7 @@ import traceback
 from typing import Any
 
 from . import blog_ops, log, queue_ops, send_ops
+from .settings import SettingsError
 from .context import Context, UserError, plugin_version
 
 __all__ = ["handle", "OPERATIONS", "UserError", "plugin_version"]
@@ -56,7 +57,7 @@ def handle(request: dict[str, Any]) -> tuple[Any, str | None]:
         return None, f"Unknown mode: {mode!r}"
     try:
         return handler(ctx), None
-    except UserError as e:
+    except (UserError, SettingsError) as e:
         return None, str(e)
     except Exception as e:  # report, never crash without a reply
         log.error(f"{mode} failed: {e}\n{traceback.format_exc()}")

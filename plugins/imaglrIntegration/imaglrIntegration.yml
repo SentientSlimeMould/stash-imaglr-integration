@@ -12,27 +12,29 @@ ui:
   css:
     - imaglrIntegration.css
 settings:
-  queueTag:
+  # Stash lists settings sorted by these keys, so they are named to keep the order sensible.
+  # Numbers are STRING settings so an unsaved value shows empty rather than 0.
+  tagQueue:
     displayName: Queue tag
-    description: Stash tag that puts markers and images on the Post to imaglr page. Leave empty for "imaglr".
+    description: Markers and images with this Stash tag appear on the Post to imaglr page. Leave empty for "imaglr". To change it later, rename the tag in Stash too so tagged items keep showing.
     type: STRING
-  doneTag:
+  tagSent:
     displayName: Sent tag
-    description: Tag that replaces the queue tag once an item is sent. Leave empty for "imaglr-sent".
+    description: Replaces the queue tag once an item is sent. Leave empty for "imaglr-sent". Must differ from the queue tag.
     type: STRING
-  excludeTagPatterns:
-    displayName: Tags never suggested
-    description: Comma-separated regular expressions; matching Stash tags are not suggested for imaglr. Leave empty for "^AI_".
-    type: STRING
-  keepTagCase:
+  tagsKeepCapitals:
     displayName: Keep tag capitals
     description: Send tags with their capital letters. Off (the default) sends them in lower case.
     type: BOOLEAN
-  defaultClipSeconds:
+  tagsNeverSuggested:
+    displayName: Tags never suggested
+    description: Comma-separated regular expressions; matching Stash tags are not suggested for imaglr. Leave empty for "^AI_".
+    type: STRING
+  videoDefaultClipSeconds:
     displayName: Default clip length (seconds)
     description: Used when a marker has no end time. Leave empty for 15.
-    type: NUMBER
-  preparedRetentionDays:
+    type: STRING
+  workingFilesKeepDays:
     displayName: Keep prepared files (days)
-    description: How long processed files are kept after sending, for re-sending. Leave empty for 14.
-    type: NUMBER
+    description: How long processed files are kept after sending. Leave empty for 14.
+    type: STRING

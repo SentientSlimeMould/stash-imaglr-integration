@@ -194,7 +194,10 @@ def run_send(ctx: Context, item_id: str) -> None:
             raise JobFailed("post_empty", "This post has no files.")
         blog = choose_blog(ctx, item)
         action = blogs.resolve_action(blog, item["action"])
-        config = plugin_settings.load(ctx.stash)
+        try:
+            config = plugin_settings.load(ctx.stash)
+        except plugin_settings.SettingsError as e:
+            raise JobFailed("settings", str(e), status="ready") from None
         queue_tag, done_tag = api.workflow_tags(ctx.stash, config.queue_tag, config.done_tag)
 
         # 1. prepare (0-40 %)

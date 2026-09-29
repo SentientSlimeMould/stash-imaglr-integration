@@ -27,13 +27,17 @@ class Settings:
 
 # Stash setting name -> (field, converter). Keep in step with `settings:` in imaglrIntegration.yml.
 _FIELDS = {
-    "queueTag": ("queue_tag", str),
-    "doneTag": ("done_tag", str),
-    "excludeTagPatterns": ("exclude_patterns", str),
-    "keepTagCase": ("keep_tag_case", bool),
-    "defaultClipSeconds": ("default_clip_seconds", float),
-    "preparedRetentionDays": ("prepared_retention_days", int),
+    "tagQueue": ("queue_tag", str),
+    "tagSent": ("done_tag", str),
+    "tagsKeepCapitals": ("keep_tag_case", bool),
+    "tagsNeverSuggested": ("exclude_patterns", str),
+    "videoDefaultClipSeconds": ("default_clip_seconds", float),
+    "workingFilesKeepDays": ("prepared_retention_days", int),
 }
+
+
+class SettingsError(ValueError):
+    """A combination of settings the plugin can't work with; the message says how to fix it."""
 
 
 def parse(raw: dict[str, Any] | None) -> Settings:
@@ -43,6 +47,8 @@ def parse(raw: dict[str, Any] | None) -> Settings:
         if value is None or (isinstance(value, str) and not value.strip()):
             continue
         try:
+            if convert is int:
+                value = float(value)  # "14.0" from a text field
             values[field] = convert(value.strip() if isinstance(value, str) else value)
         except (TypeError, ValueError):
             continue
@@ -50,7 +56,13 @@ def parse(raw: dict[str, Any] | None) -> Settings:
         values.pop("default_clip_seconds")
     if values.get("prepared_retention_days", 1) < 1:
         values.pop("prepared_retention_days")
-    return Settings(**values)
+    settings = Settings(**values)
+    if settings.queue_tag.casefold() == settings.done_tag.casefold():
+        raise SettingsError(
+            "The plugin's Queue tag and Sent tag are the same. Give them different names in "
+            "Settings → Plugins → Imaglr Integration."
+        )
+    return settings
 
 
 def load(stash: Any) -> Settings:
