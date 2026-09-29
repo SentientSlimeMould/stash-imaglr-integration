@@ -101,3 +101,292 @@
 .imaglr-card-highlight {
   outline: 2px solid #48aff0;
 }
+
+.imaglr-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.imaglr-page-header .imaglr-page-title {
+  margin: 0;
+}
+
+.imaglr-footer {
+  margin-top: 1.5rem;
+}
+
+/* Cards are buttons (tap to edit): reset button styling, keep a visible focus ring. */
+.imaglr-card-button {
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+  width: 100%;
+}
+
+.imaglr-card-button:focus-visible {
+  outline: 2px solid #48aff0;
+  outline-offset: 2px;
+}
+
+/* Editor and settings: full screen on phones. */
+@media (max-width: 575.98px) {
+  .imaglr-editor.modal-dialog {
+    margin: 0;
+    max-width: none;
+    min-height: 100%;
+  }
+
+  .imaglr-editor.modal-dialog,
+  .imaglr-editor.modal-dialog-scrollable {
+    height: 100%;
+    max-height: 100%;
+  }
+
+  /* Stash's phone menu bar (48.75px) sits above modals, so stop just above it. */
+  .imaglr-editor .modal-content {
+    display: flex;
+    flex-direction: column;
+    height: calc(100% - 48.75px);
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .imaglr-editor .modal-body {
+    flex: 1 1 auto;
+    max-height: none;
+    overflow-y: auto;
+  }
+}
+
+.imaglr-editor-footer {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.imaglr-editor-footer .btn,
+.imaglr-segmented .btn,
+.imaglr-chip-remove,
+.imaglr-strip-actions button {
+  min-height: 44px;
+}
+
+.imaglr-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.imaglr-segmented {
+  flex-wrap: wrap;
+}
+
+.imaglr-preview {
+  position: relative;
+  height: min(60vh, 520px);
+  background: #000;
+}
+
+.imaglr-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.imaglr-crop {
+  position: absolute;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+
+.imaglr-preview {
+  overflow: hidden;
+}
+
+.imaglr-strip {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  list-style: none;
+  padding: 0 0 0.5rem;
+  margin: 0;
+}
+
+.imaglr-strip-item {
+  position: relative;
+  flex: 0 0 auto;
+  width: 132px;
+}
+
+.imaglr-strip-item img {
+  width: 132px;
+  height: 132px;
+  object-fit: cover;
+  display: block;
+  background: #000;
+}
+
+.imaglr-strip-number {
+  position: absolute;
+  left: 0.3rem;
+  top: 0.3rem;
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 1rem;
+  padding: 0 0.45rem;
+  font-size: 0.8rem;
+}
+
+.imaglr-strip-actions {
+  display: flex;
+}
+
+.imaglr-strip-actions button {
+  flex: 1;
+  background: #394b59;
+  border: 0;
+  color: #f5f8fa;
+}
+
+.imaglr-strip-actions button:disabled {
+  opacity: 0.4;
+}
+
+.imaglr-tags {
+  margin-top: 1rem;
+}
+
+.imaglr-tags-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+}
+
+.imaglr-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.imaglr-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #394b59;
+  color: #f5f8fa;
+  border: 0;
+  border-radius: 1rem;
+  padding: 0.15rem 0.2rem 0.15rem 0.7rem;
+  min-height: 32px;
+}
+
+.imaglr-chip-source {
+  opacity: 0.6;
+  font-size: 0.7rem;
+}
+
+.imaglr-chip-remove {
+  background: none;
+  border: 0;
+  color: inherit;
+  font-size: 1.1rem;
+  line-height: 1;
+  min-width: 36px;
+}
+
+.imaglr-chip-parked {
+  background: transparent;
+  border: 1px dashed #5c7080;
+  padding-right: 0.7rem;
+  min-height: 44px;
+}
+
+.imaglr-chip-parked:disabled {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.imaglr-parked summary {
+  cursor: pointer;
+  margin-bottom: 0.4rem;
+}
+
+.imaglr-sent {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.imaglr-sent-row {
+  display: flex;
+  flex-direction: row;
+  gap: 0.75rem;
+  padding: 0.5rem;
+  margin: 0;
+}
+
+.imaglr-sent-thumb img {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  background: #000;
+}
+
+.imaglr-sent-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.imaglr-dropped {
+  margin-right: 0.6rem;
+}
+
+.imaglr-add-blog {
+  border-top: 1px solid #394b59;
+  padding-top: 1rem;
+}
+
+@media (max-width: 575.98px) {
+  .imaglr-preview {
+    height: 38vh;
+  }
+
+  .imaglr-editor-footer .btn-primary,
+  .imaglr-editor-footer .btn-danger {
+    flex: 1 1 100%;
+  }
+}
+
+.imaglr-blog-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+
+.imaglr-blog {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #394b59;
+}
+
+.imaglr-blog-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+.imaglr-blog-controls select {
+  width: auto;
+  min-width: 10.5rem;
+  min-height: 38px;
+}

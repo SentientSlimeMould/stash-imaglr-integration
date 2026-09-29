@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import Any
 
 from . import items as repo
-from . import services, settings
+from . import blogs, services, settings
 from .context import Context, UserError
 from .stash import Image, api
 
@@ -112,7 +112,74 @@ def op_post_split(ctx: Context) -> dict[str, Any]:
     return {"ok": True}
 
 
+def _item(ctx: Context) -> dict[str, Any]:
+    item = repo.get_item(ctx.db, ctx.arg("item_id"))
+    if item is None:
+        raise UserError("That item no longer exists. Refresh the page.")
+    return item
+
+
+def op_item_detail(ctx: Context) -> dict[str, Any]:
+    """Everything the editor needs: the item, its files, tag suggestions and the blogs to choose from."""
+    item = _item(ctx)
+    config = settings.load(ctx.stash)
+    members = repo.set_members(ctx.db, item["id"]) if item["kind"] == "set" else [item]
+    images = [api.find_image(ctx.stash, m["stash_image_id"]) if m["stash_image_id"] else None for m in members]
+    files = []
+    for member, image in zip(members, images):
+        card = services.image_card(member, image, None)
+        card["image"] = services.relative_url(image.image_url) if image else None
+        card["crop"] = member["crop"]
+        files.append(card)
+    found = [i for i in images if i is not None]
+    suggestions = services.post_suggestions(ctx.db, config, found) if found else None
+    return {
+        "item": {k: item[k] for k in ("id", "kind", "status", "tags", "caption", "blog_id", "action", "crop",
+                                      "error_code", "error_detail", "progress", "source_title")},
+        "files": files,
+        "suggestions": suggestions.to_dict() if suggestions else {"active": [], "greyed": []},
+        "blogs": [blogs.public(b) for b in blogs.list_blogs(ctx.db)],
+        "lowercase_tags": not config.keep_tag_case,
+    }
+
+
+def op_post_arrange(ctx: Context) -> dict[str, Any]:
+    """Reorder a post's files or drop some (dropped files stay queued as separate items)."""
+    post = _item(ctx)
+    if post["kind"] != "set" or post["status"] in services.BUSY_STATUSES:
+        raise UserError("This post can't be changed now.")
+    current = [m["id"] for m in repo.set_members(ctx.db, post["id"])]
+    wanted = [str(i) for i in ctx.args.get("item_ids") or []]
+    if not set(wanted) <= set(current) or len(set(wanted)) != len(wanted):
+        raise UserError("Those files aren't all in this post. Refresh and try again.")
+    if not wanted:
+        services.dissolve_post(ctx.db, post["id"])
+        return {"post_id": None}
+    repo.set_member_ids(ctx.db, post["id"], wanted)
+    return {"post_id": post["id"]}
+
+
+def op_remove_from_queue(ctx: Context) -> dict[str, Any]:
+    """Take an item (or every file in a post) off the imaglr page: removes the queue tag in Stash."""
+    item = _item(ctx)
+    if item["status"] in services.BUSY_STATUSES:
+        raise UserError("This can't be removed while it's being sent.")
+    config, (queue_tag, _) = _workflow(ctx)
+    members = repo.set_members(ctx.db, item["id"]) if item["kind"] == "set" else [item]
+    image_ids = [m["stash_image_id"] for m in members if m["stash_image_id"]]
+    if image_ids:
+        api.images_remove_tags(ctx.stash, image_ids, [queue_tag.id])
+    for m in members:
+        repo.delete_item(ctx.db, m["id"])
+    if item["kind"] == "set":
+        repo.delete_item(ctx.db, item["id"])
+    return {"removed": len(members)}
+
+
 OPERATIONS = {
+    "item_detail": op_item_detail,
+    "post_arrange": op_post_arrange,
+    "remove_from_queue": op_remove_from_queue,
     "images_queue": op_images_queue,
     "add_images": op_add_images,
     "add_gallery": op_add_gallery,

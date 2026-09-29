@@ -180,6 +180,24 @@ def op_sent_list(ctx: Context) -> dict[str, Any]:
     return {"items": [_sent_view(ctx, repo.decode(r), names) for r in rows if r["id"] not in members]}
 
 
+def op_tag_map_set(ctx: Context) -> dict[str, Any]:
+    """Always map a Stash tag to another imaglr tag, or (imaglr_tag null) never suggest it."""
+    from .db import now_iso
+
+    stash_tag = " ".join(str(ctx.arg("stash_tag")).split())
+    target = ctx.args.get("imaglr_tag")
+    target = " ".join(str(target).split()) or None if target is not None else None
+    if not stash_tag or (target and len(target) > MAX_TAG_LEN):
+        raise UserError("That tag can't be mapped.")
+    ts = now_iso()
+    ctx.db.execute(
+        "INSERT INTO tag_map(stash_tag, imaglr_tag, created_at, updated_at) VALUES(?, ?, ?, ?) "
+        "ON CONFLICT(stash_tag) DO UPDATE SET imaglr_tag=excluded.imaglr_tag, updated_at=excluded.updated_at",
+        (stash_tag, target, ts, ts),
+    )
+    return {"ok": True}
+
+
 def task_send(ctx: Context) -> None:
     jobs.run_send(ctx, ctx.arg("item_id"))
 
@@ -191,6 +209,7 @@ OPERATIONS = {
     "recover": op_recover,
     "retry_follow_up": op_retry_follow_up,
     "sent_list": op_sent_list,
+    "tag_map_set": op_tag_map_set,
 }
 
 TASKS = {
