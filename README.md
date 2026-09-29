@@ -17,7 +17,7 @@ your [imaglr](https://imaglr.com) blogs.
 ## Requirements
 
 - **Stash v0.31.1 or later.** The official Docker image has everything the plugin needs. Other installs need
-  **Python 3.9 or later** available to Stash (Settings → System → Python path); no extra Python packages are needed.
+  **Python 3.9 or later** available to Stash (Settings → System → **Python executable path**); no extra Python packages are needed.
 - **An imaglr API key** for each blog you want to post to. imaglr's API is currently only available to
   [paid supporters](https://imaglr.com/subscriptions) (see [imaglr's API page](https://imaglr.com/developers)).
   Create the key on imaglr under **Settings → API** with the **read** and **manage** permissions.
