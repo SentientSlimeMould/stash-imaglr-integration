@@ -299,7 +299,7 @@ Official image `stashapp/stash:v0.31.1` (checked from its layers):
 9. **UI build:** TypeScript + React 17 types, esbuild → one IIFE `imaglrIntegration.js` + `.css`, React and all
    Stash libraries taken from `PluginApi`, nothing framework-sized bundled. Styling via Stash's Bootstrap classes
    first, a small plugin stylesheet second.
-10. **Stash-page entry points:** nav item; "imaglr" tab on the scene page (create marker, send markers); image page
-   button (DOM injection) and `ImageDetailPanel`; bulk "Add to imaglr" in the Images list; marker-wall cards.
+10. **Stash-page entry points:** nav item; bulk "Add to imaglr" in every image list (incl. a gallery's Images tab).
+   Clips come from Stash's own markers (tag them with the queue tag); the plugin adds no scene-page UI.
 11. **Repo layout:** `plugins/imaglrIntegration/` holds only runtime files (`imaglrIntegration.yml`, Python package,
    built `imaglrIntegration.js`/`.css`, README). Source, tests and Node tooling live outside it.

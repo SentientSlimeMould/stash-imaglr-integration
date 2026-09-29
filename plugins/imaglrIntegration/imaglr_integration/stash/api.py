@@ -99,32 +99,6 @@ def find_marker(client: StashClient, marker_id: str) -> Marker | None:
     return None
 
 
-def marker_create(
-    client: StashClient,
-    scene_id: str,
-    seconds: float,
-    end_seconds: float | None,
-    primary_tag_id: str,
-    tag_ids: list[str],
-    title: str = "",
-) -> str:
-    data = client.gql(
-        q.MARKER_CREATE,
-        {
-            "scene_id": scene_id,
-            "title": title,
-            "seconds": seconds,
-            "end_seconds": end_seconds,
-            "primary_tag_id": primary_tag_id,
-            "tag_ids": tag_ids,
-        },
-    )
-    marker_id = (data.get("sceneMarkerCreate") or {}).get("id")
-    if marker_id is None:
-        raise StashError("sceneMarkerCreate returned no id")
-    return str(marker_id)
-
-
 def marker_update(
     client: StashClient,
     marker: Marker,

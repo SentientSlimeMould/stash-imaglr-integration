@@ -13,8 +13,8 @@ const EMPTY = {
     <>
       <p>No clips waiting.</p>
       <p>
-        Open a scene in Stash and use its <strong>imaglr</strong> tab to make a clip, or tag any scene marker{" "}
-        <strong>{tag}</strong>.
+        In Stash, add the tag <strong>{tag}</strong> to a scene marker (on the scene's <strong>Markers</strong> tab).
+        Its start and end become the clip; you can trim it here.
       </p>
     </>
   ),

@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """Every Stash GraphQL document the backend uses, checked against Stash v0.31.1.
 
-The only writes are the ones reference spec §5 allows: marker create/update, image tag ADD/REMOVE and
-creating the two workflow tags, plus asking Stash to generate previews for markers the plugin created or moved. Playback fields (sceneStreams) are gone: the UI plays Stash URLs itself.
+The only writes: marker update (trim write-back and queue/sent tag swap), image tag ADD/REMOVE and
+creating the two workflow tags, plus asking Stash to regenerate previews for markers whose start the plugin moved. Playback fields (sceneStreams) are gone: the UI plays Stash URLs itself.
 """
 
 VERSION = """
@@ -82,16 +82,6 @@ query MarkerById($id: ID!) {
 }
 """
 )
-
-MARKER_CREATE = """
-mutation MarkerCreate($scene_id: ID!, $title: String!, $seconds: Float!, $end_seconds: Float,
-                      $primary_tag_id: ID!, $tag_ids: [ID!]) {
-  sceneMarkerCreate(input: {
-    scene_id: $scene_id, title: $title, seconds: $seconds, end_seconds: $end_seconds,
-    primary_tag_id: $primary_tag_id, tag_ids: $tag_ids
-  }) { id }
-}
-"""
 
 MARKER_UPDATE = """
 mutation MarkerUpdate($id: ID!, $seconds: Float, $end_seconds: Float, $primary_tag_id: ID, $tag_ids: [ID!]) {

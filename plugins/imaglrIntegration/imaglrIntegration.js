@@ -838,7 +838,7 @@
   // src/ui/queue/QueueTab.tsx
   var POLL_MS = 2e3;
   var EMPTY = {
-    clips: (tag) => /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("p", null, "No clips waiting."), /* @__PURE__ */ react_default.createElement("p", null, "Open a scene in Stash and use its ", /* @__PURE__ */ react_default.createElement("strong", null, "imaglr"), " tab to make a clip, or tag any scene marker", " ", /* @__PURE__ */ react_default.createElement("strong", null, tag), ".")),
+    clips: (tag) => /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("p", null, "No clips waiting."), /* @__PURE__ */ react_default.createElement("p", null, "In Stash, add the tag ", /* @__PURE__ */ react_default.createElement("strong", null, tag), " to a scene marker (on the scene's ", /* @__PURE__ */ react_default.createElement("strong", null, "Markers"), " tab). Its start and end become the clip; you can trim it here.")),
     images: (tag) => /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("p", null, "No images waiting."), /* @__PURE__ */ react_default.createElement("p", null, "In Stash, tag images ", /* @__PURE__ */ react_default.createElement("strong", null, tag), ", or tick images in any image list and choose", " ", /* @__PURE__ */ react_default.createElement("strong", null, "\u22EF \u2192 Add to imaglr"), ". Stills saved from clips appear here too."))
   };
   function QueueTab({ tab, openId }) {
@@ -1063,136 +1063,6 @@
     ) : null);
   }
 
-  // src/ui/scene/SceneTab.tsx
-  function playerTime() {
-    const video = document.querySelector("#VideoJsPlayer video, .video-js video");
-    return video ? Math.round(video.currentTime * 10) / 10 : null;
-  }
-  function TagPicker({ value, placeholder, onChange }) {
-    const { Form, Button } = PluginApi.libraries.Bootstrap;
-    const [text, setText] = react_default.useState("");
-    const [options, setOptions] = react_default.useState([]);
-    react_default.useEffect(() => {
-      if (!text.trim()) {
-        setOptions([]);
-        return;
-      }
-      const timer = window.setTimeout(() => {
-        runOperation("tags_find", { q: text }).then((r) => setOptions(r.tags.slice(0, 8)), () => void 0);
-      }, 250);
-      return () => window.clearTimeout(timer);
-    }, [text]);
-    if (value) {
-      return /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-chip" }, value.name, /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "imaglr-chip-remove", "aria-label": "Use the default tag", onClick: () => onChange(null) }, "\xD7")));
-    }
-    return /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(
-      Form.Control,
-      {
-        className: "text-input",
-        value: text,
-        placeholder,
-        onChange: (e) => setText(e.target.value)
-      }
-    ), options.length ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-chips mt-1" }, options.map((t) => /* @__PURE__ */ react_default.createElement(Button, { key: t.id, variant: "secondary", size: "sm", onClick: () => {
-      onChange(t);
-      setText("");
-    } }, t.name))) : null);
-  }
-  function SceneImaglrTab({ sceneId, setTimestamp }) {
-    const { Button, Form, Badge } = PluginApi.libraries.Bootstrap;
-    const { Link } = PluginApi.libraries.ReactRouterDOM;
-    const Toast = PluginApi.hooks.useToast();
-    const [data, setData] = react_default.useState(null);
-    const [start, setStart] = react_default.useState(null);
-    const [end, setEnd] = react_default.useState(null);
-    const [title, setTitle] = react_default.useState("");
-    const [primary, setPrimary] = react_default.useState(null);
-    const [busy, setBusy] = react_default.useState(false);
-    const load = react_default.useCallback(() => {
-      runOperation("scene_markers", { scene_id: sceneId }).then(setData, (e) => Toast.error(e));
-    }, [sceneId]);
-    react_default.useEffect(load, [load]);
-    function mark(which) {
-      const t = playerTime();
-      if (t === null) {
-        Toast.error("Start the video player first.");
-        return;
-      }
-      (which === "start" ? setStart : setEnd)(t);
-    }
-    async function toggle(marker) {
-      try {
-        await runOperation("marker_set_queued", { marker_id: marker.id, queued: !marker.queued });
-        load();
-      } catch (e) {
-        Toast.error(e);
-      }
-    }
-    async function create() {
-      if (start === null || end === null) return;
-      setBusy(true);
-      try {
-        await runOperation("marker_create", {
-          scene_id: sceneId,
-          seconds: start,
-          end_seconds: end,
-          title,
-          primary_tag_id: primary?.id ?? null
-        });
-        Toast.success("Clip created and added to imaglr.");
-        setStart(null);
-        setEnd(null);
-        setTitle("");
-        load();
-      } catch (e) {
-        Toast.error(e);
-      } finally {
-        setBusy(false);
-      }
-    }
-    const valid = start !== null && end !== null && end - start >= 0.1;
-    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-scene-tab" }, /* @__PURE__ */ react_default.createElement("h6", null, "New clip"), /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted" }, "Play the video above, then set where the clip starts and ends."), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-new-clip" }, /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => mark("start") }, "Set start"), /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-new-clip-time" }, start === null ? "\u2014" : fmtTime(start))), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => mark("end") }, "Set end"), /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-new-clip-time" }, end === null ? "\u2014" : fmtTime(end))), start !== null ? /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0", onClick: () => setTimestamp(start) }, "Jump to start") : null), start !== null && end !== null && !valid ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning" }, "The end must be after the start.") : null, /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Title ", /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, "(optional)")), /* @__PURE__ */ react_default.createElement(
-      Form.Control,
-      {
-        className: "text-input",
-        value: title,
-        onChange: (e) => setTitle(e.target.value)
-      }
-    )), /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Marker tag ", /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, "(optional)")), /* @__PURE__ */ react_default.createElement(
-      TagPicker,
-      {
-        value: primary,
-        onChange: setPrimary,
-        placeholder: `Search Stash tags, or leave empty to use "${data?.tags.queue.name ?? "imaglr"}"`
-      }
-    )), /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", disabled: !valid || busy, onClick: create }, busy ? "Creating\u2026" : "Create clip"), /* @__PURE__ */ react_default.createElement("h6", { className: "mt-4" }, "Markers in this scene"), !data ? /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Loading\u2026") : null, data && data.markers.length === 0 ? /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "This scene has no markers yet.") : null, /* @__PURE__ */ react_default.createElement("ul", { className: "imaglr-marker-list" }, data?.markers.map((m) => /* @__PURE__ */ react_default.createElement("li", { key: m.id, className: "imaglr-marker" }, /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "imaglr-marker-thumb", onClick: () => setTimestamp(m.seconds), "aria-label": `Jump to ${m.title}` }, m.thumb ? /* @__PURE__ */ react_default.createElement("img", { src: baseUrl() + m.thumb, alt: "", loading: "lazy" }) : null), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-marker-body" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-card-title" }, m.title), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted" }, fmtTime(m.seconds), m.end_seconds ? ` \u2192 ${fmtTime(m.end_seconds)}` : "", m.sent ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, " \xB7 ", /* @__PURE__ */ react_default.createElement(Badge, { variant: "primary" }, "Sent")) : null, m.queued ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, " \xB7 ", /* @__PURE__ */ react_default.createElement(Badge, { variant: "success" }, "On imaglr page")) : null)), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-marker-actions" }, m.queued && m.item_id ? /* @__PURE__ */ react_default.createElement(Link, { to: `${ROUTE}?tab=clips&open=${m.item_id}`, className: "btn btn-secondary" }, "Open") : null, /* @__PURE__ */ react_default.createElement(
-      Button,
-      {
-        variant: m.queued ? "secondary" : "primary",
-        onClick: () => toggle(m),
-        disabled: m.queued && m.queue_is_primary,
-        title: m.queued && m.queue_is_primary ? "It's this marker's main tag; change that in Stash first" : void 0
-      },
-      m.queued ? "Remove" : "Add to imaglr"
-    ))))));
-  }
-  function patchScenePage() {
-    PluginApi.patch.before("ScenePage.Tabs", (props) => {
-      const { Nav } = PluginApi.libraries.Bootstrap;
-      return [{
-        ...props,
-        children: /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, props.children, /* @__PURE__ */ react_default.createElement(Nav.Item, null, /* @__PURE__ */ react_default.createElement(Nav.Link, { eventKey: "imaglr-panel" }, "imaglr")))
-      }];
-    });
-    PluginApi.patch.before("ScenePage.TabContent", (props) => {
-      const { Tab } = PluginApi.libraries.Bootstrap;
-      return [{
-        ...props,
-        children: /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, props.children, /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "imaglr-panel", mountOnEnter: true }, /* @__PURE__ */ react_default.createElement(SceneImaglrTab, { sceneId: props.scene.id, setTimestamp: props.setTimestamp })))
-      }];
-    });
-  }
-
   // src/ui/index.tsx
   PluginApi.register.route(ROUTE, PostPage);
   PluginApi.patch.before("MainNavBar.MenuItems", (props) => [
@@ -1202,5 +1072,4 @@
     }
   ]);
   patchImageLists();
-  patchScenePage();
 })();

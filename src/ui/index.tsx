@@ -4,7 +4,6 @@ import React from "react";
 import { patchImageLists } from "./imageListActions.tsx";
 import { NavItem } from "./NavItem.tsx";
 import { PostPage } from "./PostPage.tsx";
-import { patchScenePage } from "./scene/SceneTab.tsx";
 import { ROUTE } from "./routes.ts";
 
 PluginApi.register.route(ROUTE, PostPage);
@@ -22,4 +21,3 @@ PluginApi.patch.before("MainNavBar.MenuItems", (props: { children?: React.ReactN
 ]);
 
 patchImageLists();
-patchScenePage();

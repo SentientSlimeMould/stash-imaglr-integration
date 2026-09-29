@@ -154,11 +154,6 @@ class MarkerTest(unittest.TestCase):
             fake.calls[0][1], {"id": "501", "seconds": 12.0, "end_seconds": 18.0, "primary_tag_id": "10", "tag_ids": ["20", "21"]}
         )
 
-    def test_create(self):
-        fake = FakeStash(MarkerCreate={"sceneMarkerCreate": {"id": 77}})
-        self.assertEqual(api.marker_create(client_with(fake), "7", 1.0, None, "10", []), "77")
-        self.assertEqual(fake.calls[0][1]["title"], "")
-
     def test_find_marker_missing_is_none(self):
         # Stash errors ("scene marker with id 9 not found") instead of returning an empty list.
         def missing(v):
