@@ -8,12 +8,14 @@ runPluginTask so the job appears on Stash's Tasks page, and records the job id o
 from __future__ import annotations
 
 import json
+import os
 
 from typing import Any
 
 from . import blogs, jobs
 from . import settings as plugin_settings
 from . import items as repo
+from .cleanup import cleanup_prepared
 from .context import Context, UserError
 from .db import now_iso
 from .stash import api
@@ -147,7 +149,10 @@ def op_cancel(ctx: Context) -> dict[str, Any]:
 
 
 def op_recover(ctx: Context) -> dict[str, Any]:
-    """Items left mid-send by a Stash restart or a killed job are marked failed, so they can be retried."""
+    """Runs when the page loads: items left mid-send by a Stash restart or a killed job are marked failed
+    (so they can be retried), and old prepared files are cleaned up."""
+    config = plugin_settings.load(ctx.stash)
+    cleanup_prepared(ctx.db, os.path.join(ctx.data_dir, "prepared"), config.prepared_retention_days)
     stuck = repo.list_items(ctx.db, statuses=IN_FLIGHT)
     if not stuck:
         return {"recovered": 0}

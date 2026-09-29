@@ -75,9 +75,11 @@ def export_clip(
     should_cancel=None,
     bitrate_scale: float | None = None,
     probe_info: ProbeInfo | None = None,
+    previous_bytes: int | None = None,
 ) -> ExportResult:
     """Cut [in_s, out_s] of src to an MP4 in out_dir. bitrate_scale forces the two-pass encode at that
-    fraction of the target bitrate (used to retry after imaglr rejects a file as too large)."""
+    fraction of the target bitrate (used to retry after imaglr rejects a file as too large); with
+    previous_bytes, the target is also at most that fraction of the rejected file's size."""
     os.makedirs(out_dir, exist_ok=True)
     info = probe_info or probe(settings.ffprobe, src, headers)
     w, h = info.display_size
@@ -123,6 +125,8 @@ def export_clip(
     if bitrate_scale is not None:
         audio_kbps = 0 if (mute or not info.has_audio) else fc.AUDIO_KBPS
         kbps = fc.target_kbps(settings.max_video_mb, duration, audio_kbps, bitrate_scale)
+        if previous_bytes:
+            kbps = min(kbps, fc.kbps_for_size(previous_bytes, duration, audio_kbps, bitrate_scale))
         passlog = os.path.join(out_dir, "x264pass")
         first, second = fc.build_two_pass_cmds(kbps, passlog, **common)
         try:

@@ -17,6 +17,7 @@ The API key chooses the scenario (keys look like pbk_<scenario>|anything):
   pbk_flaky|...      first POST /drafts gets 500 server_error
   pbk_nopublish|...  drafts work, publish and queue get 500 server_error
   pbk_rejected|...   422 content_rejected
+  pbk_toolarge|...   first POST /drafts gets 422 file_too_large
 Tags named "banned" or starting with "banned-" are silently dropped, like imaglr does.
 
 Run: python3 dev/fake_imaglr.py [port] [state dir]   (the compose file runs it as `fake-imaglr`)
@@ -132,6 +133,7 @@ class Handler(BaseHTTPRequestHandler):
         self.reply(404, errors=[("not_found", f"{self.command} {self.path} is not a route the plugin may call")])
 
     def create_draft(self, name):
+        raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
         first = name not in SEEN_FIRST_POST
         SEEN_FIRST_POST.add(name)
         if name == "noscope":
@@ -142,11 +144,11 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(422, errors=[("content_rejected", "The content was refused by the site's rules.")])
         if name == "ratelimit" and first:
             return self.reply(429, errors=[("rate_limited", "Hourly quota exhausted.")], headers={"Retry-After": "2"})
+        if name == "toolarge" and first:
+            return self.reply(422, errors=[("file_too_large", "An upload exceeds 40 MB (image) or 500 MB (video).")])
         if name == "flaky" and first:
             return self.reply(500, errors=[("server_error", "Something broke on our side.")])
 
-        length = int(self.headers.get("Content-Length") or 0)
-        raw = self.rfile.read(length)
         message = email.parser.BytesParser(policy=email.policy.HTTP).parsebytes(
             b"Content-Type: " + self.headers["Content-Type"].encode() + b"\r\n\r\n" + raw
         )

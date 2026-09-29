@@ -142,3 +142,16 @@ class ImageCmdTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BitrateBoundsTest(unittest.TestCase):
+    def test_short_clips_stay_within_encoder_limits(self):
+        from imaglr_integration.media import ffmpeg_cmd as fc
+
+        self.assertEqual(fc.target_kbps(500, 3.0), fc.MAX_KBPS)
+
+    def test_shrinking_targets_a_fraction_of_the_rejected_file(self):
+        from imaglr_integration.media import ffmpeg_cmd as fc
+
+        # a 10 MiB, 10 s file with 128 kbps audio: about 8064 kbps of video; 90 % of that
+        self.assertEqual(fc.kbps_for_size(10 * 1024 * 1024, 10.0, 128, 0.9), int((8192 - 128) * 0.9))

@@ -145,10 +145,20 @@ def build_clip_cmd(
     return cmd
 
 
+MAX_KBPS = 100_000  # far above any sensible clip; keeps x264's rate options in range for very short clips
+
+
 def target_kbps(limit_mb: float, duration_s: float, audio_kbps: int = AUDIO_KBPS, scale: float = 1.0) -> int:
     duration_s = max(0.1, duration_s)
     kbps = ((limit_mb * 8192 * 0.95) / duration_s - audio_kbps) * scale
-    return max(MIN_KBPS, int(kbps))
+    return min(MAX_KBPS, max(MIN_KBPS, int(kbps)))
+
+
+def kbps_for_size(size_bytes: int, duration_s: float, audio_kbps: int = AUDIO_KBPS, scale: float = 1.0) -> int:
+    """Video bitrate that makes a file of `duration_s` about `scale` times `size_bytes` in size."""
+    duration_s = max(0.1, duration_s)
+    kbps = (size_bytes * 8 / 1024 / duration_s - audio_kbps) * scale
+    return min(MAX_KBPS, max(MIN_KBPS, int(kbps)))
 
 
 def build_two_pass_cmds(kbps: int, passlog: str, **kwargs) -> tuple[list[str], list[str]]:

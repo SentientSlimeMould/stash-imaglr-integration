@@ -423,3 +423,13 @@ class ClassifyTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BareTooLargeTest(unittest.TestCase):
+    def test_bare_413_counts_as_too_large(self):
+        from imaglr_integration.imaglr.client import _parse
+        from imaglr_integration.imaglr.errors import ErrorClass
+
+        with self.assertRaises(ImaglrError) as ctx:
+            _parse(413, {}, b"<html>Request Entity Too Large</html>")
+        self.assertEqual(ctx.exception.klass, ErrorClass.TOO_LARGE)

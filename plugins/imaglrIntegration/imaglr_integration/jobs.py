@@ -14,6 +14,7 @@ import time
 from typing import Any
 
 from . import blogs, log
+from .cleanup import cleanup_prepared
 from . import items as repo
 from . import settings as plugin_settings
 from .context import Context
@@ -175,7 +176,8 @@ def clip_source(ctx: Context, item: dict[str, Any]) -> tuple[str, dict[str, str]
     raise JobFailed("source_missing", f"Stash has no video file for {item['source_title']}.")
 
 
-def prepare_clip(ctx: Context, member: dict[str, Any], tools: tuple[str, str], should_cancel, progress) -> dict[str, Any]:
+def prepare_clip(ctx: Context, member: dict[str, Any], tools: tuple[str, str], should_cancel, progress,
+                 bitrate_scale: float | None = None, previous_bytes: int | None = None) -> dict[str, Any]:
     ffmpeg, ffprobe = tools
     src, headers = clip_source(ctx, member)
     crop = member["crop"] or {}
@@ -186,6 +188,7 @@ def prepare_clip(ctx: Context, member: dict[str, Any], tools: tuple[str, str], s
             settings=VideoSettings(ffmpeg, ffprobe), headers=headers,
             aspect=crop.get("aspect") or "original", position=float(crop.get("position", 0.5)),
             mute=bool(member["mute"]), progress_cb=progress, should_cancel=should_cancel,
+            bitrate_scale=bitrate_scale, previous_bytes=previous_bytes,
         )
     except (UnsupportedMedia, ValueError) as e:
         raise JobFailed("unsupported_video", f"{member['source_title']}: {e}") from None
@@ -253,6 +256,20 @@ def _upload_error(ctx: Context, blog: dict[str, Any], e: ImaglrError) -> JobFail
     return JobFailed(e.code, detail)
 
 
+def _shrink_videos(ctx: Context, members: list[dict[str, Any]], should_cancel) -> bool:
+    """imaglr rejected the upload as too large: re-encode each clip once at 90 % of the target bitrate.
+    Returns False when there is nothing left to shrink (images are already sized under imaglr's limit)."""
+    clips = [n for n, m in enumerate(members) if m["kind"] == "clip" and not m["size_guard_retried"]]
+    if not clips:
+        return False
+    tools = media_tools(ctx)
+    for n in clips:
+        repo.update_item(ctx.db, members[n]["id"], size_guard_retried=True)
+        members[n] = prepare_clip(ctx, members[n], tools, should_cancel, lambda f: None, bitrate_scale=0.9,
+                                  previous_bytes=members[n]["output_bytes"])
+    return True
+
+
 def _follow_up(client, action: str, draft_id: str) -> dict[str, Any]:
     return client.publish_draft(draft_id) if action == "publish" else client.queue_draft(draft_id)
 
@@ -313,7 +330,14 @@ def run_send(ctx: Context, item_id: str) -> None:
         try:
             draft = _upload(client, files, tags, caption_to_html(item["caption"]), progress)
         except ImaglrError as e:
-            raise _upload_error(ctx, blog, e) from None
+            if e.klass is not ErrorClass.TOO_LARGE or not _shrink_videos(ctx, members, should_cancel):
+                raise _upload_error(ctx, blog, e) from None
+            log.info(f"imaglr said too large; re-encoded smaller, uploading {item_id} again")
+            files = [(m["output_path"], m["output_mime"]) for m in members]
+            try:
+                draft = _upload(client, files, tags, caption_to_html(item["caption"]), progress)
+            except ImaglrError as e2:
+                raise _upload_error(ctx, blog, e2) from None
     except Cancelled:
         repo.update_item(ctx.db, item_id, status="ready" if all(map(_is_prepared, members)) else "pending",
                          progress=0, cancel_requested=False, error_code="cancelled", error_detail="Stopped.")
@@ -360,6 +384,7 @@ def run_send(ctx: Context, item_id: str) -> None:
         repo.update_item(ctx.db, item_id, error_code="tag_swap_failed",
                          error_detail="Sent, but Stash's tags couldn't be updated for: " + ", ".join(failed)[:500])
     log.info(f"sent {item_id} to {blog['name']} as {record['sent_as']} (draft {draft.id})")
+    cleanup_prepared(ctx.db, os.path.join(ctx.data_dir, "prepared"), config.prepared_retention_days)
     log.progress(1.0)
 
 

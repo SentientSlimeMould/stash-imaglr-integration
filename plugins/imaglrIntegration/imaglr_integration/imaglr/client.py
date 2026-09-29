@@ -262,6 +262,8 @@ def _parse(status: int, headers: Any, raw: bytes) -> dict[str, Any]:
             raise ImaglrError("server_error", detail=f"HTTP {status}", http_status=status)
         if status == 429:
             raise ImaglrError("rate_limited", http_status=429, retry_after=retry_after)
+        if status == 413:  # a proxy in front of the API refusing the request body as too big
+            raise ImaglrError("file_too_large", detail="HTTP 413: upload too large", http_status=413)
         if status in (401, 403):
             raise ImaglrError(
                 "not_authenticated", detail=f"HTTP {status} without an imaglr response", http_status=status
