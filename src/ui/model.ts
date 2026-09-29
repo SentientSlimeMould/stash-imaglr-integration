@@ -111,6 +111,7 @@ export interface ItemDetail {
   suggestions: import("./lib/types.ts").Suggestions;
   blogs: Blog[];
   lowercase_tags: boolean;
+  queue_tag: string;
 }
 
 export interface SentItem {

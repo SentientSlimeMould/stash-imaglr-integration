@@ -117,6 +117,7 @@ export function Editor({ itemId, onClose }: Props) {
 
   if (!detail) return null;
   const { item, files, blogs } = detail;
+  const queueTag = detail.queue_tag;
   const locked = BUSY.includes(item.status) || busy;
   const blog = pickBlog(blogs, blogId);
   const sendAction = effectiveAction(blog, action);
@@ -144,13 +145,9 @@ export function Editor({ itemId, onClose }: Props) {
     setChanged(true);
   }
 
-  async function close() {
-    try {
-      await save();
-    } catch (e) {
-      Toast.error(e);
-    }
-    onClose(changed || dirty);
+  function cancel() {
+    if (dirty && !window.confirm("Discard your changes?")) return;
+    onClose(changed);
   }
 
   async function send() {
@@ -197,11 +194,16 @@ export function Editor({ itemId, onClose }: Props) {
     onClose(true);
   }
 
+  const removeLabel = item.kind === "still"
+    ? "Delete still"
+    : `Remove "${queueTag}" tag${item.kind === "set" ? "s" : ""}`;
+
   async function remove() {
-    if (!window.confirm(
-      "Take this off the Post to imaglr page? The imaglr tag is removed from it in Stash. " +
-        "Nothing on imaglr is changed and nothing is deleted.",
-    )) return;
+    const question = item.kind === "still"
+      ? "Delete this still? It only exists in the plugin."
+      : `Remove the "${queueTag}" tag in Stash${item.kind === "set" ? " from every file in this post" : ""}? ` +
+        "It leaves this page. Nothing on imaglr is changed and nothing is deleted.";
+    if (!window.confirm(question)) return;
     try {
       await runOperation("remove_from_queue", { item_id: item.id });
       onClose(true);
@@ -210,8 +212,9 @@ export function Editor({ itemId, onClose }: Props) {
     }
   }
 
+
   return (
-    <Modal show onHide={close} size="lg" dialogClassName="imaglr-editor" scrollable>
+    <Modal show onHide={cancel} size="lg" dialogClassName="imaglr-editor" scrollable>
       <Modal.Header closeButton>
         <Modal.Title>
           {item.kind === "set" ? `Post of ${files.length}` : item.source_title}{" "}
@@ -324,8 +327,9 @@ export function Editor({ itemId, onClose }: Props) {
         ) : (
           <>
             <Button variant="link" className="text-danger mr-auto" onClick={remove} disabled={locked}>
-              Don't send
+              {removeLabel}
             </Button>
+            <Button variant="secondary" onClick={cancel}>Cancel</Button>
             {confirmPublish ? (
               <span className="imaglr-confirm">
                 Posts publicly on {blog?.label} right away.

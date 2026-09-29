@@ -167,6 +167,7 @@ def op_item_detail(ctx: Context) -> dict[str, Any]:
         "suggestions": suggestions.to_dict(),
         "blogs": [blogs.public(b) for b in blogs.list_blogs(ctx.db)],
         "lowercase_tags": not config.keep_tag_case,
+        "queue_tag": config.queue_tag,
     }
 
 

@@ -648,6 +648,7 @@
     react_default.useEffect(load, [load]);
     if (!detail) return null;
     const { item, files, blogs } = detail;
+    const queueTag = detail.queue_tag;
     const locked = BUSY.includes(item.status) || busy;
     const blog = pickBlog(blogs, blogId);
     const sendAction = effectiveAction(blog, action);
@@ -676,13 +677,9 @@
       setDirty(false);
       setChanged(true);
     }
-    async function close() {
-      try {
-        await save();
-      } catch (e) {
-        Toast.error(e);
-      }
-      onClose(changed || dirty);
+    function cancel() {
+      if (dirty && !window.confirm("Discard your changes?")) return;
+      onClose(changed);
     }
     async function send() {
       if (sendAction === "publish" && !confirmPublish) {
@@ -724,10 +721,10 @@
       await runOperation("cancel", { item_id: item.id }).catch((e) => Toast.error(e));
       onClose(true);
     }
+    const removeLabel = item.kind === "still" ? "Delete still" : `Remove "${queueTag}" tag${item.kind === "set" ? "s" : ""}`;
     async function remove() {
-      if (!window.confirm(
-        "Take this off the Post to imaglr page? The imaglr tag is removed from it in Stash. Nothing on imaglr is changed and nothing is deleted."
-      )) return;
+      const question = item.kind === "still" ? "Delete this still? It only exists in the plugin." : `Remove the "${queueTag}" tag in Stash${item.kind === "set" ? " from every file in this post" : ""}? It leaves this page. Nothing on imaglr is changed and nothing is deleted.`;
+      if (!window.confirm(question)) return;
       try {
         await runOperation("remove_from_queue", { item_id: item.id });
         onClose(true);
@@ -735,7 +732,7 @@
         Toast.error(e);
       }
     }
-    return /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: close, size: "lg", dialogClassName: "imaglr-editor", scrollable: true }, /* @__PURE__ */ react_default.createElement(Modal.Header, { closeButton: true }, /* @__PURE__ */ react_default.createElement(Modal.Title, null, item.kind === "set" ? `Post of ${files.length}` : item.source_title, " ", /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, STATUS_LABELS[item.status]))), /* @__PURE__ */ react_default.createElement(Modal.Body, null, item.error_detail && !BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, item.error_detail) : null, BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement("div", { className: "mb-3" }, /* @__PURE__ */ react_default.createElement(ProgressBar, { now: Math.round(item.progress * 100), label: STATUS_LABELS[item.status] })) : null, item.hdr_warning ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info" }, "This video is HDR. Colours may look flatter on imaglr (HDR isn't converted).") : null, isClip ? /* @__PURE__ */ react_default.createElement(
+    return /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: cancel, size: "lg", dialogClassName: "imaglr-editor", scrollable: true }, /* @__PURE__ */ react_default.createElement(Modal.Header, { closeButton: true }, /* @__PURE__ */ react_default.createElement(Modal.Title, null, item.kind === "set" ? `Post of ${files.length}` : item.source_title, " ", /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, STATUS_LABELS[item.status]))), /* @__PURE__ */ react_default.createElement(Modal.Body, null, item.error_detail && !BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, item.error_detail) : null, BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement("div", { className: "mb-3" }, /* @__PURE__ */ react_default.createElement(ProgressBar, { now: Math.round(item.progress * 100), label: STATUS_LABELS[item.status] })) : null, item.hdr_warning ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info" }, "This video is HDR. Colours may look flatter on imaglr (HDR isn't converted).") : null, isClip ? /* @__PURE__ */ react_default.createElement(
       ClipPanel,
       {
         sceneId: files[0].stash_scene_id,
@@ -803,7 +800,7 @@
         }
       },
       ACTION_LABELS[a]
-    ))))), blogs.length === 0 ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info" }, "Add your imaglr blog first: use the Blogs button on the page.") : null, problem ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, problem) : null), /* @__PURE__ */ react_default.createElement(Modal.Footer, { className: "imaglr-editor-footer" }, BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: cancelSend }, "Stop sending") : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger mr-auto", onClick: remove, disabled: locked }, "Don't send"), confirmPublish ? /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-confirm" }, "Posts publicly on ", blog?.label, " right away.", /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setConfirmPublish(false) }, "Cancel"), /* @__PURE__ */ react_default.createElement(Button, { variant: "danger", onClick: send, disabled: busy }, "Publish now")) : /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: send, disabled: locked || !blog || !!problem }, busy ? "Starting\u2026" : sendButtonLabel(sendAction, blog)))));
+    ))))), blogs.length === 0 ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info" }, "Add your imaglr blog first: use the Blogs button on the page.") : null, problem ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, problem) : null), /* @__PURE__ */ react_default.createElement(Modal.Footer, { className: "imaglr-editor-footer" }, BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: cancelSend }, "Stop sending") : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger mr-auto", onClick: remove, disabled: locked }, removeLabel), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: cancel }, "Cancel"), confirmPublish ? /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-confirm" }, "Posts publicly on ", blog?.label, " right away.", /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setConfirmPublish(false) }, "Cancel"), /* @__PURE__ */ react_default.createElement(Button, { variant: "danger", onClick: send, disabled: busy }, "Publish now")) : /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: send, disabled: locked || !blog || !!problem }, busy ? "Starting\u2026" : sendButtonLabel(sendAction, blog)))));
   }
 
   // src/ui/queue/ItemCard.tsx
