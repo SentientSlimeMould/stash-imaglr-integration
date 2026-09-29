@@ -2,7 +2,8 @@
 #
 # The project folder may sit on a network share, and SQLite must not, so every database,
 # generated file and test media file lives in a Docker volume. Only the plugin code is
-# bind-mounted from the repo (read-only), with the plugin's own data folder overlaid by a volume.
+# mounted (read-only) from a local copy made by `npm run dev` / `npm run dev:sync` (scripts/dev-sync.sh),
+# with the plugin's own data folder overlaid by a volume.
 name: imaglr-dev
 
 x-stash: &stash
@@ -30,7 +31,7 @@ services:
       - v0311-cache:/cache
       - v0311-blobs:/blobs
       - media:/data:ro
-      - ../plugins/imaglrIntegration:/root/.stash/plugins/imaglrIntegration:ro
+      - ${IMAGLR_DEV_PLUGIN:-${HOME}/.imaglr-dev/plugin}:/root/.stash/plugins/imaglrIntegration:ro
       - v0311-plugin-data:/root/.stash/plugins/imaglrIntegration/data
 
   # Stash's development build: early warning of upcoming changes.
@@ -45,7 +46,7 @@ services:
       - dev-cache:/cache
       - dev-blobs:/blobs
       - media:/data:ro
-      - ../plugins/imaglrIntegration:/root/.stash/plugins/imaglrIntegration:ro
+      - ${IMAGLR_DEV_PLUGIN:-${HOME}/.imaglr-dev/plugin}:/root/.stash/plugins/imaglrIntegration:ro
       - dev-plugin-data:/root/.stash/plugins/imaglrIntegration/data
 
   # Fake imaglr API (dev/fake_imaglr.py). Received posts: http://127.0.0.1:8900/

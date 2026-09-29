@@ -9,14 +9,17 @@ Needs Docker (Docker Desktop on macOS/Windows). All commands run from this `dev/
 | `stash-dev` | `stashapp/stash:development` | http://127.0.0.1:9932 |
 
 Stash's databases, generated files and the test media live in Docker volumes, never in the repo folder
-(SQLite must not sit on a network share). The plugin folder `../plugins/imaglrIntegration` is mounted read-only
-into both instances, with its `data/` subfolder overlaid by a per-instance volume, so a code change only needs
-**Settings → Plugins → Reload plugins** in Stash.
+(SQLite must not sit on a network share). The plugin is mounted read-only into both instances from a copy on
+this computer's own disk (`~/.imaglr-dev/plugin`, or `$IMAGLR_DEV_PLUGIN`), with its `data/` subfolder overlaid
+by a per-instance volume. After a code change run **`npm run dev`** (build + copy), then
+**Settings → Plugins → Reload plugins** in Stash. (Mounting the repo folder directly is unreliable when the repo
+is on a network share: Docker's view of rebuilt files goes stale.)
 
 ## First run
 
 ```sh
-mkdir -p ../plugins/imaglrIntegration/data     # mount point for the plugin data volume
+(cd .. && npm run dev)                         # build the plugin and copy it to ~/.imaglr-dev/plugin
+mkdir -p ~/.imaglr-dev/plugin/data             # mount point for the plugin data volume
 docker compose run --rm make-media             # synthetic test media (≈25 MB)
 docker compose up -d
 python3 seed.py 9931 setup                     # first-run setup, scan, generate, sample metadata

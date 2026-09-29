@@ -29,3 +29,4 @@ plugins/imaglrIntegration/data/
 
 # SMB network-share temporary files
 .smbdelete*
+*.fresh

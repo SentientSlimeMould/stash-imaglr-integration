@@ -9,6 +9,7 @@ import { MAX_POST_FILES } from "../lib/imageActions.ts";
 import { STATUS_LABELS, STATUS_VARIANTS, type Card, type QueueResponse } from "../model.ts";
 import { ROUTE } from "../routes.ts";
 import { CardImage, cardDetail, CardOverlays, FallbackCard } from "./ItemCard.tsx";
+import { SendAllDialog } from "./SendAllDialog.tsx";
 import { Toolbar, type SelectionAction } from "./Toolbar.tsx";
 
 const POLL_MS = 2000;
@@ -61,6 +62,7 @@ export function QueueTab({ tab, openId }: { tab: "clips" | "images"; openId: str
   const [error, setError] = React.useState<string | null>(null);
   const [controls, setControls] = React.useState<QueueControlsState>(() => loadControls(tab));
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  const [sendAll, setSendAll] = React.useState<string[] | null>(null);
   const box = React.useRef<HTMLDivElement>(null);
   const width = useContainerWidth(box);
   const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 576px)").matches;
@@ -225,6 +227,7 @@ export function QueueTab({ tab, openId }: { tab: "clips" | "images"; openId: str
         onSelectAll={() => setSelected(new Set(items.map((c) => c.id)))}
         onSelectNone={() => setSelected(new Set())}
         onRefresh={load}
+        onSendAll={items.length ? () => setSendAll(selected.size ? [...selected] : items.map((c) => c.id)) : undefined}
       />
       {data && all.length ? (
         <div className="imaglr-count text-center text-muted">
@@ -232,6 +235,15 @@ export function QueueTab({ tab, openId }: { tab: "clips" | "images"; openId: str
         </div>
       ) : null}
       {body}
+      {sendAll ? (
+        <SendAllDialog itemIds={sendAll} selected={selected.size > 0} onClose={(sent) => {
+          setSendAll(null);
+          if (sent) {
+            setSelected(new Set());
+            load();
+          }
+        }} />
+      ) : null}
       {openId ? (
         <Editor
           itemId={openId}

@@ -25,6 +25,7 @@ interface Props {
   onSelectAll: () => void;
   onSelectNone: () => void;
   onRefresh: () => void;
+  onSendAll?: () => void;
 }
 
 const STATUS_FILTERS: StatusFilter[] = ["pending", "ready", "exporting", "sending", "failed"];
@@ -221,6 +222,9 @@ export function Toolbar(props: Props) {
           </>
         )}
         <ButtonGroup className="list-operations">
+          {props.onSendAll ? (
+            <Button variant="primary" onClick={props.onSendAll}>{selected ? "Send selected" : "Send all"}</Button>
+          ) : null}
           {buttons.map((a) => (
             <Button key={a.text} variant={a.danger ? "danger" : "secondary"} disabled={a.disabled} onClick={a.onClick}>{a.text}</Button>
           ))}

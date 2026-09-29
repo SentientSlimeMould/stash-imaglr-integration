@@ -124,7 +124,11 @@ def op_send(ctx: Context) -> dict[str, Any]:
         blog = jobs.choose_blog(ctx, item)
     except jobs.JobFailed as e:
         raise UserError(e.detail) from None
-    action = blogs.resolve_action(blog, item["action"])
+    return _start(ctx, item, blog, blogs.resolve_action(blog, item["action"]))
+
+
+def _start(ctx: Context, item: dict[str, Any], blog: dict[str, Any], action: str) -> dict[str, Any]:
+    """Queue the send task in Stash (it appears on Stash's Tasks page) and record its job id."""
     title = item["source_title"] or "post"
     job_id = ctx.stash.gql(RUN_TASK, {
         "id": PLUGIN_ID,
@@ -132,8 +136,65 @@ def op_send(ctx: Context) -> dict[str, Any]:
         "args": {"mode": "task_send", "item_id": item["id"]},
     })["runPluginTask"]
     item = repo.update_item(ctx.db, item["id"], status="exporting", progress=0, stash_job_id=str(job_id),
-                            cancel_requested=False, error_code=None, error_detail=None)  # type: ignore[assignment]
+                            action=action, cancel_requested=False, error_code=None,
+                            error_detail=None)  # type: ignore[assignment]
     return {"item": item, "job_id": job_id}
+
+
+SKIP_REASONS = {
+    "no_blog": "no blog chosen",
+    "paused": "blog needs attention",
+    "busy": "already sending",
+    "sent": "already sent",
+    "gone": "no longer on the page",
+    "in_post": "part of a post (send the post)",
+}
+
+
+def plan_send_all(ctx: Context, item_ids: list[str]) -> list[dict[str, Any]]:
+    """What Send all would do with each item: its blog and action, or why it's skipped.
+    Never publishes straight away: an item that would be published is saved as a draft."""
+    all_blogs = blogs.list_blogs(ctx.db)
+    plan = []
+    for item_id in dict.fromkeys(str(i) for i in item_ids):
+        item = repo.get_item(ctx.db, item_id)
+        entry: dict[str, Any] = {"id": item_id}
+        if item is None:
+            entry["skip"] = "gone"
+        elif item["status"] in IN_FLIGHT:
+            entry["skip"] = "busy"
+        elif item["status"] == "sent":
+            entry["skip"] = "sent"
+        elif repo.set_of(ctx.db, item_id):
+            entry["skip"] = "in_post"
+        else:
+            blog = blogs.get_blog(ctx.db, item["blog_id"]) if item["blog_id"] else (all_blogs[0] if len(all_blogs) == 1 else None)
+            if blog is None:
+                entry["skip"] = "no_blog"
+            elif blog["paused_reason"]:
+                entry["skip"] = "paused"
+            else:
+                action = blogs.resolve_action(blog, item["action"])
+                entry.update(blog_id=blog["id"], blog=blog["name"] or f"Blog {blog['id']}",
+                             action="draft" if action == "publish" else action, downgraded=action == "publish")
+        if "skip" in entry:
+            entry["reason"] = SKIP_REASONS[entry["skip"]]
+        plan.append(entry)
+    return plan
+
+
+def op_send_all(ctx: Context) -> dict[str, Any]:
+    """Send several items, each as its own post (dry_run: just say what would happen)."""
+    ids = ctx.args.get("item_ids")
+    if not isinstance(ids, list) or not ids:
+        raise UserError("Nothing to send.")
+    plan = plan_send_all(ctx, ids)
+    if not ctx.args.get("dry_run"):
+        for entry in plan:
+            if "skip" not in entry:
+                item = repo.get_item(ctx.db, entry["id"])
+                _start(ctx, item, blogs.get_blog(ctx.db, entry["blog_id"]), entry["action"])  # type: ignore[arg-type]
+    return {"plan": plan}
 
 
 def op_cancel(ctx: Context) -> dict[str, Any]:
@@ -269,6 +330,7 @@ def task_send(ctx: Context) -> None:
 OPERATIONS = {
     "item_update": op_item_update,
     "send": op_send,
+    "send_all": op_send_all,
     "cancel": op_cancel,
     "recover": op_recover,
     "retry_follow_up": op_retry_follow_up,

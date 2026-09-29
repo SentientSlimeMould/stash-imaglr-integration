@@ -943,6 +943,84 @@
     return /* @__PURE__ */ react_default.createElement("div", { className: "card grid-card image-card imaglr-grid-card", style: width ? { width } : void 0 }, /* @__PURE__ */ react_default.createElement("div", { className: "thumbnail-section" }, /* @__PURE__ */ react_default.createElement(Link, { to: url, className: "image-card-link" }, /* @__PURE__ */ react_default.createElement(CardImage, { card })), /* @__PURE__ */ react_default.createElement(CardOverlays, { card })), /* @__PURE__ */ react_default.createElement("div", { className: "card-section" }, /* @__PURE__ */ react_default.createElement(Link, { to: url }, /* @__PURE__ */ react_default.createElement("h5", { className: "card-section-title" }, card.title)), /* @__PURE__ */ react_default.createElement("div", { className: "image-card__details" }, /* @__PURE__ */ react_default.createElement("span", null, cardDetail(card)))));
   }
 
+  // src/ui/lib/sendAll.ts
+  var ACTION_WORDS = { draft: "as drafts", queue: "to the queue" };
+  function summarisePlan(plan, fallback) {
+    const sending = /* @__PURE__ */ new Map();
+    const skipped = /* @__PURE__ */ new Map();
+    let downgraded = 0;
+    let total = 0;
+    for (const e of plan) {
+      let blog = e.blog;
+      let action = e.action;
+      let down = !!e.downgraded;
+      if (e.skip === "no_blog" && fallback) {
+        blog = fallback.label;
+        down = fallback.default_action === "publish";
+        action = fallback.default_action === "queue" ? "queue" : "draft";
+      } else if (e.skip) {
+        const reason = e.reason ?? e.skip;
+        skipped.set(reason, (skipped.get(reason) ?? 0) + 1);
+        continue;
+      }
+      const key = `${blog} ${ACTION_WORDS[action ?? "draft"]}`;
+      sending.set(key, (sending.get(key) ?? 0) + 1);
+      if (down) downgraded++;
+      total++;
+    }
+    return { sending: [...sending], skipped: [...skipped], downgraded, total };
+  }
+
+  // src/ui/queue/SendAllDialog.tsx
+  function SendAllDialog({ itemIds, selected, onClose }) {
+    const { Modal, Button, Form, Alert } = PluginApi.libraries.Bootstrap;
+    const Toast = PluginApi.hooks.useToast();
+    const [plan, setPlan] = react_default.useState(null);
+    const [blogs, setBlogs] = react_default.useState([]);
+    const [fallbackBlog, setFallbackBlog] = react_default.useState(null);
+    const [busy, setBusy] = react_default.useState(false);
+    const preview = react_default.useCallback(() => {
+      runOperation("send_all", { item_ids: itemIds, dry_run: true }).then((r) => setPlan(r.plan), (e) => {
+        Toast.error(e);
+        onClose(false);
+      });
+    }, [itemIds]);
+    react_default.useEffect(() => {
+      preview();
+      runOperation("blogs_list").then((r) => setBlogs(r.blogs.filter((b) => !b.paused_reason)), () => void 0);
+    }, [preview]);
+    if (!plan) return null;
+    const noBlog = plan.filter((e) => e.skip === "no_blog");
+    const fallback = blogs.find((b) => b.id === fallbackBlog) ?? null;
+    const { sending, skipped, downgraded, total: ready } = summarisePlan(plan, fallback);
+    async function send() {
+      setBusy(true);
+      try {
+        if (fallbackBlog) {
+          await Promise.all(noBlog.map((e) => runOperation("item_update", { item_id: e.id, changes: { blog_id: fallbackBlog } })));
+        }
+        const r = await runOperation("send_all", { item_ids: itemIds });
+        const started = r.plan.filter((e) => !e.skip).length;
+        Toast.success(`Sending ${started} ${started === 1 ? "item" : "items"}. Progress shows on each card.`);
+        onClose(true);
+      } catch (e) {
+        Toast.error(e);
+        setBusy(false);
+      }
+    }
+    return /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: () => void 0, keyboard: false }, /* @__PURE__ */ react_default.createElement(Modal.Header, null, /* @__PURE__ */ react_default.createElement(Modal.Title, null, selected ? "Send selected" : "Send all")), /* @__PURE__ */ react_default.createElement(Modal.Body, null, sending.length ? /* @__PURE__ */ react_default.createElement("ul", { className: "imaglr-plan" }, sending.map(([what, n]) => /* @__PURE__ */ react_default.createElement("li", { key: what }, /* @__PURE__ */ react_default.createElement("strong", null, n), " to ", what))) : /* @__PURE__ */ react_default.createElement("p", null, "Nothing can be sent yet."), downgraded ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info" }, downgraded, " ", downgraded === 1 ? "item is" : "items are", " set to Publish now and will be saved as drafts instead. Send all never publishes straight away; publish from the editor or on imaglr.") : null, noBlog.length && blogs.length ? /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, noBlog.length, " ", noBlog.length === 1 ? "item has" : "items have", " no blog chosen. Send ", noBlog.length === 1 ? "it" : "them", " to:"), /* @__PURE__ */ react_default.createElement(
+      Form.Control,
+      {
+        as: "select",
+        className: "text-input",
+        value: fallbackBlog ?? "",
+        onChange: (e) => setFallbackBlog(e.target.value ? Number(e.target.value) : null)
+      },
+      /* @__PURE__ */ react_default.createElement("option", { value: "" }, "Skip ", noBlog.length === 1 ? "it" : "them"),
+      blogs.map((b) => /* @__PURE__ */ react_default.createElement("option", { key: b.id, value: b.id }, b.label, " (uses its default action)"))
+    )) : null, skipped.length ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted" }, "Skipped: ", skipped.map(([reason, n]) => `${n} ${reason}`).join(", "), ".") : null), /* @__PURE__ */ react_default.createElement(Modal.Footer, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => onClose(false) }, "Cancel"), /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", disabled: !ready || busy, onClick: send }, busy ? "Starting\u2026" : `Send ${ready}`)));
+  }
+
   // src/ui/queue/Toolbar.tsx
   var STATUS_FILTERS = ["pending", "ready", "exporting", "sending", "failed"];
   var ORIENTATIONS = ["portrait", "landscape", "square"];
@@ -1093,7 +1171,7 @@
     const count = filterCount(controls);
     const buttons = selected ? selectionActions.filter((a) => a.primary) : [];
     const menu = selected ? selectionActions.filter((a) => !a.primary) : [];
-    return /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(ButtonToolbar, { className: `filtered-list-toolbar${selected ? " has-selection" : ""}` }, selected ? /* @__PURE__ */ react_default.createElement("div", { className: "selected-items-info" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", className: "minimal", title: "Select none", onClick: props.onSelectNone }, icon("faTimes")), /* @__PURE__ */ react_default.createElement("span", { className: "selected-count" }, selected), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", className: "minimal", title: "Select all", onClick: props.onSelectAll }, icon("faSquareCheck"))) : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(SearchInput, { value: controls.search, onChange: (search) => onChange({ ...controls, search }) }), /* @__PURE__ */ react_default.createElement(ButtonGroup, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", className: "filter-button", title: "Filter", onClick: () => setShowFilter(true) }, icon("faFilter"), count ? /* @__PURE__ */ react_default.createElement(Badge, { pill: true, variant: "info" }, count) : null)), /* @__PURE__ */ react_default.createElement(SortBySelect, { tab: props.tab, controls, onChange })), /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "list-operations" }, buttons.map((a) => /* @__PURE__ */ react_default.createElement(Button, { key: a.text, variant: a.danger ? "danger" : "secondary", disabled: a.disabled, onClick: a.onClick }, a.text)), /* @__PURE__ */ react_default.createElement(Dropdown, { as: ButtonGroup }, /* @__PURE__ */ react_default.createElement(Dropdown.Toggle, { variant: "secondary", id: "imaglr-more", "aria-label": "More" }, icon("faEllipsisH")), /* @__PURE__ */ react_default.createElement(Dropdown.Menu, { className: "bg-secondary text-white" }, /* @__PURE__ */ react_default.createElement(Dropdown.Item, { className: "bg-secondary text-white", onClick: props.onSelectAll }, "Select all"), selected ? /* @__PURE__ */ react_default.createElement(Dropdown.Item, { className: "bg-secondary text-white", onClick: props.onSelectNone }, "Select none") : null, menu.map((a) => /* @__PURE__ */ react_default.createElement(Dropdown.Item, { key: a.text, className: "bg-secondary text-white", disabled: a.disabled, onClick: a.onClick }, a.text)), /* @__PURE__ */ react_default.createElement(Dropdown.Item, { className: "bg-secondary text-white", onClick: props.onRefresh }, "Refresh")))), /* @__PURE__ */ react_default.createElement(ViewButtons, { controls, onChange })), /* @__PURE__ */ react_default.createElement(FilterTags, { controls, onChange }), showFilter ? /* @__PURE__ */ react_default.createElement(FilterDialog, { tab: props.tab, controls, items: props.items, onChange, onClose: () => setShowFilter(false) }) : null);
+    return /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(ButtonToolbar, { className: `filtered-list-toolbar${selected ? " has-selection" : ""}` }, selected ? /* @__PURE__ */ react_default.createElement("div", { className: "selected-items-info" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", className: "minimal", title: "Select none", onClick: props.onSelectNone }, icon("faTimes")), /* @__PURE__ */ react_default.createElement("span", { className: "selected-count" }, selected), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", className: "minimal", title: "Select all", onClick: props.onSelectAll }, icon("faSquareCheck"))) : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(SearchInput, { value: controls.search, onChange: (search) => onChange({ ...controls, search }) }), /* @__PURE__ */ react_default.createElement(ButtonGroup, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", className: "filter-button", title: "Filter", onClick: () => setShowFilter(true) }, icon("faFilter"), count ? /* @__PURE__ */ react_default.createElement(Badge, { pill: true, variant: "info" }, count) : null)), /* @__PURE__ */ react_default.createElement(SortBySelect, { tab: props.tab, controls, onChange })), /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "list-operations" }, props.onSendAll ? /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: props.onSendAll }, selected ? "Send selected" : "Send all") : null, buttons.map((a) => /* @__PURE__ */ react_default.createElement(Button, { key: a.text, variant: a.danger ? "danger" : "secondary", disabled: a.disabled, onClick: a.onClick }, a.text)), /* @__PURE__ */ react_default.createElement(Dropdown, { as: ButtonGroup }, /* @__PURE__ */ react_default.createElement(Dropdown.Toggle, { variant: "secondary", id: "imaglr-more", "aria-label": "More" }, icon("faEllipsisH")), /* @__PURE__ */ react_default.createElement(Dropdown.Menu, { className: "bg-secondary text-white" }, /* @__PURE__ */ react_default.createElement(Dropdown.Item, { className: "bg-secondary text-white", onClick: props.onSelectAll }, "Select all"), selected ? /* @__PURE__ */ react_default.createElement(Dropdown.Item, { className: "bg-secondary text-white", onClick: props.onSelectNone }, "Select none") : null, menu.map((a) => /* @__PURE__ */ react_default.createElement(Dropdown.Item, { key: a.text, className: "bg-secondary text-white", disabled: a.disabled, onClick: a.onClick }, a.text)), /* @__PURE__ */ react_default.createElement(Dropdown.Item, { className: "bg-secondary text-white", onClick: props.onRefresh }, "Refresh")))), /* @__PURE__ */ react_default.createElement(ViewButtons, { controls, onChange })), /* @__PURE__ */ react_default.createElement(FilterTags, { controls, onChange }), showFilter ? /* @__PURE__ */ react_default.createElement(FilterDialog, { tab: props.tab, controls, items: props.items, onChange, onClose: () => setShowFilter(false) }) : null);
   }
 
   // src/ui/queue/QueueTab.tsx
@@ -1126,6 +1204,7 @@
     const [error, setError] = react_default.useState(null);
     const [controls, setControls] = react_default.useState(() => loadControls(tab));
     const [selected, setSelected] = react_default.useState(/* @__PURE__ */ new Set());
+    const [sendAll, setSendAll] = react_default.useState(null);
     const box = react_default.useRef(null);
     const width = useContainerWidth(box);
     const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 576px)").matches;
@@ -1257,9 +1336,16 @@
         onChange: updateControls,
         onSelectAll: () => setSelected(new Set(items.map((c) => c.id))),
         onSelectNone: () => setSelected(/* @__PURE__ */ new Set()),
-        onRefresh: load
+        onRefresh: load,
+        onSendAll: items.length ? () => setSendAll(selected.size ? [...selected] : items.map((c) => c.id)) : void 0
       }
-    ), data && all.length ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-count text-center text-muted" }, items.length === all.length ? `${all.length} ${all.length === 1 ? "item" : "items"}` : `${items.length} of ${all.length}`) : null, body, openId ? /* @__PURE__ */ react_default.createElement(
+    ), data && all.length ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-count text-center text-muted" }, items.length === all.length ? `${all.length} ${all.length === 1 ? "item" : "items"}` : `${items.length} of ${all.length}`) : null, body, sendAll ? /* @__PURE__ */ react_default.createElement(SendAllDialog, { itemIds: sendAll, selected: selected.size > 0, onClose: (sent) => {
+      setSendAll(null);
+      if (sent) {
+        setSelected(/* @__PURE__ */ new Set());
+        load();
+      }
+    } }) : null, openId ? /* @__PURE__ */ react_default.createElement(
       Editor,
       {
         itemId: openId,
