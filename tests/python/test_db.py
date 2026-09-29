@@ -138,3 +138,26 @@ class BlogsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TagRuleMigrationTest(unittest.TestCase):
+    def test_old_one_to_one_rules_become_lists(self):
+        import json
+
+        from imaglr_integration import db as dbmod
+
+        path = os.path.join(tempfile.mkdtemp(), "old.sqlite")
+        conn = sqlite3.connect(path, isolation_level=None)
+        for n, script in enumerate(dbmod.MIGRATIONS[:2], 1):
+            conn.executescript(f"BEGIN;{script}PRAGMA user_version = {n}; COMMIT;")
+        conn.executemany(
+            "INSERT INTO tag_map(stash_tag, imaglr_tag, created_at, updated_at) VALUES(?, ?, 't', 't')",
+            [("Sunset", "golden hour"), ("AI_Junk", None), ('Say "hi"', 'say "hi" \\ back')],
+        )
+        conn.close()
+        with Database(path) as db:
+            self.assertEqual(items.tag_mapping(db), {
+                "sunset": ["golden hour"], "ai_junk": [], 'say "hi"': ['say "hi" \\ back'],
+            })
+            self.assertIsNone(db.fetchone("SELECT name FROM sqlite_master WHERE name='tag_map'"))
+            json.loads(db.fetchone("SELECT imaglr_tags FROM tag_rules WHERE stash_tag='Sunset'")["imaglr_tags"])

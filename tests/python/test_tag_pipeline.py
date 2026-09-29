@@ -124,3 +124,22 @@ class MergeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TagRuleListTest(unittest.TestCase):
+    def test_one_stash_tag_can_become_several_imaglr_tags(self):
+        from imaglr_integration.tags.pipeline import RawTag, TagConfig, suggest
+
+        cfg = TagConfig(queue_tag="imaglr", done_tag="imaglr-sent")
+        raw = [RawTag("Pink Hair", "image"), RawTag("Dyed Hair", "image"), RawTag("AI_x", "image"), RawTag("Beach", "scene")]
+        mapping = {"pink hair": ["pink hair", "coloured hair", "Colourful Hair", "dyed hair"], "beach": []}
+        out = suggest(raw, cfg, mapping)
+        self.assertEqual(out.active_names(), ["pink hair", "coloured hair", "colourful hair", "dyed hair"])
+        self.assertTrue(all(t.original == "Pink Hair" for t in out.active))
+
+    def test_rules_respect_the_30_tag_cap(self):
+        from imaglr_integration.tags.pipeline import RawTag, TagConfig, suggest
+
+        cfg = TagConfig(queue_tag="imaglr", done_tag="imaglr-sent")
+        out = suggest([RawTag("Many", "image")], cfg, {"many": [f"t{n}" for n in range(35)]})
+        self.assertEqual((len(out.active), len(out.greyed)), (30, 5))

@@ -5,7 +5,7 @@
 // so it never creates a tag in Stash.
 import React from "react";
 import { runOperation } from "../api.ts";
-import { checkNewTag, MAX_TAGS, spareSuggestions } from "../lib/tags.ts";
+import { checkNewTag, MAX_TAGS, normalise, spareSuggestions } from "../lib/tags.ts";
 import type { Suggestions } from "../lib/types.ts";
 
 interface Option {
@@ -31,12 +31,22 @@ const STYLES = {
 
 const toOption = (tag: string): Option => ({ value: tag, label: tag });
 
-export function TagField({ tags, suggestions, lowercase, disabled, onChange }: Props) {
+interface InputProps {
+  tags: string[];
+  extra?: string[]; // offered before typing, e.g. suggestions not on the post
+  lowercase: boolean;
+  disabled?: boolean;
+  inputId?: string;
+  placeholder?: string;
+  onChange: (tags: string[]) => void;
+  onMessage?: (message: string | null) => void;
+}
+
+/** A multi-tag input identical to Stash's tag fields; "Add" creates imaglr tags, never Stash tags. */
+export function TagInput({ tags, extra = [], lowercase, disabled, inputId, placeholder, onChange, onMessage }: InputProps) {
   const Select = PluginApi.libraries.ReactSelect.default;
   const [input, setInput] = React.useState("");
   const [found, setFound] = React.useState<string[]>([]);
-  const [message, setMessage] = React.useState<string | null>(null);
-  const spare = spareSuggestions(suggestions, tags);
 
   // Matches as you type: tags sent before, then Stash tag names.
   React.useEffect(() => {
@@ -53,7 +63,9 @@ export function TagField({ tags, suggestions, lowercase, disabled, onChange }: P
 
   const taken = new Set(tags.map((t) => t.toLowerCase()));
   const q = input.trim().toLowerCase();
-  const names = q ? [...spare.addable.filter((t) => t.toLowerCase().includes(q)), ...found] : spare.addable;
+  // Suggestions are shown (and added) exactly as they will be sent.
+  const names = (q ? [...extra.filter((t) => t.toLowerCase().includes(q)), ...found] : extra)
+    .map((t) => normalise(t, lowercase));
   const options: Option[] = names
     .filter((t, i) => !taken.has(t.toLowerCase()) && names.findIndex((o) => o.toLowerCase() === t.toLowerCase()) === i)
     .map(toOption);
@@ -65,22 +77,17 @@ export function TagField({ tags, suggestions, lowercase, disabled, onChange }: P
   function change(selected: readonly Option[] | null) {
     const next = (selected ?? []).map((o) => o.value);
     if (next.length > MAX_TAGS) {
-      setMessage(`imaglr allows ${MAX_TAGS} tags per post. Remove one first.`);
+      onMessage?.(`imaglr allows ${MAX_TAGS} tags per post. Remove one first.`);
       return;
     }
-    setMessage(null);
+    onMessage?.(null);
     setInput("");
     onChange(next);
   }
 
   return (
-    <div className="imaglr-tags">
-      <div className="imaglr-tags-header">
-        <label htmlFor="imaglr-tag-field"><strong>Tags</strong></label>
-        <span className={tags.length >= MAX_TAGS ? "text-warning" : "text-muted"}>{tags.length} / {MAX_TAGS}</span>
-      </div>
       <Select
-        inputId="imaglr-tag-field"
+        inputId={inputId}
         className="react-select tag-select imaglr-tag-select"
         classNamePrefix="react-select"
         isMulti
@@ -93,16 +100,30 @@ export function TagField({ tags, suggestions, lowercase, disabled, onChange }: P
         onInputChange={(value: string, meta: { action: string }) => {
           if (meta.action === "input-change") {
             setInput(value);
-            setMessage(null);
+            onMessage?.(null);
           }
         }}
         onChange={change}
         filterOption={() => true}
-        placeholder="Add tags…"
+        placeholder={placeholder ?? "Add tags…"}
         noOptionsMessage={() => (input.trim() && !typed.ok ? typed.error : null)}
         styles={STYLES}
         components={{ IndicatorSeparator: () => null }}
       />
+  );
+}
+
+export function TagField({ tags, suggestions, lowercase, disabled, onChange }: Props) {
+  const [message, setMessage] = React.useState<string | null>(null);
+  const spare = spareSuggestions(suggestions, tags);
+  return (
+    <div className="imaglr-tags">
+      <div className="imaglr-tags-header">
+        <label htmlFor="imaglr-tag-field"><strong>Tags</strong></label>
+        <span className={tags.length >= MAX_TAGS ? "text-warning" : "text-muted"}>{tags.length} / {MAX_TAGS}</span>
+      </div>
+      <TagInput inputId="imaglr-tag-field" tags={tags} extra={spare.addable} lowercase={lowercase} disabled={disabled}
+        onChange={onChange} onMessage={setMessage} />
       {message ? <div className="small text-warning mt-1">{message}</div> : null}
       {spare.tooLong.length ? (
         <div className="small text-muted mt-1">

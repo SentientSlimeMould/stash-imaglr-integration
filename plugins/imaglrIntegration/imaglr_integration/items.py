@@ -118,8 +118,9 @@ def bump_used_tags(db: Database, tags: list[str]) -> None:
         )
 
 
-def tag_mapping(db: Database) -> dict[str, str | None]:
-    return {r["stash_tag"].lower(): r["imaglr_tag"] for r in db.fetchall("SELECT stash_tag, imaglr_tag FROM tag_map")}
+def tag_mapping(db: Database) -> dict[str, list[str]]:
+    """Tag rules: lower-cased Stash tag -> the imaglr tags to send instead ([] = never suggest)."""
+    return {r["stash_tag"].lower(): loads(r["imaglr_tags"], []) for r in db.fetchall("SELECT * FROM tag_rules")}
 
 
 # ---- sets --------------------------------------------------------------------------------

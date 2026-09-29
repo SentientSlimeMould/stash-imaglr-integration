@@ -29,7 +29,7 @@ export function SentTab() {
 
   async function alwaysDrop(tag: string) {
     try {
-      await runOperation("tag_map_set", { stash_tag: tag, imaglr_tag: null });
+      await runOperation("tag_rule_set", { stash_tag: tag, imaglr_tags: [] });
       Toast.success(`"${tag}" won't be suggested again.`);
     } catch (e) {
       Toast.error(e);

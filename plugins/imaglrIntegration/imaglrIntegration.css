@@ -323,6 +323,7 @@
 .imaglr-rules li {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
   gap: 0.5rem;
   padding: 0.35rem 0;
   border-bottom: 1px solid #394b59;
@@ -330,14 +331,24 @@
 .imaglr-tag-select .react-select__multi-value {
   max-width: 100%;
 }
-.imaglr-rule-form {
-  display: grid;
-  grid-template-columns: 1fr 1fr auto auto;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
+.imaglr-rules .tag-item {
+  margin: 0.1rem 0.2rem 0.1rem 0;
 }
-@media (max-width: 575.98px) {
-  .imaglr-rule-form {
-    grid-template-columns: 1fr 1fr;
-  }
+.imaglr-rule-actions,
+.imaglr-rule-buttons {
+  display: flex;
+  gap: 1rem;
+  flex-shrink: 0;
+}
+.imaglr-refresh {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 1rem;
+}
+.imaglr-settings-section {
+  border-top: 1px solid #394b59;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
 }

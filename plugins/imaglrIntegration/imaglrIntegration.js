@@ -471,12 +471,10 @@
     multiValueRemove: (base, state) => ({ ...base, color: state.isFocused ? base.color : "#333333" })
   };
   var toOption = (tag) => ({ value: tag, label: tag });
-  function TagField({ tags, suggestions, lowercase, disabled, onChange }) {
+  function TagInput({ tags, extra = [], lowercase, disabled, inputId, placeholder, onChange, onMessage }) {
     const Select = PluginApi.libraries.ReactSelect.default;
     const [input, setInput] = react_default.useState("");
     const [found, setFound] = react_default.useState([]);
-    const [message, setMessage] = react_default.useState(null);
-    const spare = spareSuggestions(suggestions, tags);
     react_default.useEffect(() => {
       const q2 = input.trim();
       if (!q2) {
@@ -490,7 +488,7 @@
     }, [input]);
     const taken = new Set(tags.map((t) => t.toLowerCase()));
     const q = input.trim().toLowerCase();
-    const names = q ? [...spare.addable.filter((t) => t.toLowerCase().includes(q)), ...found] : spare.addable;
+    const names = (q ? [...extra.filter((t) => t.toLowerCase().includes(q)), ...found] : extra).map((t) => normalise(t, lowercase));
     const options = names.filter((t, i) => !taken.has(t.toLowerCase()) && names.findIndex((o) => o.toLowerCase() === t.toLowerCase()) === i).map(toOption);
     const typed = checkNewTag(tags, input, lowercase);
     if (input.trim() && typed.ok && !options.some((o) => o.value.toLowerCase() === typed.tag.toLowerCase())) {
@@ -499,17 +497,17 @@
     function change(selected) {
       const next = (selected ?? []).map((o) => o.value);
       if (next.length > MAX_TAGS) {
-        setMessage(`imaglr allows ${MAX_TAGS} tags per post. Remove one first.`);
+        onMessage?.(`imaglr allows ${MAX_TAGS} tags per post. Remove one first.`);
         return;
       }
-      setMessage(null);
+      onMessage?.(null);
       setInput("");
       onChange(next);
     }
-    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags-header" }, /* @__PURE__ */ react_default.createElement("label", { htmlFor: "imaglr-tag-field" }, /* @__PURE__ */ react_default.createElement("strong", null, "Tags")), /* @__PURE__ */ react_default.createElement("span", { className: tags.length >= MAX_TAGS ? "text-warning" : "text-muted" }, tags.length, " / ", MAX_TAGS)), /* @__PURE__ */ react_default.createElement(
+    return /* @__PURE__ */ react_default.createElement(
       Select,
       {
-        inputId: "imaglr-tag-field",
+        inputId,
         className: "react-select tag-select imaglr-tag-select",
         classNamePrefix: "react-select",
         isMulti: true,
@@ -522,15 +520,31 @@
         onInputChange: (value, meta) => {
           if (meta.action === "input-change") {
             setInput(value);
-            setMessage(null);
+            onMessage?.(null);
           }
         },
         onChange: change,
         filterOption: () => true,
-        placeholder: "Add tags\u2026",
+        placeholder: placeholder ?? "Add tags\u2026",
         noOptionsMessage: () => input.trim() && !typed.ok ? typed.error : null,
         styles: STYLES,
         components: { IndicatorSeparator: () => null }
+      }
+    );
+  }
+  function TagField({ tags, suggestions, lowercase, disabled, onChange }) {
+    const [message, setMessage] = react_default.useState(null);
+    const spare = spareSuggestions(suggestions, tags);
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags-header" }, /* @__PURE__ */ react_default.createElement("label", { htmlFor: "imaglr-tag-field" }, /* @__PURE__ */ react_default.createElement("strong", null, "Tags")), /* @__PURE__ */ react_default.createElement("span", { className: tags.length >= MAX_TAGS ? "text-warning" : "text-muted" }, tags.length, " / ", MAX_TAGS)), /* @__PURE__ */ react_default.createElement(
+      TagInput,
+      {
+        inputId: "imaglr-tag-field",
+        tags,
+        extra: spare.addable,
+        lowercase,
+        disabled,
+        onChange,
+        onMessage: setMessage
       }
     ), message ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning mt-1" }, message) : null, spare.tooLong.length ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "Not usable on imaglr (over 64 characters): ", spare.tooLong.join(", ")) : null);
   }
@@ -764,7 +778,7 @@
           }
         },
         ACTION_LABELS[a]
-      ))))), blogs.length === 0 ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info" }, "Add your imaglr blog first: use the Blogs button on the page.") : null, problem ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, problem) : null), /* @__PURE__ */ react_default.createElement(Modal.Footer, { className: "imaglr-editor-footer" }, BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: cancelSend }, "Stop sending") : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger mr-auto", onClick: remove, disabled: locked }, removeLabel), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: cancel }, "Cancel"), confirmPublish ? /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-confirm" }, "Posts publicly on ", blog?.label, " right away.", /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setConfirmPublish(false) }, "Cancel"), /* @__PURE__ */ react_default.createElement(Button, { variant: "danger", onClick: send, disabled: busy }, "Publish now")) : /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: send, disabled: locked || !blog || !!problem }, busy ? "Starting\u2026" : sendButtonLabel(sendAction, blog)))))
+      ))))), blogs.length === 0 ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info" }, "Add your imaglr blog first: use the Settings button on the page.") : null, problem ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, problem) : null), /* @__PURE__ */ react_default.createElement(Modal.Footer, { className: "imaglr-editor-footer" }, BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: cancelSend }, "Stop sending") : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger mr-auto", onClick: remove, disabled: locked }, removeLabel), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: cancel }, "Cancel"), confirmPublish ? /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-confirm" }, "Posts publicly on ", blog?.label, " right away.", /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setConfirmPublish(false) }, "Cancel"), /* @__PURE__ */ react_default.createElement(Button, { variant: "danger", onClick: send, disabled: busy }, "Publish now")) : /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: send, disabled: locked || !blog || !!problem }, busy ? "Starting\u2026" : sendButtonLabel(sendAction, blog)))))
     );
   }
 
@@ -1278,7 +1292,7 @@
     }
     async function alwaysDrop(tag) {
       try {
-        await runOperation("tag_map_set", { stash_tag: tag, imaglr_tag: null });
+        await runOperation("tag_rule_set", { stash_tag: tag, imaglr_tags: [] });
         Toast.success(`"${tag}" won't be suggested again.`);
       } catch (e) {
         Toast.error(e);
@@ -1289,8 +1303,90 @@
     return /* @__PURE__ */ react_default.createElement("ul", { className: "imaglr-sent" }, items.map((item) => /* @__PURE__ */ react_default.createElement("li", { key: item.id, className: "imaglr-sent-row card" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-sent-thumb" }, item.thumb ? /* @__PURE__ */ react_default.createElement("img", { src: baseUrl() + item.thumb, alt: "", loading: "lazy" }) : null), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-sent-body" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-card-title" }, item.title, item.files > 1 ? /* @__PURE__ */ react_default.createElement("span", { className: "text-muted" }, " + ", item.files - 1, " more") : null), /* @__PURE__ */ react_default.createElement("div", { className: "small" }, /* @__PURE__ */ react_default.createElement(Badge, { variant: item.sent_as === "publish" ? "success" : "primary" }, SENT_AS_LABELS[item.sent_as]), " ", item.blog ? `on ${item.blog}` : null, " \xB7 ", fmtDate(item.sent_at), " \xB7", " ", /* @__PURE__ */ react_default.createElement("a", { href: imaglrLink(item.sent_as, item.post_url), target: "_blank", rel: "noreferrer" }, item.sent_as === "draft" ? "Open imaglr drafts" : "Open on imaglr")), item.followup_failed ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning" }, item.error_detail, " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "link", size: "sm", className: "p-0", onClick: () => retry(item) }, item.action === "publish" ? "Retry publishing" : "Retry adding to queue")) : item.error_detail ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning" }, item.error_detail) : null, item.dropped_tags.length ? /* @__PURE__ */ react_default.createElement("div", { className: "small" }, /* @__PURE__ */ react_default.createElement("span", { className: "text-muted" }, "imaglr dropped:"), " ", item.dropped_tags.map((tag) => /* @__PURE__ */ react_default.createElement("span", { key: tag, className: "imaglr-dropped" }, tag, " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "link", size: "sm", className: "p-0", onClick: () => alwaysDrop(tag) }, "Always drop")))) : null))));
   }
 
-  // src/ui/settings/BlogSettings.tsx
-  function BlogSettings({ onClose }) {
+  // src/ui/settings/TagRules.tsx
+  function StashTagPicker({ value, onChange }) {
+    const Select = PluginApi.libraries.ReactSelect.default;
+    const [input, setInput] = react_default.useState("");
+    const [found, setFound] = react_default.useState([]);
+    react_default.useEffect(() => {
+      if (!input.trim()) {
+        setFound([]);
+        return;
+      }
+      const timer = window.setTimeout(() => {
+        runOperation("stash_tags_find", { q: input }).then((r) => setFound(r.tags), () => setFound([]));
+      }, 200);
+      return () => window.clearTimeout(timer);
+    }, [input]);
+    return /* @__PURE__ */ react_default.createElement(
+      Select,
+      {
+        inputId: "imaglr-rule-stash-tag",
+        className: "react-select tag-select",
+        classNamePrefix: "react-select",
+        isClearable: true,
+        value: value ? { value, label: value } : null,
+        options: found.map((t) => ({ value: t, label: t })),
+        inputValue: input,
+        onInputChange: (v, meta) => meta.action === "input-change" && setInput(v),
+        onChange: (o) => {
+          onChange(o?.value ?? null);
+          setInput("");
+        },
+        filterOption: () => true,
+        placeholder: "Choose a Stash tag\u2026",
+        noOptionsMessage: () => input.trim() ? "No Stash tag with that name" : null,
+        styles: { option: (base) => ({ ...base, color: "#000" }) },
+        components: { IndicatorSeparator: () => null }
+      }
+    );
+  }
+  function TagRules() {
+    const { Button, Badge, Form } = PluginApi.libraries.Bootstrap;
+    const Toast = PluginApi.hooks.useToast();
+    const [rules, setRules] = react_default.useState([]);
+    const [stashTag, setStashTag] = react_default.useState(null);
+    const [targets, setTargets] = react_default.useState([]);
+    const [lowercase, setLowercase] = react_default.useState(true);
+    react_default.useEffect(() => {
+      runOperation("tag_rule_list").then((r) => {
+        setRules(r.rules);
+        setLowercase(r.lowercase_tags);
+      }, () => void 0);
+    }, []);
+    async function save(tags) {
+      try {
+        setRules((await runOperation("tag_rule_set", { stash_tag: stashTag, imaglr_tags: tags })).rules);
+        setStashTag(null);
+        setTargets([]);
+      } catch (e) {
+        Toast.error(e);
+      }
+    }
+    async function remove(tag) {
+      try {
+        setRules((await runOperation("tag_rule_delete", { stash_tag: tag })).rules);
+      } catch (e) {
+        Toast.error(e);
+      }
+    }
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-settings-section" }, /* @__PURE__ */ react_default.createElement("h5", null, "Tag rules"), /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted" }, "Whenever a Stash tag is suggested for imaglr, send these imaglr tags instead. Include the original if you still want it. A rule with no imaglr tags means the Stash tag is never suggested."), rules.length ? /* @__PURE__ */ react_default.createElement("ul", { className: "imaglr-rules" }, rules.map((r) => /* @__PURE__ */ react_default.createElement("li", { key: r.stash_tag }, /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement("strong", null, r.stash_tag), " \u2192", " ", r.imaglr_tags.length ? r.imaglr_tags.map((t) => /* @__PURE__ */ react_default.createElement(Badge, { key: t, variant: "secondary", className: "tag-item" }, t)) : /* @__PURE__ */ react_default.createElement("em", null, "never suggested")), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-rule-actions" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0", onClick: () => {
+      setStashTag(r.stash_tag);
+      setTargets(r.imaglr_tags);
+    } }, "Edit"), /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger p-0", onClick: () => remove(r.stash_tag) }, "Remove"))))) : null, /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, { htmlFor: "imaglr-rule-stash-tag" }, "Stash tag"), /* @__PURE__ */ react_default.createElement(StashTagPicker, { value: stashTag, onChange: setStashTag })), /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, { htmlFor: "imaglr-rule-targets" }, "Send as (imaglr tags)"), /* @__PURE__ */ react_default.createElement(
+      TagInput,
+      {
+        inputId: "imaglr-rule-targets",
+        tags: targets,
+        lowercase,
+        onChange: setTargets,
+        placeholder: "Add imaglr tags\u2026"
+      }
+    )), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-rule-buttons" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", disabled: !stashTag || !targets.length, onClick: () => save(targets) }, "Save rule"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled: !stashTag, onClick: () => save([]) }, "Never suggest")));
+  }
+
+  // src/ui/settings/Settings.tsx
+  function Settings({ onClose }) {
     const { Modal, Button, Form, Alert, Badge } = PluginApi.libraries.Bootstrap;
     const Toast = PluginApi.hooks.useToast();
     const [blogs, setBlogs] = react_default.useState(null);
@@ -1300,39 +1396,16 @@
     const [checking, setChecking] = react_default.useState(false);
     const [error, setError] = react_default.useState(null);
     const [changed, setChanged] = react_default.useState(false);
-    const [rules, setRules] = react_default.useState([]);
-    react_default.useEffect(() => {
-      runOperation("tag_map_list").then((r) => setRules(r.rules), () => void 0);
-    }, []);
-    const [ruleFrom, setRuleFrom] = react_default.useState("");
-    const [ruleTo, setRuleTo] = react_default.useState("");
-    async function addRule(drop) {
-      try {
-        await runOperation("tag_map_set", { stash_tag: ruleFrom, imaglr_tag: drop ? null : ruleTo });
-        setRules((await runOperation("tag_map_list")).rules);
-        setRuleFrom("");
-        setRuleTo("");
-      } catch (err) {
-        Toast.error(err);
-      }
-    }
-    async function removeRule(stashTag) {
-      try {
-        setRules((await runOperation("tag_map_delete", { stash_tag: stashTag })).rules);
-      } catch (err) {
-        Toast.error(err);
-      }
-    }
-    const check = react_default.useCallback(() => {
+    const refresh = react_default.useCallback(() => {
       setChecking(true);
       runOperation("blogs_check").then((r) => setBlogs(r.blogs), (e) => Toast.error(e)).finally(() => setChecking(false));
     }, []);
     react_default.useEffect(() => {
       runOperation("blogs_list").then((r) => {
         setBlogs(r.blogs);
-        if (r.blogs.length) check();
+        if (r.blogs.length) refresh();
       }, (e) => Toast.error(e));
-    }, [check]);
+    }, [refresh]);
     async function add(e) {
       e.preventDefault();
       setAdding(true);
@@ -1341,7 +1414,7 @@
         await runOperation("blog_add", { api_key: key, default_action: defaultAction });
         setKey("");
         setChanged(true);
-        check();
+        refresh();
       } catch (err) {
         setError(err.message);
       } finally {
@@ -1366,10 +1439,10 @@
         Toast.error(err);
       }
     }
-    return /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: () => void 0, keyboard: false, size: "lg", dialogClassName: "imaglr-editor", scrollable: true }, /* @__PURE__ */ react_default.createElement(Modal.Header, null, /* @__PURE__ */ react_default.createElement(Modal.Title, null, "imaglr blogs")), /* @__PURE__ */ react_default.createElement(Modal.Body, null, blogs === null ? /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Loading\u2026") : null, blogs && blogs.length ? /* @__PURE__ */ react_default.createElement("ul", { className: "imaglr-blog-list" }, blogs.map((blog) => {
+    return /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: () => void 0, keyboard: false, size: "lg", dialogClassName: "imaglr-editor", scrollable: true }, /* @__PURE__ */ react_default.createElement(Modal.Header, null, /* @__PURE__ */ react_default.createElement(Modal.Title, null, "imaglr settings")), /* @__PURE__ */ react_default.createElement(Modal.Body, null, /* @__PURE__ */ react_default.createElement("h5", null, "Blogs"), blogs === null ? /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Loading\u2026") : null, blogs && blogs.length ? /* @__PURE__ */ react_default.createElement("ul", { className: "imaglr-blog-list" }, blogs.map((blog) => {
       const problem = blogProblem(blog);
       const postsLeft = blog.limits?.posts_per_day?.remaining;
-      return /* @__PURE__ */ react_default.createElement("li", { key: blog.id, className: "imaglr-blog" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-blog-name" }, blog.url ? /* @__PURE__ */ react_default.createElement("a", { href: blog.url, target: "_blank", rel: "noreferrer" }, blog.label) : blog.label, " ", problem ? /* @__PURE__ */ react_default.createElement(Badge, { variant: "warning" }, "Needs attention") : blog.ok ? /* @__PURE__ */ react_default.createElement(Badge, { variant: "success" }, "OK") : null), /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, "Key ", blog.key_hint, postsLeft != null ? ` \xB7 ${postsLeft} posts left today` : ""), problem ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning" }, problem) : null, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-blog-controls" }, /* @__PURE__ */ react_default.createElement(Form.Label, { className: "mb-0", htmlFor: `imaglr-action-${blog.id}` }, "When sent"), /* @__PURE__ */ react_default.createElement(
+      return /* @__PURE__ */ react_default.createElement("li", { key: blog.id, className: "imaglr-blog" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-blog-name" }, blog.url ? /* @__PURE__ */ react_default.createElement("a", { href: blog.url, target: "_blank", rel: "noreferrer" }, blog.label) : blog.label, " ", problem ? /* @__PURE__ */ react_default.createElement(Badge, { variant: "warning" }, "Needs attention") : blog.ok ? /* @__PURE__ */ react_default.createElement(Badge, { variant: "success" }, "OK") : null), /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, "Key ", blog.key_hint, postsLeft != null ? ` \xB7 ${postsLeft} posts left today` : "", blog.checked_at ? ` \xB7 checked ${fmtDate(blog.checked_at)}` : ""), problem ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning" }, problem) : null, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-blog-controls" }, /* @__PURE__ */ react_default.createElement(Form.Label, { className: "mb-0", htmlFor: `imaglr-action-${blog.id}` }, "When sent"), /* @__PURE__ */ react_default.createElement(
         Form.Control,
         {
           id: `imaglr-action-${blog.id}`,
@@ -1381,26 +1454,7 @@
         },
         Object.keys(ACTION_LABELS).map((a) => /* @__PURE__ */ react_default.createElement("option", { key: a, value: a }, ACTION_LABELS[a]))
       ), /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger", onClick: () => remove(blog) }, "Remove")));
-    })) : null, blogs && blogs.length ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", size: "sm", onClick: check, disabled: checking, className: "mb-3" }, checking ? "Checking with imaglr\u2026" : "Check again") : null, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-add-blog" }, /* @__PURE__ */ react_default.createElement("h6", null, "Tag rules"), /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted" }, "When a Stash tag is suggested for imaglr, always send it under another name, or never suggest it."), rules.length === 0 ? null : /* @__PURE__ */ react_default.createElement("ul", { className: "imaglr-rules" }, rules.map((r) => /* @__PURE__ */ react_default.createElement("li", { key: r.stash_tag }, /* @__PURE__ */ react_default.createElement("span", null, /* @__PURE__ */ react_default.createElement("strong", null, r.stash_tag), " \u2192 ", r.imaglr_tag ? /* @__PURE__ */ react_default.createElement("strong", null, r.imaglr_tag) : /* @__PURE__ */ react_default.createElement("em", null, "always dropped")), /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger p-0", onClick: () => removeRule(r.stash_tag) }, "Remove")))), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-rule-form" }, /* @__PURE__ */ react_default.createElement(
-      Form.Control,
-      {
-        className: "text-input",
-        value: ruleFrom,
-        placeholder: "Stash tag",
-        "aria-label": "Stash tag",
-        onChange: (e) => setRuleFrom(e.target.value)
-      }
-    ), /* @__PURE__ */ react_default.createElement(
-      Form.Control,
-      {
-        className: "text-input",
-        value: ruleTo,
-        placeholder: "send as\u2026 (imaglr tag)",
-        maxLength: 64,
-        "aria-label": "imaglr tag",
-        onChange: (e) => setRuleTo(e.target.value)
-      }
-    ), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled: !ruleFrom.trim() || !ruleTo.trim(), onClick: () => addRule(false) }, "Add rule"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled: !ruleFrom.trim(), onClick: () => addRule(true) }, "Never suggest"))), /* @__PURE__ */ react_default.createElement(Form, { onSubmit: add, className: "imaglr-add-blog" }, /* @__PURE__ */ react_default.createElement("h6", null, blogs && blogs.length ? "Add another blog" : "Add your imaglr blog"), /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted" }, "On imaglr, open ", /* @__PURE__ */ react_default.createElement("a", { href: "https://imaglr.com/settings", target: "_blank", rel: "noreferrer" }, "Settings \u2192 API"), " and create a key with the ", /* @__PURE__ */ react_default.createElement("strong", null, "read"), " and ", /* @__PURE__ */ react_default.createElement("strong", null, "manage"), " permissions. Each key belongs to one blog. The key is stored only in this plugin and never shown again."), /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "API key"), /* @__PURE__ */ react_default.createElement(
+    })) : null, blogs && blogs.length ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-refresh" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", size: "sm", onClick: refresh, disabled: checking }, checking ? "Refreshing\u2026" : "Refresh status"), /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, "Asks imaglr for each blog's name, account status and posts left today. Nothing is changed on imaglr.")) : null, /* @__PURE__ */ react_default.createElement(Form, { onSubmit: add, className: "imaglr-add-blog" }, /* @__PURE__ */ react_default.createElement("h6", null, blogs && blogs.length ? "Add a blog" : "Add your imaglr blog"), /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted" }, "On imaglr, open ", /* @__PURE__ */ react_default.createElement("a", { href: "https://imaglr.com/settings", target: "_blank", rel: "noreferrer" }, "Settings \u2192 API"), " and create a key with the ", /* @__PURE__ */ react_default.createElement("strong", null, "read"), " and ", /* @__PURE__ */ react_default.createElement("strong", null, "manage"), " permissions. Each key belongs to one blog. The key is stored only in this plugin and never shown again."), /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "API key"), /* @__PURE__ */ react_default.createElement(
       Form.Control,
       {
         className: "text-input",
@@ -1419,7 +1473,7 @@
         onChange: (e) => setDefaultAction(e.target.value)
       },
       Object.keys(ACTION_LABELS).map((a) => /* @__PURE__ */ react_default.createElement("option", { key: a, value: a }, ACTION_LABELS[a]))
-    ), /* @__PURE__ */ react_default.createElement(Form.Text, { muted: true }, "You can still choose differently each time you send.")), error ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "danger" }, error) : null, /* @__PURE__ */ react_default.createElement(Button, { type: "submit", variant: "primary", disabled: adding || !key.trim() }, adding ? "Checking the key\u2026" : "Add blog"))), /* @__PURE__ */ react_default.createElement(Modal.Footer, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => onClose(changed) }, "Close")));
+    ), /* @__PURE__ */ react_default.createElement(Form.Text, { muted: true }, "You can still choose differently each time you send.")), error ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "danger" }, error) : null, /* @__PURE__ */ react_default.createElement(Button, { type: "submit", variant: "primary", disabled: adding || !key.trim() }, adding ? "Checking the key\u2026" : "Add blog")), /* @__PURE__ */ react_default.createElement(TagRules, null)), /* @__PURE__ */ react_default.createElement(Modal.Footer, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => onClose(changed) }, "Close")));
   }
 
   // src/ui/PostPage.tsx
@@ -1467,8 +1521,8 @@
     function setTab(key) {
       history.replace({ search: `?tab=${key}` });
     }
-    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-page container-fluid" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-page-header" }, /* @__PURE__ */ react_default.createElement("h2", { className: "imaglr-page-title" }, "Post to imaglr"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setShowBlogs(true) }, /* @__PURE__ */ react_default.createElement(Icon, { icon: PluginApi.libraries.FontAwesomeSolid.faCog }), " Blogs")), blogs && blogs.length === 0 ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info", className: "imaglr-welcome" }, /* @__PURE__ */ react_default.createElement("strong", null, "Add your imaglr blog to start."), " You'll need an API key from imaglr (paid supporters only).", " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", size: "sm", onClick: () => setShowBlogs(true) }, "Add blog")) : null, /* @__PURE__ */ react_default.createElement(Tab.Container, { activeKey: tab, onSelect: (key) => key && setTab(key) }, /* @__PURE__ */ react_default.createElement(Nav, { variant: "tabs", className: "imaglr-tabs" }, TABS.map(({ key, title }) => /* @__PURE__ */ react_default.createElement(Nav.Item, { key }, /* @__PURE__ */ react_default.createElement(Nav.Link, { eventKey: key }, title)))), /* @__PURE__ */ react_default.createElement(Tab.Content, { className: "imaglr-tab-content", key: reloadKey }, /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "clips" }, tab === "clips" ? /* @__PURE__ */ react_default.createElement(QueueTab, { tab: "clips", openId }) : null), /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "images" }, tab === "images" ? /* @__PURE__ */ react_default.createElement(QueueTab, { tab: "images", openId }) : null), /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "sent" }, tab === "sent" ? /* @__PURE__ */ react_default.createElement(SentTab, null) : null))), /* @__PURE__ */ react_default.createElement(BackendStatus, null), showBlogs ? /* @__PURE__ */ react_default.createElement(
-      BlogSettings,
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-page container-fluid" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-page-header" }, /* @__PURE__ */ react_default.createElement("h2", { className: "imaglr-page-title" }, "Post to imaglr"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setShowBlogs(true) }, /* @__PURE__ */ react_default.createElement(Icon, { icon: PluginApi.libraries.FontAwesomeSolid.faCog }), " Settings")), blogs && blogs.length === 0 ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info", className: "imaglr-welcome" }, /* @__PURE__ */ react_default.createElement("strong", null, "Add your imaglr blog to start."), " You'll need an API key from imaglr (paid supporters only).", " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", size: "sm", onClick: () => setShowBlogs(true) }, "Open settings")) : null, /* @__PURE__ */ react_default.createElement(Tab.Container, { activeKey: tab, onSelect: (key) => key && setTab(key) }, /* @__PURE__ */ react_default.createElement(Nav, { variant: "tabs", className: "imaglr-tabs" }, TABS.map(({ key, title }) => /* @__PURE__ */ react_default.createElement(Nav.Item, { key }, /* @__PURE__ */ react_default.createElement(Nav.Link, { eventKey: key }, title)))), /* @__PURE__ */ react_default.createElement(Tab.Content, { className: "imaglr-tab-content", key: reloadKey }, /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "clips" }, tab === "clips" ? /* @__PURE__ */ react_default.createElement(QueueTab, { tab: "clips", openId }) : null), /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "images" }, tab === "images" ? /* @__PURE__ */ react_default.createElement(QueueTab, { tab: "images", openId }) : null), /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "sent" }, tab === "sent" ? /* @__PURE__ */ react_default.createElement(SentTab, null) : null))), /* @__PURE__ */ react_default.createElement(BackendStatus, null), showBlogs ? /* @__PURE__ */ react_default.createElement(
+      Settings,
       {
         onClose: (changed) => {
           setShowBlogs(false);

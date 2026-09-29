@@ -106,6 +106,22 @@ MIGRATIONS = [
     """
     ALTER TABLE items ADD COLUMN source_path TEXT;
     """,
+    # v3: a tag rule maps one Stash tag to a list of imaglr tags (JSON; [] = never suggest)
+    """
+    CREATE TABLE tag_rules (
+      stash_tag TEXT PRIMARY KEY COLLATE NOCASE,
+      imaglr_tags TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    INSERT INTO tag_rules(stash_tag, imaglr_tags, created_at, updated_at)
+      SELECT stash_tag,
+             CASE WHEN imaglr_tag IS NULL THEN '[]'
+                  ELSE '["' || replace(replace(imaglr_tag, '\\', '\\\\'), '"', '\\"') || '"]' END,
+             created_at, updated_at
+      FROM tag_map;
+    DROP TABLE tag_map;
+    """,
 ]
 
 

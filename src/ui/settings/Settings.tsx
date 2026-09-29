@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Blogs: one imaglr API key each, kept in the plugin's database and never shown again after saving.
+// Settings dialog: blogs (one imaglr API key each, kept in the plugin's database and never shown again
+// after saving), then tag rules. Stash-level options live in Stash's Settings → Plugins.
 import React from "react";
 import { runOperation } from "../api.ts";
+import { fmtDate } from "../lib/format.ts";
 import { ACTION_LABELS, blogProblem } from "../lib/send.ts";
 import type { Blog, SendAction } from "../model.ts";
+import { TagRules } from "./TagRules.tsx";
 
-export function BlogSettings({ onClose }: { onClose: (changed: boolean) => void }) {
+export function Settings({ onClose }: { onClose: (changed: boolean) => void }) {
   const { Modal, Button, Form, Alert, Badge } = PluginApi.libraries.Bootstrap;
   const Toast = PluginApi.hooks.useToast();
   const [blogs, setBlogs] = React.useState<Blog[] | null>(null);
@@ -15,35 +18,9 @@ export function BlogSettings({ onClose }: { onClose: (changed: boolean) => void 
   const [checking, setChecking] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [changed, setChanged] = React.useState(false);
-  const [rules, setRules] = React.useState<{ stash_tag: string; imaglr_tag: string | null }[]>([]);
 
-  React.useEffect(() => {
-    runOperation<{ rules: typeof rules }>("tag_map_list").then((r) => setRules(r.rules), () => undefined);
-  }, []);
-
-  const [ruleFrom, setRuleFrom] = React.useState("");
-  const [ruleTo, setRuleTo] = React.useState("");
-
-  async function addRule(drop: boolean) {
-    try {
-      await runOperation("tag_map_set", { stash_tag: ruleFrom, imaglr_tag: drop ? null : ruleTo });
-      setRules((await runOperation<{ rules: typeof rules }>("tag_map_list")).rules);
-      setRuleFrom("");
-      setRuleTo("");
-    } catch (err) {
-      Toast.error(err);
-    }
-  }
-
-  async function removeRule(stashTag: string) {
-    try {
-      setRules((await runOperation<{ rules: typeof rules }>("tag_map_delete", { stash_tag: stashTag })).rules);
-    } catch (err) {
-      Toast.error(err);
-    }
-  }
-
-  const check = React.useCallback(() => {
+  /** Ask imaglr for every blog's profile, account status and remaining limits (read-only calls). */
+  const refresh = React.useCallback(() => {
     setChecking(true);
     runOperation<{ blogs: Blog[] }>("blogs_check")
       .then((r) => setBlogs(r.blogs), (e: Error) => Toast.error(e))
@@ -53,9 +30,9 @@ export function BlogSettings({ onClose }: { onClose: (changed: boolean) => void 
   React.useEffect(() => {
     runOperation<{ blogs: Blog[] }>("blogs_list").then((r) => {
       setBlogs(r.blogs);
-      if (r.blogs.length) check();
+      if (r.blogs.length) refresh();
     }, (e: Error) => Toast.error(e));
-  }, [check]);
+  }, [refresh]);
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -65,7 +42,7 @@ export function BlogSettings({ onClose }: { onClose: (changed: boolean) => void 
       await runOperation("blog_add", { api_key: key, default_action: defaultAction });
       setKey("");
       setChanged(true);
-      check();
+      refresh();
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -96,9 +73,10 @@ export function BlogSettings({ onClose }: { onClose: (changed: boolean) => void 
   return (
     <Modal show onHide={() => undefined} keyboard={false} size="lg" dialogClassName="imaglr-editor" scrollable>
       <Modal.Header>
-        <Modal.Title>imaglr blogs</Modal.Title>
+        <Modal.Title>imaglr settings</Modal.Title>
       </Modal.Header>
       <Modal.Body>
+        <h5>Blogs</h5>
         {blogs === null ? <p className="text-muted">Loading…</p> : null}
         {blogs && blogs.length ? (
           <ul className="imaglr-blog-list">
@@ -114,6 +92,7 @@ export function BlogSettings({ onClose }: { onClose: (changed: boolean) => void 
                   <small className="text-muted">
                     Key {blog.key_hint}
                     {postsLeft != null ? ` · ${postsLeft} posts left today` : ""}
+                    {blog.checked_at ? ` · checked ${fmtDate(blog.checked_at)}` : ""}
                   </small>
                   {problem ? <div className="small text-warning">{problem}</div> : null}
                   <div className="imaglr-blog-controls">
@@ -132,40 +111,18 @@ export function BlogSettings({ onClose }: { onClose: (changed: boolean) => void 
           </ul>
         ) : null}
         {blogs && blogs.length ? (
-          <Button variant="secondary" size="sm" onClick={check} disabled={checking} className="mb-3">
-            {checking ? "Checking with imaglr…" : "Check again"}
-          </Button>
+          <div className="imaglr-refresh">
+            <Button variant="secondary" size="sm" onClick={refresh} disabled={checking}>
+              {checking ? "Refreshing…" : "Refresh status"}
+            </Button>
+            <small className="text-muted">
+              Asks imaglr for each blog's name, account status and posts left today. Nothing is changed on imaglr.
+            </small>
+          </div>
         ) : null}
 
-        <div className="imaglr-add-blog">
-          <h6>Tag rules</h6>
-          <p className="small text-muted">
-            When a Stash tag is suggested for imaglr, always send it under another name, or never suggest it.
-          </p>
-          {rules.length === 0 ? null : (
-            <ul className="imaglr-rules">
-              {rules.map((r) => (
-                <li key={r.stash_tag}>
-                  <span>
-                    <strong>{r.stash_tag}</strong> → {r.imaglr_tag ? <strong>{r.imaglr_tag}</strong> : <em>always dropped</em>}
-                  </span>
-                  <Button variant="link" className="text-danger p-0" onClick={() => removeRule(r.stash_tag)}>Remove</Button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="imaglr-rule-form">
-            <Form.Control className="text-input" value={ruleFrom} placeholder="Stash tag" aria-label="Stash tag"
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRuleFrom(e.target.value)} />
-            <Form.Control className="text-input" value={ruleTo} placeholder="send as… (imaglr tag)" maxLength={64}
-              aria-label="imaglr tag" onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRuleTo(e.target.value)} />
-            <Button variant="secondary" disabled={!ruleFrom.trim() || !ruleTo.trim()} onClick={() => addRule(false)}>Add rule</Button>
-            <Button variant="secondary" disabled={!ruleFrom.trim()} onClick={() => addRule(true)}>Never suggest</Button>
-          </div>
-        </div>
-
         <Form onSubmit={add} className="imaglr-add-blog">
-          <h6>{blogs && blogs.length ? "Add another blog" : "Add your imaglr blog"}</h6>
+          <h6>{blogs && blogs.length ? "Add a blog" : "Add your imaglr blog"}</h6>
           <p className="small text-muted">
             On imaglr, open <a href="https://imaglr.com/settings" target="_blank" rel="noreferrer">Settings → API</a> and
             create a key with the <strong>read</strong> and <strong>manage</strong> permissions. Each key belongs to one
@@ -191,6 +148,8 @@ export function BlogSettings({ onClose }: { onClose: (changed: boolean) => void 
             {adding ? "Checking the key…" : "Add blog"}
           </Button>
         </Form>
+
+        <TagRules />
       </Modal.Body>
       <Modal.Footer>
         <Button variant="primary" onClick={() => onClose(changed)}>Close</Button>

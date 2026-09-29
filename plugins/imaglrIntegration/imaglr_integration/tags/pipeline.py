@@ -98,8 +98,19 @@ def normalise(name: str, lowercase: bool) -> str:
     return s.lower() if lowercase else s
 
 
-def suggest(raw: list[RawTag], cfg: TagConfig, mapping: dict[str, str | None]) -> Suggestions:
-    """mapping keys are lower-cased Stash tag names; value None means drop."""
+def _mapped(name: str, mapping: dict) -> list[str]:
+    """A Stash tag after the tag rules: itself, the rule's imaglr tags, or nothing (never suggest)."""
+    if name.lower() not in mapping:
+        return [name]
+    value = mapping[name.lower()]
+    if value is None:
+        return []
+    return [value] if isinstance(value, str) else list(value)
+
+
+def suggest(raw: list[RawTag], cfg: TagConfig, mapping: dict[str, list[str]]) -> Suggestions:
+    """mapping keys are lower-cased Stash tag names; each value is the list of imaglr tags to send
+    instead ([] means never suggest). A plain string or None is accepted as a one-tag list or []."""
     workflow = {cfg.queue_tag.lower(), cfg.done_tag.lower()}
     out = Suggestions()
     seen: set[str] = set()
@@ -112,31 +123,27 @@ def suggest(raw: list[RawTag], cfg: TagConfig, mapping: dict[str, str | None]) -
             continue
         if any(p.search(name) for p in cfg.exclude_patterns):
             continue
-        # 2. mapping
-        if name.lower() in mapping:
-            mapped = mapping[name.lower()]
-            if mapped is None:
+        # 2. tag rules: one Stash tag may become several imaglr tags, or none
+        for mapped in _mapped(name, mapping):
+            # 3. normalise
+            norm = normalise(mapped, cfg.lowercase)
+            if not norm:
                 continue
-            name = mapped
-        # 3. normalise
-        norm = normalise(name, cfg.lowercase)
-        if not norm:
-            continue
-        # 4. too long
-        if len(norm) > cfg.max_len:
-            if norm.lower() not in seen:
-                seen.add(norm.lower())
-                out.greyed.append(SuggestedTag(norm, r.source, r.name, "too_long"))
-            continue
-        # 5. dedupe
-        if norm.lower() in seen:
-            continue
-        seen.add(norm.lower())
-        # 6. cap
-        if len(out.active) < cfg.max_tags:
-            out.active.append(SuggestedTag(norm, r.source, r.name))
-        else:
-            out.greyed.append(SuggestedTag(norm, r.source, r.name, "over_limit"))
+            # 4. too long
+            if len(norm) > cfg.max_len:
+                if norm.lower() not in seen:
+                    seen.add(norm.lower())
+                    out.greyed.append(SuggestedTag(norm, r.source, r.name, "too_long"))
+                continue
+            # 5. dedupe
+            if norm.lower() in seen:
+                continue
+            seen.add(norm.lower())
+            # 6. cap
+            if len(out.active) < cfg.max_tags:
+                out.active.append(SuggestedTag(norm, r.source, r.name))
+            else:
+                out.greyed.append(SuggestedTag(norm, r.source, r.name, "over_limit"))
     return out
 
 

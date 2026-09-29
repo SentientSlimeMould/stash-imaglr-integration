@@ -7,12 +7,15 @@ runPluginTask so the job appears on Stash's Tasks page, and records the job id o
 
 from __future__ import annotations
 
+import json
+
 from typing import Any
 
 from . import blogs, jobs
 from . import settings as plugin_settings
 from . import items as repo
 from .context import Context, UserError
+from .db import now_iso
 from .stash import api
 from .settings import PLUGIN_ID
 from .tags.pipeline import MAX_TAG_LEN, MAX_TAGS
@@ -200,32 +203,40 @@ def op_sent_list(ctx: Context) -> dict[str, Any]:
     return {"items": [_sent_view(ctx, repo.decode(r), names) for r in rows if r["id"] not in members]}
 
 
-def op_tag_map_set(ctx: Context) -> dict[str, Any]:
-    """Always map a Stash tag to another imaglr tag, or (imaglr_tag null) never suggest it."""
-    from .db import now_iso
+def _rules(ctx: Context) -> dict[str, Any]:
+    rows = ctx.db.fetchall("SELECT stash_tag, imaglr_tags FROM tag_rules ORDER BY stash_tag COLLATE NOCASE")
+    return {"rules": [{"stash_tag": r["stash_tag"], "imaglr_tags": json.loads(r["imaglr_tags"])} for r in rows]}
 
+
+def op_tag_rule_set(ctx: Context) -> dict[str, Any]:
+    """Whenever this Stash tag is suggested, send these imaglr tags instead ([] = never suggest it)."""
     stash_tag = " ".join(str(ctx.arg("stash_tag")).split())
-    target = ctx.args.get("imaglr_tag")
-    target = " ".join(str(target).split()) or None if target is not None else None
-    if not stash_tag or (target and len(target) > MAX_TAG_LEN):
-        raise UserError("That tag can't be mapped.")
+    targets = ctx.args.get("imaglr_tags")
+    if not stash_tag or not isinstance(targets, list):
+        raise UserError("Choose a Stash tag and the imaglr tags to send for it.")
+    cleaned = _clean_tags(targets, not plugin_settings.load(ctx.stash).keep_tag_case)
     ts = now_iso()
     ctx.db.execute(
-        "INSERT INTO tag_map(stash_tag, imaglr_tag, created_at, updated_at) VALUES(?, ?, ?, ?) "
-        "ON CONFLICT(stash_tag) DO UPDATE SET imaglr_tag=excluded.imaglr_tag, updated_at=excluded.updated_at",
-        (stash_tag, target, ts, ts),
+        "INSERT INTO tag_rules(stash_tag, imaglr_tags, created_at, updated_at) VALUES(?, ?, ?, ?) "
+        "ON CONFLICT(stash_tag) DO UPDATE SET imaglr_tags=excluded.imaglr_tags, updated_at=excluded.updated_at",
+        (stash_tag, json.dumps(cleaned), ts, ts),
     )
-    return {"ok": True}
+    return _rules(ctx)
 
 
-def op_tag_map_list(ctx: Context) -> dict[str, Any]:
-    rows = ctx.db.fetchall("SELECT stash_tag, imaglr_tag FROM tag_map ORDER BY stash_tag COLLATE NOCASE")
-    return {"rules": rows}
+def op_tag_rule_list(ctx: Context) -> dict[str, Any]:
+    return {**_rules(ctx), "lowercase_tags": not plugin_settings.load(ctx.stash).keep_tag_case}
 
 
-def op_tag_map_delete(ctx: Context) -> dict[str, Any]:
-    ctx.db.execute("DELETE FROM tag_map WHERE stash_tag=?", (str(ctx.arg("stash_tag")),))
-    return op_tag_map_list(ctx)
+def op_tag_rule_delete(ctx: Context) -> dict[str, Any]:
+    ctx.db.execute("DELETE FROM tag_rules WHERE stash_tag=?", (str(ctx.arg("stash_tag")),))
+    return _rules(ctx)
+
+
+def op_stash_tags_find(ctx: Context) -> dict[str, Any]:
+    """Existing Stash tags by name, for choosing the Stash side of a tag rule."""
+    text = str(ctx.args.get("q") or "").strip()
+    return {"tags": [t.name for t in api.find_tags(ctx.stash, text)] if text else []}
 
 
 def op_tags_suggest(ctx: Context) -> dict[str, Any]:
@@ -257,9 +268,10 @@ OPERATIONS = {
     "recover": op_recover,
     "retry_follow_up": op_retry_follow_up,
     "sent_list": op_sent_list,
-    "tag_map_set": op_tag_map_set,
-    "tag_map_list": op_tag_map_list,
-    "tag_map_delete": op_tag_map_delete,
+    "tag_rule_set": op_tag_rule_set,
+    "tag_rule_list": op_tag_rule_list,
+    "tag_rule_delete": op_tag_rule_delete,
+    "stash_tags_find": op_stash_tags_find,
     "tags_suggest": op_tags_suggest,
 }
 

@@ -319,7 +319,7 @@ export function Editor({ itemId, onClose }: Props) {
             </ButtonGroup>
           </div>
         </Form.Group>
-        {blogs.length === 0 ? <Alert variant="info">Add your imaglr blog first: use the Blogs button on the page.</Alert> : null}
+        {blogs.length === 0 ? <Alert variant="info">Add your imaglr blog first: use the Settings button on the page.</Alert> : null}
         {problem ? <Alert variant="warning">{problem}</Alert> : null}
       </Modal.Body>
       <Modal.Footer className="imaglr-editor-footer">

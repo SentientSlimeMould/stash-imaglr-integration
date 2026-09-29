@@ -5,7 +5,7 @@ import { runOperation, type Ping } from "./api.ts";
 import type { Blog } from "./model.ts";
 import { QueueTab } from "./queue/QueueTab.tsx";
 import { SentTab } from "./sent/SentTab.tsx";
-import { BlogSettings } from "./settings/BlogSettings.tsx";
+import { Settings } from "./settings/Settings.tsx";
 
 const TABS = [
   { key: "clips", title: "Clips" },
@@ -71,13 +71,13 @@ export function PostPage() {
       <div className="imaglr-page-header">
         <h2 className="imaglr-page-title">Post to imaglr</h2>
         <Button variant="secondary" onClick={() => setShowBlogs(true)}>
-          <Icon icon={PluginApi.libraries.FontAwesomeSolid.faCog} /> Blogs
+          <Icon icon={PluginApi.libraries.FontAwesomeSolid.faCog} /> Settings
         </Button>
       </div>
       {blogs && blogs.length === 0 ? (
         <Alert variant="info" className="imaglr-welcome">
           <strong>Add your imaglr blog to start.</strong> You'll need an API key from imaglr (paid supporters only).{" "}
-          <Button variant="primary" size="sm" onClick={() => setShowBlogs(true)}>Add blog</Button>
+          <Button variant="primary" size="sm" onClick={() => setShowBlogs(true)}>Open settings</Button>
         </Alert>
       ) : null}
       <Tab.Container activeKey={tab} onSelect={(key: TabKey) => key && setTab(key)}>
@@ -96,7 +96,7 @@ export function PostPage() {
       </Tab.Container>
       <BackendStatus />
       {showBlogs ? (
-        <BlogSettings
+        <Settings
           onClose={(changed) => {
             setShowBlogs(false);
             if (changed) {
