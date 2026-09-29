@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 import unittest
 
-from imaglr_integration.stash import StashClient, base_url
+from imaglr_integration.stash.client import StashClient, base_url
 
 
 class BaseUrlTest(unittest.TestCase):

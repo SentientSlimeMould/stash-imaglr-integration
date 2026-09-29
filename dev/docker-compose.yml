@@ -13,6 +13,9 @@ x-stash: &stash
     STASH_METADATA: /metadata/
     STASH_CACHE: /cache/
     STASH_PORT: "9999"
+    # Development only: where the plugin sends imaglr API calls. Defaults to the fake server;
+    # run `IMAGLR_API_BASE=https://imaglr.com/api/v2 docker compose up -d` for a real-imaglr checkpoint.
+    IMAGLR_API_BASE: ${IMAGLR_API_BASE:-http://fake-imaglr:8900/api/v2}
 
 services:
   # Oldest supported release.
@@ -45,6 +48,15 @@ services:
       - ../plugins/imaglrIntegration:/root/.stash/plugins/imaglrIntegration:ro
       - dev-plugin-data:/root/.stash/plugins/imaglrIntegration/data
 
+  # Fake imaglr API (dev/fake_imaglr.py). Received posts: http://127.0.0.1:8900/
+  fake-imaglr:
+    image: stashapp/stash:v0.31.1
+    entrypoint: ["python3", "-u", "/scripts/fake_imaglr.py", "8900", "/state"]
+    ports: ["127.0.0.1:8900:8900"]
+    volumes:
+      - fake-imaglr-state:/state
+      - ./fake_imaglr.py:/scripts/fake_imaglr.py:ro
+
   # One-off: generates synthetic test media into the shared media volume.
   #   docker compose run --rm make-media
   make-media:
@@ -57,6 +69,7 @@ services:
 
 volumes:
   media:
+  fake-imaglr-state:
   v0311-config:
   v0311-generated:
   v0311-metadata:

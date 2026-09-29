@@ -53,11 +53,28 @@ class StashClient:
         self._ssl = ssl._create_unverified_context() if _is_loopback(self.url) else None
 
     def gql(self, query, variables=None):
+        self._check_api_key()
+        return self._request(query, variables)
+
+    def auth_headers(self):
+        """Headers that authenticate a plain HTTP request to Stash (a download, ffmpeg's HTTP input)
+        the same way gql() does: Stash's API key when one exists, else the session cookie."""
+        self._check_api_key()
+        if self._api_key:
+            return {"ApiKey": self._api_key}
+        if self._cookie_value:
+            return {"Cookie": f"{self._cookie_name}={self._cookie_value}"}
+        return {}
+
+    @property
+    def ssl_context(self):
+        return self._ssl
+
+    def _check_api_key(self):
         if not self._api_key_checked:
             self._api_key_checked = True
             key = self._request("{ configuration { general { apiKey } } }", None)
             self._api_key = key["configuration"]["general"]["apiKey"] or None
-        return self._request(query, variables)
 
     def _request(self, query, variables):
         body = json.dumps({"query": query, "variables": variables or {}}).encode()

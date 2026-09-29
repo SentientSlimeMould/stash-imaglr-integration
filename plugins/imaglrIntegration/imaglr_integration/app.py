@@ -6,47 +6,20 @@ request ends. Anything slow runs as a task (runPluginTask), whose outcome is rec
 database, since Stash reports every plugin task as FINISHED regardless of its result.
 """
 
+from __future__ import annotations
+
 import os
 import platform
-import re
 import traceback
+from typing import Any
 
-from . import log
-from .stash import StashClient
+from . import blog_ops, log, queue_ops
+from .context import Context, UserError, plugin_version
 
-
-class UserError(Exception):
-    """An error whose message is safe and useful to show in the UI."""
-
-
-class Context:
-    def __init__(self, request):
-        self.connection = request.get("server_connection") or {}
-        self.args = request.get("args") or {}
-        self.plugin_dir = self.connection.get("PluginDir") or os.path.dirname(os.path.dirname(__file__))
-        self.data_dir = os.path.join(self.plugin_dir, "data")
-        self._stash = None
-
-    @property
-    def stash(self):
-        if self._stash is None:
-            self._stash = StashClient(self.connection)
-        return self._stash
+__all__ = ["handle", "OPERATIONS", "UserError", "plugin_version"]
 
 
-def plugin_version(plugin_dir):
-    try:
-        with open(os.path.join(plugin_dir, "imaglrIntegration.yml"), encoding="utf-8") as f:
-            for line in f:
-                match = re.match(r"version:\s*(\S+)", line)
-                if match:
-                    return match.group(1)
-    except OSError:
-        pass
-    return "unknown"
-
-
-def op_ping(ctx):
+def op_ping(ctx: Context) -> dict[str, Any]:
     """Round trip check: plugin runs, can reach Stash, and can write its data folder."""
     data = ctx.stash.gql("{ version { version } systemStatus { ffmpegPath ffprobePath } }")
     os.makedirs(ctx.data_dir, exist_ok=True)
@@ -56,7 +29,7 @@ def op_ping(ctx):
     os.remove(probe)
     return {
         "pong": True,
-        "plugin_version": plugin_version(ctx.plugin_dir),
+        "plugin_version": ctx.version,
         "python": platform.python_version(),
         "stash_version": data["version"]["version"],
         "ffmpeg": data["systemStatus"]["ffmpegPath"],
@@ -67,10 +40,12 @@ def op_ping(ctx):
 
 OPERATIONS = {
     "ping": op_ping,
+    **blog_ops.OPERATIONS,
+    **queue_ops.OPERATIONS,
 }
 
 
-def handle(request):
+def handle(request: dict[str, Any]) -> tuple[Any, str | None]:
     """Returns (output, error) for Stash's raw-interface reply."""
     ctx = Context(request)
     mode = ctx.args.get("mode")
@@ -84,3 +59,5 @@ def handle(request):
     except Exception as e:  # report, never crash without a reply
         log.error(f"{mode} failed: {e}\n{traceback.format_exc()}")
         return None, f"{mode} failed: {e}"
+    finally:
+        ctx.close()

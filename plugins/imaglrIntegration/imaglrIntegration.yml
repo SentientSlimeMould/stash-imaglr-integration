@@ -11,3 +11,28 @@ ui:
     - imaglrIntegration.js
   css:
     - imaglrIntegration.css
+settings:
+  queueTag:
+    displayName: Queue tag
+    description: Stash tag that puts markers and images on the Post to imaglr page. Leave empty for "imaglr".
+    type: STRING
+  doneTag:
+    displayName: Sent tag
+    description: Tag that replaces the queue tag once an item is sent. Leave empty for "imaglr-sent".
+    type: STRING
+  excludeTagPatterns:
+    displayName: Tags never suggested
+    description: Comma-separated regular expressions; matching Stash tags are not suggested for imaglr. Leave empty for "^AI_".
+    type: STRING
+  keepTagCase:
+    displayName: Keep tag capitals
+    description: Send tags with their capital letters. Off (the default) sends them in lower case.
+    type: BOOLEAN
+  defaultClipSeconds:
+    displayName: Default clip length (seconds)
+    description: Used when a marker has no end time. Leave empty for 15.
+    type: NUMBER
+  preparedRetentionDays:
+    displayName: Keep prepared files (days)
+    description: How long processed files are kept after sending, for re-sending. Leave empty for 14.
+    type: NUMBER
