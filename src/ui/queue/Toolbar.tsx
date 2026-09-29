@@ -149,8 +149,8 @@ function FilterDialog({ tab, controls, items, onChange, onClose }: Pick<Props, "
   const [draft, setDraft] = React.useState(controls);
   const formats = formatsIn(items);
   return (
-    <Modal show onHide={onClose}>
-      <Modal.Header closeButton>
+    <Modal show onHide={() => undefined} keyboard={false}>
+      <Modal.Header>
         <Modal.Title>Filter {tab}</Modal.Title>
       </Modal.Header>
       <Modal.Body>

@@ -80,8 +80,8 @@ export function BlogSettings({ onClose }: { onClose: (changed: boolean) => void 
   }
 
   return (
-    <Modal show onHide={() => onClose(changed)} size="lg" dialogClassName="imaglr-editor" scrollable>
-      <Modal.Header closeButton>
+    <Modal show onHide={() => undefined} keyboard={false} size="lg" dialogClassName="imaglr-editor" scrollable>
+      <Modal.Header>
         <Modal.Title>imaglr blogs</Modal.Title>
       </Modal.Header>
       <Modal.Body>
@@ -171,6 +171,9 @@ export function BlogSettings({ onClose }: { onClose: (changed: boolean) => void 
           </Button>
         </Form>
       </Modal.Body>
+      <Modal.Footer>
+        <Button variant="primary" onClick={() => onClose(changed)}>Close</Button>
+      </Modal.Footer>
     </Modal>
   );
 }

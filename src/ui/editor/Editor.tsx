@@ -146,7 +146,6 @@ export function Editor({ itemId, onClose }: Props) {
   }
 
   function cancel() {
-    if (dirty && !window.confirm("Discard your changes?")) return;
     onClose(changed);
   }
 
@@ -214,8 +213,10 @@ export function Editor({ itemId, onClose }: Props) {
 
 
   return (
-    <Modal show onHide={cancel} size="lg" dialogClassName="imaglr-editor" scrollable>
-      <Modal.Header closeButton>
+    // Like Stash's own dialogs (ModalComponent): clicking outside or pressing Escape does nothing;
+    // leave with Cancel or the send button.
+    <Modal show onHide={() => undefined} keyboard={false} size="lg" dialogClassName="imaglr-editor" scrollable>
+      <Modal.Header>
         <Modal.Title>
           {item.kind === "set" ? `Post of ${files.length}` : item.source_title}{" "}
           <small className="text-muted">{STATUS_LABELS[item.status]}</small>

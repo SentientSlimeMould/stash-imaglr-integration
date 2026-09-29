@@ -737,7 +737,6 @@
       setChanged(true);
     }
     function cancel() {
-      if (dirty && !window.confirm("Discard your changes?")) return;
       onClose(changed);
     }
     async function send() {
@@ -791,75 +790,79 @@
         Toast.error(e);
       }
     }
-    return /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: cancel, size: "lg", dialogClassName: "imaglr-editor", scrollable: true }, /* @__PURE__ */ react_default.createElement(Modal.Header, { closeButton: true }, /* @__PURE__ */ react_default.createElement(Modal.Title, null, item.kind === "set" ? `Post of ${files.length}` : item.source_title, " ", /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, STATUS_LABELS[item.status]))), /* @__PURE__ */ react_default.createElement(Modal.Body, null, item.error_detail && !BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, item.error_detail) : null, BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement("div", { className: "mb-3" }, /* @__PURE__ */ react_default.createElement(ProgressBar, { now: Math.round(item.progress * 100), label: STATUS_LABELS[item.status] })) : null, item.hdr_warning ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info" }, "This video is HDR. Colours may look flatter on imaglr (HDR isn't converted).") : null, isClip ? /* @__PURE__ */ react_default.createElement(
-      ClipPanel,
-      {
-        sceneId: files[0].stash_scene_id,
-        imageId: files[0].stash_marker_id ? null : files[0].stash_image_id,
-        value: { ...trim, crop },
-        disabled: locked,
-        onChange: (v) => {
-          edit(setTrim)({ inS: v.inS, outS: v.outS, mute: v.mute });
-          setCrop(v.crop);
-        },
-        onSaveStill: saveStill
-      }
-    ) : single ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(CropPreview, { file: files[0], aspect: crop.aspect, position: crop.position }), /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Crop"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(ASPECTS).map((a) => /* @__PURE__ */ react_default.createElement(
-      Button,
-      {
-        key: a,
-        variant: crop.aspect === a ? "primary" : "secondary",
-        disabled: locked,
-        onClick: () => edit(setCrop)({ ...crop, aspect: a })
-      },
-      a === "original" ? "Original" : a
-    )))), crop.aspect !== "original" ? /* @__PURE__ */ react_default.createElement(
-      Form.Control,
-      {
-        type: "range",
-        min: 0,
-        max: 1,
-        step: 0.01,
-        value: crop.position,
-        disabled: locked,
-        "aria-label": "Crop position",
-        className: "mt-2",
-        onChange: (e) => edit(setCrop)({ ...crop, position: Number(e.target.value) })
-      }
-    ) : null)) : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("p", { className: "text-muted mb-1" }, "Files in this post, in order:"), /* @__PURE__ */ react_default.createElement(FileStrip, { files, disabled: locked, onArrange: arrange }), locked ? null : /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0 mb-2", onClick: () => arrange([]) }, "Split into separate posts")), /* @__PURE__ */ react_default.createElement(TagEditor, { chips, lowercase: detail.lowercase_tags, disabled: locked, onChange: edit(setChips) }), /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-3" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Caption ", /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, "(optional)")), /* @__PURE__ */ react_default.createElement(
-      Form.Control,
-      {
-        className: "text-input",
-        as: "textarea",
-        rows: 3,
-        value: caption,
-        disabled: locked,
-        onChange: (e) => edit(setCaption)(e.target.value)
-      }
-    )), blogs.length > 1 ? /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Blog"), /* @__PURE__ */ react_default.createElement(
-      Form.Control,
-      {
-        className: "text-input",
-        as: "select",
-        value: blogId ?? "",
-        disabled: locked,
-        onChange: (e) => edit(setBlogId)(e.target.value ? Number(e.target.value) : null)
-      },
-      /* @__PURE__ */ react_default.createElement("option", { value: "" }, "Choose a blog\u2026"),
-      blogs.map((b) => /* @__PURE__ */ react_default.createElement("option", { key: b.id, value: b.id }, b.label))
-    )) : null, /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "When sent", " ", blog ? /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, "(default for ", blog.label, ": ", ACTION_LABELS[blog.default_action].toLowerCase(), ")") : null), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(ACTION_LABELS).map((a) => /* @__PURE__ */ react_default.createElement(
-      Button,
-      {
-        key: a,
-        variant: sendAction === a ? "primary" : "secondary",
-        disabled: locked,
-        onClick: () => {
-          edit(setAction)(a);
-          setConfirmPublish(false);
+    return (
+      // Like Stash's own dialogs (ModalComponent): clicking outside or pressing Escape does nothing;
+      // leave with Cancel or the send button.
+      /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: () => void 0, keyboard: false, size: "lg", dialogClassName: "imaglr-editor", scrollable: true }, /* @__PURE__ */ react_default.createElement(Modal.Header, null, /* @__PURE__ */ react_default.createElement(Modal.Title, null, item.kind === "set" ? `Post of ${files.length}` : item.source_title, " ", /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, STATUS_LABELS[item.status]))), /* @__PURE__ */ react_default.createElement(Modal.Body, null, item.error_detail && !BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, item.error_detail) : null, BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement("div", { className: "mb-3" }, /* @__PURE__ */ react_default.createElement(ProgressBar, { now: Math.round(item.progress * 100), label: STATUS_LABELS[item.status] })) : null, item.hdr_warning ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info" }, "This video is HDR. Colours may look flatter on imaglr (HDR isn't converted).") : null, isClip ? /* @__PURE__ */ react_default.createElement(
+        ClipPanel,
+        {
+          sceneId: files[0].stash_scene_id,
+          imageId: files[0].stash_marker_id ? null : files[0].stash_image_id,
+          value: { ...trim, crop },
+          disabled: locked,
+          onChange: (v) => {
+            edit(setTrim)({ inS: v.inS, outS: v.outS, mute: v.mute });
+            setCrop(v.crop);
+          },
+          onSaveStill: saveStill
         }
-      },
-      ACTION_LABELS[a]
-    ))))), blogs.length === 0 ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info" }, "Add your imaglr blog first: use the Blogs button on the page.") : null, problem ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, problem) : null), /* @__PURE__ */ react_default.createElement(Modal.Footer, { className: "imaglr-editor-footer" }, BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: cancelSend }, "Stop sending") : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger mr-auto", onClick: remove, disabled: locked }, removeLabel), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: cancel }, "Cancel"), confirmPublish ? /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-confirm" }, "Posts publicly on ", blog?.label, " right away.", /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setConfirmPublish(false) }, "Cancel"), /* @__PURE__ */ react_default.createElement(Button, { variant: "danger", onClick: send, disabled: busy }, "Publish now")) : /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: send, disabled: locked || !blog || !!problem }, busy ? "Starting\u2026" : sendButtonLabel(sendAction, blog)))));
+      ) : single ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(CropPreview, { file: files[0], aspect: crop.aspect, position: crop.position }), /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Crop"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(ASPECTS).map((a) => /* @__PURE__ */ react_default.createElement(
+        Button,
+        {
+          key: a,
+          variant: crop.aspect === a ? "primary" : "secondary",
+          disabled: locked,
+          onClick: () => edit(setCrop)({ ...crop, aspect: a })
+        },
+        a === "original" ? "Original" : a
+      )))), crop.aspect !== "original" ? /* @__PURE__ */ react_default.createElement(
+        Form.Control,
+        {
+          type: "range",
+          min: 0,
+          max: 1,
+          step: 0.01,
+          value: crop.position,
+          disabled: locked,
+          "aria-label": "Crop position",
+          className: "mt-2",
+          onChange: (e) => edit(setCrop)({ ...crop, position: Number(e.target.value) })
+        }
+      ) : null)) : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("p", { className: "text-muted mb-1" }, "Files in this post, in order:"), /* @__PURE__ */ react_default.createElement(FileStrip, { files, disabled: locked, onArrange: arrange }), locked ? null : /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0 mb-2", onClick: () => arrange([]) }, "Split into separate posts")), /* @__PURE__ */ react_default.createElement(TagEditor, { chips, lowercase: detail.lowercase_tags, disabled: locked, onChange: edit(setChips) }), /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-3" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Caption ", /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, "(optional)")), /* @__PURE__ */ react_default.createElement(
+        Form.Control,
+        {
+          className: "text-input",
+          as: "textarea",
+          rows: 3,
+          value: caption,
+          disabled: locked,
+          onChange: (e) => edit(setCaption)(e.target.value)
+        }
+      )), blogs.length > 1 ? /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Blog"), /* @__PURE__ */ react_default.createElement(
+        Form.Control,
+        {
+          className: "text-input",
+          as: "select",
+          value: blogId ?? "",
+          disabled: locked,
+          onChange: (e) => edit(setBlogId)(e.target.value ? Number(e.target.value) : null)
+        },
+        /* @__PURE__ */ react_default.createElement("option", { value: "" }, "Choose a blog\u2026"),
+        blogs.map((b) => /* @__PURE__ */ react_default.createElement("option", { key: b.id, value: b.id }, b.label))
+      )) : null, /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "When sent", " ", blog ? /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, "(default for ", blog.label, ": ", ACTION_LABELS[blog.default_action].toLowerCase(), ")") : null), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(ACTION_LABELS).map((a) => /* @__PURE__ */ react_default.createElement(
+        Button,
+        {
+          key: a,
+          variant: sendAction === a ? "primary" : "secondary",
+          disabled: locked,
+          onClick: () => {
+            edit(setAction)(a);
+            setConfirmPublish(false);
+          }
+        },
+        ACTION_LABELS[a]
+      ))))), blogs.length === 0 ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info" }, "Add your imaglr blog first: use the Blogs button on the page.") : null, problem ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, problem) : null), /* @__PURE__ */ react_default.createElement(Modal.Footer, { className: "imaglr-editor-footer" }, BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: cancelSend }, "Stop sending") : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger mr-auto", onClick: remove, disabled: locked }, removeLabel), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: cancel }, "Cancel"), confirmPublish ? /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-confirm" }, "Posts publicly on ", blog?.label, " right away.", /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setConfirmPublish(false) }, "Cancel"), /* @__PURE__ */ react_default.createElement(Button, { variant: "danger", onClick: send, disabled: busy }, "Publish now")) : /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: send, disabled: locked || !blog || !!problem }, busy ? "Starting\u2026" : sendButtonLabel(sendAction, blog)))))
+    );
   }
 
   // src/ui/lib/sort.ts
@@ -1128,7 +1131,7 @@
     const { Modal, Button, Form } = PluginApi.libraries.Bootstrap;
     const [draft, setDraft] = react_default.useState(controls);
     const formats = formatsIn(items);
-    return /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: onClose }, /* @__PURE__ */ react_default.createElement(Modal.Header, { closeButton: true }, /* @__PURE__ */ react_default.createElement(Modal.Title, null, "Filter ", tab)), /* @__PURE__ */ react_default.createElement(Modal.Body, null, /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Status"), /* @__PURE__ */ react_default.createElement(
+    return /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: () => void 0, keyboard: false }, /* @__PURE__ */ react_default.createElement(Modal.Header, null, /* @__PURE__ */ react_default.createElement(Modal.Title, null, "Filter ", tab)), /* @__PURE__ */ react_default.createElement(Modal.Body, null, /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Status"), /* @__PURE__ */ react_default.createElement(
       Form.Control,
       {
         as: "select",
@@ -1448,7 +1451,7 @@
         Toast.error(err);
       }
     }
-    return /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: () => onClose(changed), size: "lg", dialogClassName: "imaglr-editor", scrollable: true }, /* @__PURE__ */ react_default.createElement(Modal.Header, { closeButton: true }, /* @__PURE__ */ react_default.createElement(Modal.Title, null, "imaglr blogs")), /* @__PURE__ */ react_default.createElement(Modal.Body, null, blogs === null ? /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Loading\u2026") : null, blogs && blogs.length ? /* @__PURE__ */ react_default.createElement("ul", { className: "imaglr-blog-list" }, blogs.map((blog) => {
+    return /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: () => void 0, keyboard: false, size: "lg", dialogClassName: "imaglr-editor", scrollable: true }, /* @__PURE__ */ react_default.createElement(Modal.Header, null, /* @__PURE__ */ react_default.createElement(Modal.Title, null, "imaglr blogs")), /* @__PURE__ */ react_default.createElement(Modal.Body, null, blogs === null ? /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Loading\u2026") : null, blogs && blogs.length ? /* @__PURE__ */ react_default.createElement("ul", { className: "imaglr-blog-list" }, blogs.map((blog) => {
       const problem = blogProblem(blog);
       const postsLeft = blog.limits?.posts_per_day?.remaining;
       return /* @__PURE__ */ react_default.createElement("li", { key: blog.id, className: "imaglr-blog" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-blog-name" }, blog.url ? /* @__PURE__ */ react_default.createElement("a", { href: blog.url, target: "_blank", rel: "noreferrer" }, blog.label) : blog.label, " ", problem ? /* @__PURE__ */ react_default.createElement(Badge, { variant: "warning" }, "Needs attention") : blog.ok ? /* @__PURE__ */ react_default.createElement(Badge, { variant: "success" }, "OK") : null), /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, "Key ", blog.key_hint, postsLeft != null ? ` \xB7 ${postsLeft} posts left today` : ""), problem ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning" }, problem) : null, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-blog-controls" }, /* @__PURE__ */ react_default.createElement(Form.Label, { className: "mb-0", htmlFor: `imaglr-action-${blog.id}` }, "When sent"), /* @__PURE__ */ react_default.createElement(
@@ -1482,7 +1485,7 @@
         onChange: (e) => setDefaultAction(e.target.value)
       },
       Object.keys(ACTION_LABELS).map((a) => /* @__PURE__ */ react_default.createElement("option", { key: a, value: a }, ACTION_LABELS[a]))
-    ), /* @__PURE__ */ react_default.createElement(Form.Text, { muted: true }, "You can still choose differently each time you send.")), error ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "danger" }, error) : null, /* @__PURE__ */ react_default.createElement(Button, { type: "submit", variant: "primary", disabled: adding || !key.trim() }, adding ? "Checking the key\u2026" : "Add blog"))));
+    ), /* @__PURE__ */ react_default.createElement(Form.Text, { muted: true }, "You can still choose differently each time you send.")), error ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "danger" }, error) : null, /* @__PURE__ */ react_default.createElement(Button, { type: "submit", variant: "primary", disabled: adding || !key.trim() }, adding ? "Checking the key\u2026" : "Add blog"))), /* @__PURE__ */ react_default.createElement(Modal.Footer, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => onClose(changed) }, "Close")));
   }
 
   // src/ui/PostPage.tsx
