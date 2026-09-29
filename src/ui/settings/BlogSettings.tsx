@@ -15,6 +15,19 @@ export function BlogSettings({ onClose }: { onClose: (changed: boolean) => void 
   const [checking, setChecking] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [changed, setChanged] = React.useState(false);
+  const [rules, setRules] = React.useState<{ stash_tag: string; imaglr_tag: string | null }[]>([]);
+
+  React.useEffect(() => {
+    runOperation<{ rules: typeof rules }>("tag_map_list").then((r) => setRules(r.rules), () => undefined);
+  }, []);
+
+  async function removeRule(stashTag: string) {
+    try {
+      setRules((await runOperation<{ rules: typeof rules }>("tag_map_delete", { stash_tag: stashTag })).rules);
+    } catch (err) {
+      Toast.error(err);
+    }
+  }
 
   const check = React.useCallback(() => {
     setChecking(true);
@@ -109,6 +122,26 @@ export function BlogSettings({ onClose }: { onClose: (changed: boolean) => void 
             {checking ? "Checking with imaglr…" : "Check again"}
           </Button>
         ) : null}
+
+        <div className="imaglr-add-blog">
+          <h6>Tag rules</h6>
+          {rules.length === 0 ? (
+            <p className="small text-muted">
+              None yet. In the editor, tap a suggested tag to always send it under another name or always drop it.
+            </p>
+          ) : (
+            <ul className="imaglr-rules">
+              {rules.map((r) => (
+                <li key={r.stash_tag}>
+                  <span>
+                    <strong>{r.stash_tag}</strong> → {r.imaglr_tag ? <strong>{r.imaglr_tag}</strong> : <em>always dropped</em>}
+                  </span>
+                  <Button variant="link" className="text-danger p-0" onClick={() => removeRule(r.stash_tag)}>Remove</Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
 
         <Form onSubmit={add} className="imaglr-add-blog">
           <h6>{blogs && blogs.length ? "Add another blog" : "Add your imaglr blog"}</h6>

@@ -432,3 +432,46 @@
   width: 22px;
   height: 22px;
 }
+
+.imaglr-chip-name {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.imaglr-suggestions {
+  margin-top: 0.5rem;
+}
+
+.imaglr-suggestions .btn {
+  min-height: 36px;
+}
+
+.imaglr-rule {
+  margin-top: 0.5rem;
+  padding: 0.6rem;
+  border: 1px solid #394b59;
+  border-radius: 0.25rem;
+}
+
+.imaglr-rule-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.5rem;
+}
+
+.imaglr-rules {
+  list-style: none;
+  padding: 0;
+}
+
+.imaglr-rules li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid #394b59;
+}

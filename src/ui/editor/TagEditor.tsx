@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Tag chips: active tags go to imaglr; parked ones (removed, or over the limit) can be re-added with a tap.
 import React from "react";
-import { activate, activeNames, addTag, MAX_TAGS, removeTag } from "../lib/tags.ts";
+import { runOperation } from "../api.ts";
+import { activate, activeNames, addTag, MAX_TAGS, normalise, removeTag, replaceChip } from "../lib/tags.ts";
 import type { TagChip } from "../lib/types.ts";
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -25,17 +26,53 @@ export function TagEditor({ chips, lowercase, disabled, onChange }: Props) {
   const { Button, Form, InputGroup } = PluginApi.libraries.Bootstrap;
   const [text, setText] = React.useState("");
   const [message, setMessage] = React.useState<string | null>(null);
+  const [suggestions, setSuggestions] = React.useState<string[]>([]);
+  const [rule, setRule] = React.useState<TagChip | null>(null);
+  const [ruleText, setRuleText] = React.useState("");
   const count = activeNames(chips).length;
 
-  function add() {
-    const result = addTag(chips, text, lowercase);
+  // Autocomplete: tags sent before, then Stash tag names (backend op tags_suggest).
+  React.useEffect(() => {
+    const q = text.trim();
+    if (!q) {
+      setSuggestions([]);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      runOperation<{ tags: string[] }>("tags_suggest", { q }).then((r) => {
+        const taken = new Set(activeNames(chips).map((t) => t.toLowerCase()));
+        setSuggestions(r.tags.filter((t) => !taken.has(t.toLowerCase())).slice(0, 8));
+      }, () => setSuggestions([]));
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [text]);
+
+  function add(value = text) {
+    const result = addTag(chips, value, lowercase);
     if (!result.ok) {
       setMessage(result.error);
       return;
     }
     onChange(result.chips);
     setText("");
+    setSuggestions([]);
     setMessage(result.parked ? `Parked: already ${MAX_TAGS} tags. Remove one to use it.` : null);
+  }
+
+  async function saveRule(chip: TagChip, target: string | null) {
+    const stashTag = chip.original ?? chip.name;
+    try {
+      await runOperation("tag_map_set", {
+        stash_tag: stashTag, imaglr_tag: target === null ? null : normalise(target, lowercase),
+      });
+      onChange(replaceChip(chips, chip.name, target === null ? null : normalise(target, lowercase)));
+      setMessage(target === null
+        ? `"${stashTag}" won't be suggested again.`
+        : `"${stashTag}" will always be sent as "${normalise(target, lowercase)}".`);
+      setRule(null);
+    } catch (e) {
+      setMessage((e as Error).message);
+    }
   }
 
   function reactivate(name: string) {
@@ -59,7 +96,12 @@ export function TagEditor({ chips, lowercase, disabled, onChange }: Props) {
         {active.length === 0 ? <span className="text-muted">No tags yet.</span> : null}
         {active.map((chip) => (
           <span key={chip.name} className="imaglr-chip" title={chip.original ? `from Stash: ${chip.original}` : undefined}>
-            {chip.name}
+            {chip.source !== "manual" && !disabled ? (
+              <button type="button" className="imaglr-chip-name" aria-label={`Rules for ${chip.name}`}
+                onClick={() => { setRule(chip); setRuleText(""); }}>
+                {chip.name}
+              </button>
+            ) : chip.name}
             <small className="imaglr-chip-source">{SOURCE_LABELS[chip.source] ?? chip.source}</small>
             {disabled ? null : (
               <button type="button" className="imaglr-chip-remove" aria-label={`Remove ${chip.name}`}
@@ -88,10 +130,35 @@ export function TagEditor({ chips, lowercase, disabled, onChange }: Props) {
             }}
           />
           <InputGroup.Append>
-            <Button variant="secondary" onClick={add} disabled={!text.trim()}>Add</Button>
+            <Button variant="secondary" onClick={() => add()} disabled={!text.trim()}>Add</Button>
           </InputGroup.Append>
         </InputGroup>
       )}
+      {suggestions.length ? (
+        <div className="imaglr-chips imaglr-suggestions">
+          {suggestions.map((t) => (
+            <Button key={t} variant="secondary" size="sm" onClick={() => add(t)}>+ {t}</Button>
+          ))}
+        </div>
+      ) : null}
+      {rule ? (
+        <div className="imaglr-rule">
+          <div className="small mb-1">
+            Stash tag <strong>{rule.original ?? rule.name}</strong>, every time it's suggested:
+          </div>
+          <InputGroup>
+            <Form.Control className="text-input" value={ruleText} placeholder="Always send as…" maxLength={64}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRuleText(e.target.value)} />
+            <InputGroup.Append>
+              <Button variant="primary" disabled={!ruleText.trim()} onClick={() => saveRule(rule, ruleText)}>Save</Button>
+            </InputGroup.Append>
+          </InputGroup>
+          <div className="imaglr-rule-actions">
+            <Button variant="link" className="text-danger p-0" onClick={() => saveRule(rule, null)}>Always drop it</Button>
+            <Button variant="link" className="p-0" onClick={() => setRule(null)}>Cancel</Button>
+          </div>
+        </div>
+      ) : null}
       {message ? <div className="small text-warning mt-1">{message}</div> : null}
       {parked.length ? (
         <details className="imaglr-parked">

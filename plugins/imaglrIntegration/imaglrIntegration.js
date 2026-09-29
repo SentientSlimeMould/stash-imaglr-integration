@@ -232,6 +232,12 @@
   function removeTag(chips, name) {
     return chips.map((c) => c.name === name ? c.source === "manual" ? null : { ...c, state: "parked", reason: "removed" } : c).filter((c) => c !== null);
   }
+  function replaceChip(chips, name, next) {
+    if (next === null) return chips.filter((c) => c.name !== name);
+    const dup = chips.some((c) => c.name.toLowerCase() === next.toLowerCase() && c.name !== name);
+    if (dup) return chips.filter((c) => c.name !== name);
+    return chips.map((c) => c.name === name ? { ...c, name: next, original: c.original ?? c.name } : c);
+  }
 
   // src/ui/lib/send.ts
   var ACTION_LABELS = {
@@ -522,16 +528,48 @@
     const { Button, Form, InputGroup } = PluginApi.libraries.Bootstrap;
     const [text, setText] = react_default.useState("");
     const [message, setMessage] = react_default.useState(null);
+    const [suggestions, setSuggestions] = react_default.useState([]);
+    const [rule, setRule] = react_default.useState(null);
+    const [ruleText, setRuleText] = react_default.useState("");
     const count = activeNames(chips).length;
-    function add() {
-      const result = addTag(chips, text, lowercase);
+    react_default.useEffect(() => {
+      const q = text.trim();
+      if (!q) {
+        setSuggestions([]);
+        return;
+      }
+      const timer = window.setTimeout(() => {
+        runOperation("tags_suggest", { q }).then((r) => {
+          const taken = new Set(activeNames(chips).map((t) => t.toLowerCase()));
+          setSuggestions(r.tags.filter((t) => !taken.has(t.toLowerCase())).slice(0, 8));
+        }, () => setSuggestions([]));
+      }, 250);
+      return () => window.clearTimeout(timer);
+    }, [text]);
+    function add(value = text) {
+      const result = addTag(chips, value, lowercase);
       if (!result.ok) {
         setMessage(result.error);
         return;
       }
       onChange(result.chips);
       setText("");
+      setSuggestions([]);
       setMessage(result.parked ? `Parked: already ${MAX_TAGS} tags. Remove one to use it.` : null);
+    }
+    async function saveRule(chip, target) {
+      const stashTag = chip.original ?? chip.name;
+      try {
+        await runOperation("tag_map_set", {
+          stash_tag: stashTag,
+          imaglr_tag: target === null ? null : normalise(target, lowercase)
+        });
+        onChange(replaceChip(chips, chip.name, target === null ? null : normalise(target, lowercase)));
+        setMessage(target === null ? `"${stashTag}" won't be suggested again.` : `"${stashTag}" will always be sent as "${normalise(target, lowercase)}".`);
+        setRule(null);
+      } catch (e) {
+        setMessage(e.message);
+      }
     }
     function reactivate(name) {
       const result = activate(chips, name);
@@ -540,7 +578,19 @@
     }
     const active = chips.filter((c) => c.state === "active");
     const parked = chips.filter((c) => c.state !== "active");
-    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags-header" }, /* @__PURE__ */ react_default.createElement("strong", null, "Tags"), /* @__PURE__ */ react_default.createElement("span", { className: count > MAX_TAGS ? "text-danger" : "text-muted" }, count, " / ", MAX_TAGS)), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-chips" }, active.length === 0 ? /* @__PURE__ */ react_default.createElement("span", { className: "text-muted" }, "No tags yet.") : null, active.map((chip) => /* @__PURE__ */ react_default.createElement("span", { key: chip.name, className: "imaglr-chip", title: chip.original ? `from Stash: ${chip.original}` : void 0 }, chip.name, /* @__PURE__ */ react_default.createElement("small", { className: "imaglr-chip-source" }, SOURCE_LABELS[chip.source] ?? chip.source), disabled ? null : /* @__PURE__ */ react_default.createElement(
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags-header" }, /* @__PURE__ */ react_default.createElement("strong", null, "Tags"), /* @__PURE__ */ react_default.createElement("span", { className: count > MAX_TAGS ? "text-danger" : "text-muted" }, count, " / ", MAX_TAGS)), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-chips" }, active.length === 0 ? /* @__PURE__ */ react_default.createElement("span", { className: "text-muted" }, "No tags yet.") : null, active.map((chip) => /* @__PURE__ */ react_default.createElement("span", { key: chip.name, className: "imaglr-chip", title: chip.original ? `from Stash: ${chip.original}` : void 0 }, chip.source !== "manual" && !disabled ? /* @__PURE__ */ react_default.createElement(
+      "button",
+      {
+        type: "button",
+        className: "imaglr-chip-name",
+        "aria-label": `Rules for ${chip.name}`,
+        onClick: () => {
+          setRule(chip);
+          setRuleText("");
+        }
+      },
+      chip.name
+    ) : chip.name, /* @__PURE__ */ react_default.createElement("small", { className: "imaglr-chip-source" }, SOURCE_LABELS[chip.source] ?? chip.source), disabled ? null : /* @__PURE__ */ react_default.createElement(
       "button",
       {
         type: "button",
@@ -567,7 +617,16 @@
           }
         }
       }
-    ), /* @__PURE__ */ react_default.createElement(InputGroup.Append, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: add, disabled: !text.trim() }, "Add"))), message ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning mt-1" }, message) : null, parked.length ? /* @__PURE__ */ react_default.createElement("details", { className: "imaglr-parked" }, /* @__PURE__ */ react_default.createElement("summary", { className: "text-muted" }, "Not included (", parked.length, ")"), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-chips" }, parked.map((chip) => /* @__PURE__ */ react_default.createElement(
+    ), /* @__PURE__ */ react_default.createElement(InputGroup.Append, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => add(), disabled: !text.trim() }, "Add"))), suggestions.length ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-chips imaglr-suggestions" }, suggestions.map((t) => /* @__PURE__ */ react_default.createElement(Button, { key: t, variant: "secondary", size: "sm", onClick: () => add(t) }, "+ ", t))) : null, rule ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-rule" }, /* @__PURE__ */ react_default.createElement("div", { className: "small mb-1" }, "Stash tag ", /* @__PURE__ */ react_default.createElement("strong", null, rule.original ?? rule.name), ", every time it's suggested:"), /* @__PURE__ */ react_default.createElement(InputGroup, null, /* @__PURE__ */ react_default.createElement(
+      Form.Control,
+      {
+        className: "text-input",
+        value: ruleText,
+        placeholder: "Always send as\u2026",
+        maxLength: 64,
+        onChange: (e) => setRuleText(e.target.value)
+      }
+    ), /* @__PURE__ */ react_default.createElement(InputGroup.Append, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", disabled: !ruleText.trim(), onClick: () => saveRule(rule, ruleText) }, "Save"))), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-rule-actions" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger p-0", onClick: () => saveRule(rule, null) }, "Always drop it"), /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0", onClick: () => setRule(null) }, "Cancel"))) : null, message ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning mt-1" }, message) : null, parked.length ? /* @__PURE__ */ react_default.createElement("details", { className: "imaglr-parked" }, /* @__PURE__ */ react_default.createElement("summary", { className: "text-muted" }, "Not included (", parked.length, ")"), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-chips" }, parked.map((chip) => /* @__PURE__ */ react_default.createElement(
       "button",
       {
         key: chip.name,
@@ -1335,6 +1394,17 @@
     const [checking, setChecking] = react_default.useState(false);
     const [error, setError] = react_default.useState(null);
     const [changed, setChanged] = react_default.useState(false);
+    const [rules, setRules] = react_default.useState([]);
+    react_default.useEffect(() => {
+      runOperation("tag_map_list").then((r) => setRules(r.rules), () => void 0);
+    }, []);
+    async function removeRule(stashTag) {
+      try {
+        setRules((await runOperation("tag_map_delete", { stash_tag: stashTag })).rules);
+      } catch (err) {
+        Toast.error(err);
+      }
+    }
     const check = react_default.useCallback(() => {
       setChecking(true);
       runOperation("blogs_check").then((r) => setBlogs(r.blogs), (e) => Toast.error(e)).finally(() => setChecking(false));
@@ -1393,7 +1463,7 @@
         },
         Object.keys(ACTION_LABELS).map((a) => /* @__PURE__ */ react_default.createElement("option", { key: a, value: a }, ACTION_LABELS[a]))
       ), /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger", onClick: () => remove(blog) }, "Remove")));
-    })) : null, blogs && blogs.length ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", size: "sm", onClick: check, disabled: checking, className: "mb-3" }, checking ? "Checking with imaglr\u2026" : "Check again") : null, /* @__PURE__ */ react_default.createElement(Form, { onSubmit: add, className: "imaglr-add-blog" }, /* @__PURE__ */ react_default.createElement("h6", null, blogs && blogs.length ? "Add another blog" : "Add your imaglr blog"), /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted" }, "On imaglr, open ", /* @__PURE__ */ react_default.createElement("a", { href: "https://imaglr.com/settings", target: "_blank", rel: "noreferrer" }, "Settings \u2192 API"), " and create a key with the ", /* @__PURE__ */ react_default.createElement("strong", null, "read"), " and ", /* @__PURE__ */ react_default.createElement("strong", null, "manage"), " permissions. Each key belongs to one blog. The key is stored only in this plugin and never shown again."), /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "API key"), /* @__PURE__ */ react_default.createElement(
+    })) : null, blogs && blogs.length ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", size: "sm", onClick: check, disabled: checking, className: "mb-3" }, checking ? "Checking with imaglr\u2026" : "Check again") : null, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-add-blog" }, /* @__PURE__ */ react_default.createElement("h6", null, "Tag rules"), rules.length === 0 ? /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted" }, "None yet. In the editor, tap a suggested tag to always send it under another name or always drop it.") : /* @__PURE__ */ react_default.createElement("ul", { className: "imaglr-rules" }, rules.map((r) => /* @__PURE__ */ react_default.createElement("li", { key: r.stash_tag }, /* @__PURE__ */ react_default.createElement("span", null, /* @__PURE__ */ react_default.createElement("strong", null, r.stash_tag), " \u2192 ", r.imaglr_tag ? /* @__PURE__ */ react_default.createElement("strong", null, r.imaglr_tag) : /* @__PURE__ */ react_default.createElement("em", null, "always dropped")), /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger p-0", onClick: () => removeRule(r.stash_tag) }, "Remove"))))), /* @__PURE__ */ react_default.createElement(Form, { onSubmit: add, className: "imaglr-add-blog" }, /* @__PURE__ */ react_default.createElement("h6", null, blogs && blogs.length ? "Add another blog" : "Add your imaglr blog"), /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted" }, "On imaglr, open ", /* @__PURE__ */ react_default.createElement("a", { href: "https://imaglr.com/settings", target: "_blank", rel: "noreferrer" }, "Settings \u2192 API"), " and create a key with the ", /* @__PURE__ */ react_default.createElement("strong", null, "read"), " and ", /* @__PURE__ */ react_default.createElement("strong", null, "manage"), " permissions. Each key belongs to one blog. The key is stored only in this plugin and never shown again."), /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "API key"), /* @__PURE__ */ react_default.createElement(
       Form.Control,
       {
         className: "text-input",

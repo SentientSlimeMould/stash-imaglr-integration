@@ -218,6 +218,34 @@ def op_tag_map_set(ctx: Context) -> dict[str, Any]:
     return {"ok": True}
 
 
+def op_tag_map_list(ctx: Context) -> dict[str, Any]:
+    rows = ctx.db.fetchall("SELECT stash_tag, imaglr_tag FROM tag_map ORDER BY stash_tag COLLATE NOCASE")
+    return {"rules": rows}
+
+
+def op_tag_map_delete(ctx: Context) -> dict[str, Any]:
+    ctx.db.execute("DELETE FROM tag_map WHERE stash_tag=?", (str(ctx.arg("stash_tag")),))
+    return op_tag_map_list(ctx)
+
+
+def op_tags_suggest(ctx: Context) -> dict[str, Any]:
+    """Autocomplete for the tag editor: tags sent before (most used first), then Stash tag names."""
+    text = " ".join(str(ctx.args.get("q") or "").split())
+    if not text:
+        return {"tags": []}
+    lowercase = not plugin_settings.load(ctx.stash).keep_tag_case
+    used = [r["tag"] for r in ctx.db.fetchall(
+        "SELECT tag FROM used_tags WHERE tag LIKE ? ESCAPE '\\' ORDER BY use_count DESC, last_used DESC LIMIT 10",
+        ("%" + text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%",),
+    )]
+    stash = [t.name.lower() if lowercase else t.name for t in api.find_tags(ctx.stash, text)]
+    out: list[str] = []
+    for tag in used + stash:
+        if tag.lower() not in (t.lower() for t in out) and len(tag) <= MAX_TAG_LEN:
+            out.append(tag)
+    return {"tags": out[:10]}
+
+
 def task_send(ctx: Context) -> None:
     jobs.run_send(ctx, ctx.arg("item_id"))
 
@@ -230,6 +258,9 @@ OPERATIONS = {
     "retry_follow_up": op_retry_follow_up,
     "sent_list": op_sent_list,
     "tag_map_set": op_tag_map_set,
+    "tag_map_list": op_tag_map_list,
+    "tag_map_delete": op_tag_map_delete,
+    "tags_suggest": op_tags_suggest,
 }
 
 TASKS = {
