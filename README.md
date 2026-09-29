@@ -1,24 +1,35 @@
-# Template for creating Stash plugins source index
+# Imaglr Integration for Stash
 
-This template allows you to create a new repository with a few clicks with preconfigured GitHub action to publish your plugins source index. 
-_This assumes you already know how to create plugins for Stash. If you don't, first read [this](https://docs.stashapp.cc/in-app-manual/plugins/#creating-plugins)._
+A [Stash](https://github.com/stashapp/stash) plugin for sharing your favourite images and clips from Stash to
+your [imaglr](https://imaglr.com) blogs.
 
-## How to use it?
+- **Images:** tag them `imaglr` in Stash, crop if you like, and send.
+- **Clips:** tag a scene marker `imaglr` (or create one from the plugin's tab on the scene page), trim, crop and send.
+- **Tags:** suggested from your Stash tags, performers and studio, and editable before you send.
+- **Where it goes:** your imaglr drafts (the default), your imaglr queue, or published straight away. Set a
+  default for each blog and change it when you send.
+- **Privacy:** location and camera data are stripped from every file before upload.
 
-1. Click **Use this template** > **Create a new repository**. 
-1. Choose a repository name and click **Create repository**.
-1. Open **Settings** and head to **Pages**.
-1. Under Build and deployment select the Source as GitHub Actions.
+Requires an imaglr API key, which is currently only available to
+[paid supporters](https://imaglr.com/subscriptions) (see [imaglr's API page](https://imaglr.com/developers)).
 
-Now add your plugins to [plugins](/plugins) directory and they will be automatically published to the source index.
+> **Status: in development.** Nothing is installable yet. This README will cover installation, settings, usage
+> and limitations before the first release.
 
-Source index URL: [`https://<your-username>.github.io/<repository-name>/main/index.yml`](https://<your-username>.github.io/<repository-name>/main/index.yml)
+## Planned features
 
-## Share your plugins
+- A **Post to imaglr** page inside Stash (menu item **imaglr**) with **Clips**, **Images** and **Sent** tabs:
+  trim and crop clips, edit tags and caption, then send.
+- Several imaglr blogs (one API key each), with a default send action per blog that can be changed at send time.
+- Sets: up to 10 images or clips in one post.
+- Works on any Stash v0.31.1 or later install, on desktop and phone.
 
-- [Create a new topic](https://discourse.stashapp.cc/t/-/33) for your plugin on the community forum.
-- [Add your source index to the list](https://discourse.stashapp.cc/t/-/122) on the Stash community forum.
+## AI assistance
 
-## License
+This plugin is being written with the help of an AI coding assistant (Claude, by Anthropic). All code is reviewed
+and tested by a human maintainer before release, in line with the
+[CommunityScripts contribution guidelines](https://github.com/stashapp/CommunityScripts#readme).
 
-The default license is set to [AGPL-3.0](/LICENCE). Before publishing any plugins you can change it.
+## Licence
+
+[AGPL-3.0](LICENCE), the same licence as Stash.

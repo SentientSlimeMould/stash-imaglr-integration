@@ -1,0 +1,28 @@
+# Local-only notes (personal details, third-party copies)
+docs/private/
+
+# Local test environment state and secrets
+dev/stash/
+dev/media/
+dev/*.env
+dev/.env*
+
+# Build tooling
+node_modules/
+_site/
+dist/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Plugin runtime data (created by the plugin, never shipped)
+plugins/imaglrIntegration/data/
+
+# OS / editor
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
