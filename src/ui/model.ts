@@ -27,6 +27,12 @@ export interface Card {
   date?: string | null;
   first_seen?: string | null;
   stash_image_id?: string | null;
+  stash_marker_id?: string | null;
+  stash_scene_id?: string | null;
+  tab?: "clips" | "images";
+  preview?: string | null; // clips: Stash's marker preview video
+  in_s?: number | null;
+  out_s?: number | null;
   members?: Card[]; // posts with several files
 }
 
@@ -71,8 +77,15 @@ export interface Blog {
 }
 
 export interface FileCard extends Card {
-  image: string | null;
+  image?: string | null;
   crop: { aspect: import("./lib/types.ts").Aspect; position: number };
+  in_s: number | null;
+  out_s: number | null;
+  mute: boolean;
+  stash_marker_id: string | null;
+  stash_scene_id: string | null;
+  stash_image_id: string | null;
+  prepared: string | null;
 }
 
 export interface ItemDetail {
@@ -89,6 +102,10 @@ export interface ItemDetail {
     error_detail: string | null;
     progress: number;
     source_title: string;
+    in_s: number | null;
+    out_s: number | null;
+    mute: boolean;
+    hdr_warning: boolean;
   };
   files: FileCard[];
   suggestions: import("./lib/types.ts").Suggestions;

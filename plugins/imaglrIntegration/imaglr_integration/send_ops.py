@@ -13,11 +13,13 @@ from . import blogs, jobs
 from . import settings as plugin_settings
 from . import items as repo
 from .context import Context, UserError
+from .stash import api
 from .settings import PLUGIN_ID
 from .tags.pipeline import MAX_TAG_LEN, MAX_TAGS
 
 IN_FLIGHT = ("exporting", "sending")
-EDITABLE = {"tags", "caption", "blog_id", "action", "crop"}
+EDITABLE = {"tags", "caption", "blog_id", "action", "crop", "in_s", "out_s", "mute"}
+MAX_CLIP_SECONDS = 600
 ASPECTS = ("original", "9:16", "4:5", "1:1")
 
 RUN_TASK = """
@@ -73,8 +75,26 @@ def op_item_update(ctx: Context) -> dict[str, Any]:
         changes["crop"] = {"aspect": crop["aspect"], "position": min(max(float(crop.get("position", 0.5)), 0.0), 1.0)}
         if changes["crop"] != item["crop"]:
             changes.update(output_path=None, output_bytes=None, output_mime=None)  # prepare again
-    if item["status"] == "failed":
-        changes.update(status="ready" if item["output_path"] else "pending", error_code=None, error_detail=None)
+    if {"in_s", "out_s", "mute"} & set(changes):
+        if item["kind"] != "clip":
+            raise UserError("Only clips can be trimmed or muted.")
+        in_s = float(changes.get("in_s", item["in_s"]) or 0)
+        out_s = float(changes.get("out_s", item["out_s"]) or 0)
+        if in_s < 0 or out_s - in_s < 0.1:
+            raise UserError("The clip must end after it starts.")
+        if out_s - in_s > MAX_CLIP_SECONDS:
+            raise UserError(f"Clips can be at most {MAX_CLIP_SECONDS // 60} minutes long.")
+        changes.update(in_s=round(in_s, 3), out_s=round(out_s, 3), mute=bool(changes.get("mute", item["mute"])))
+        if (changes["in_s"], changes["out_s"], changes["mute"]) != (item["in_s"], item["out_s"], item["mute"]):
+            changes.update(output_path=None, output_bytes=None, output_mime=None)  # export again
+        if item["stash_marker_id"] and (changes["in_s"], changes["out_s"]) != (item["in_s"], item["out_s"]):
+            marker = api.find_marker(ctx.stash, item["stash_marker_id"])
+            if marker:  # keep Stash's marker in step with the trimmed clip
+                api.marker_update(ctx.stash, marker, seconds=changes["in_s"], end_seconds=changes["out_s"])
+                if marker.scene and changes["in_s"] != marker.seconds:
+                    api.generate_marker_previews(ctx.stash, marker.scene.id)  # Stash names them by start time
+    if item["status"] == "failed" or (item["status"] == "ready" and changes.get("output_path", True) is None):
+        changes.update(status="pending", error_code=None, error_detail=None)
     return {"item": repo.update_item(ctx.db, item["id"], **changes)}
 
 

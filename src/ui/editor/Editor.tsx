@@ -8,6 +8,7 @@ import { activeNames, chipsFromSuggestions } from "../lib/tags.ts";
 import type { Aspect, TagChip } from "../lib/types.ts";
 import { ACTION_LABELS, blogProblem, effectiveAction, pickBlog, sendButtonLabel } from "../lib/send.ts";
 import { STATUS_LABELS, type FileCard, type ItemDetail, type SendAction } from "../model.ts";
+import { ClipPanel, type ClipState } from "./ClipPanel.tsx";
 import { TagEditor } from "./TagEditor.tsx";
 
 interface Props {
@@ -88,6 +89,7 @@ export function Editor({ itemId, onClose }: Props) {
   const [chips, setChips] = React.useState<TagChip[]>([]);
   const [caption, setCaption] = React.useState("");
   const [crop, setCrop] = React.useState<{ aspect: Aspect; position: number }>({ aspect: "original", position: 0.5 });
+  const [trim, setTrim] = React.useState({ inS: 0, outS: 0, mute: false });
   const [blogId, setBlogId] = React.useState<number | null>(null);
   const [action, setAction] = React.useState<SendAction | null>(null);
   const [confirmPublish, setConfirmPublish] = React.useState(false);
@@ -101,6 +103,7 @@ export function Editor({ itemId, onClose }: Props) {
       setChips(chipsFromSuggestions(d.suggestions, d.item.tags));
       setCaption(d.item.caption);
       setCrop(d.item.crop);
+      setTrim({ inS: d.item.in_s ?? 0, outS: d.item.out_s ?? 0, mute: d.item.mute });
       setBlogId(d.item.blog_id);
       setAction(d.item.action);
       setDirty(false);
@@ -119,6 +122,7 @@ export function Editor({ itemId, onClose }: Props) {
   const sendAction = effectiveAction(blog, action);
   const problem = blog ? blogProblem(blog) : null;
   const single = files.length === 1 && item.kind !== "set";
+  const isClip = item.kind === "clip";
 
   function edit<T>(setter: (v: T) => void) {
     return (value: T) => {
@@ -131,7 +135,10 @@ export function Editor({ itemId, onClose }: Props) {
     if (!dirty) return;
     await runOperation("item_update", {
       item_id: item.id,
-      changes: { tags: activeNames(chips), caption, crop, blog_id: blogId, action },
+      changes: {
+        tags: activeNames(chips), caption, crop, blog_id: blogId, action,
+        ...(isClip ? { in_s: trim.inS, out_s: trim.outS, mute: trim.mute } : {}),
+      },
     });
     setDirty(false);
     setChanged(true);
@@ -175,6 +182,16 @@ export function Editor({ itemId, onClose }: Props) {
     }
   }
 
+  async function saveStill(t: number) {
+    try {
+      await runOperation("still_create", { item_id: item.id, t });
+      setChanged(true);
+      Toast.success(`Still saved at ${t.toFixed(1)} s. It's on the Images tab.`);
+    } catch (e) {
+      Toast.error(e);
+    }
+  }
+
   async function cancelSend() {
     await runOperation("cancel", { item_id: item.id }).catch((e: Error) => Toast.error(e));
     onClose(true);
@@ -209,7 +226,22 @@ export function Editor({ itemId, onClose }: Props) {
           </div>
         ) : null}
 
-        {single ? (
+        {item.hdr_warning ? (
+          <Alert variant="info">This video is HDR. Colours may look flatter on imaglr (HDR isn't converted).</Alert>
+        ) : null}
+        {isClip ? (
+          <ClipPanel
+            sceneId={files[0].stash_scene_id}
+            imageId={files[0].stash_marker_id ? null : files[0].stash_image_id}
+            value={{ ...trim, crop }}
+            disabled={locked}
+            onChange={(v: ClipState) => {
+              edit(setTrim)({ inS: v.inS, outS: v.outS, mute: v.mute });
+              setCrop(v.crop);
+            }}
+            onSaveStill={saveStill}
+          />
+        ) : single ? (
           <>
             <CropPreview file={files[0]} aspect={crop.aspect} position={crop.position} />
             <Form.Group className="mt-2">

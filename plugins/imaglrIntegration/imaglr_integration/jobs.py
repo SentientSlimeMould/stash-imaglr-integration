@@ -25,9 +25,9 @@ from .media.image_plan import plan_image
 from .media.image_process import ImageTooLarge, process_image
 from .media.metadata_strip import StripError
 from .media.naming import slugify
-from .media.video_export import UnsupportedMedia, VideoSettings, gif_to_mp4
-from .stash import HttpStream, StashError, api
-from .stash.paths import image_source
+from .media.video_export import UnsupportedMedia, VideoSettings, export_clip, gif_to_mp4, grab_frame
+from .stash import HttpStream, LocalFile, StashError, api
+from .stash.paths import image_source, scene_source
 from .tags.caption import caption_to_html
 from .tags.pipeline import dropped_tags
 
@@ -93,21 +93,41 @@ def prepare_image(ctx: Context, member: dict[str, Any], tools: tuple[str, str], 
     image = api.find_image(ctx.stash, member["stash_image_id"])
     if image is None:
         raise JobFailed("source_deleted", f"{member['source_title']} no longer exists in Stash.")
-    if image.is_video:
-        raise JobFailed("not_supported_yet", "Video clips from the Images list aren't supported yet.")
-    ffmpeg, ffprobe = tools
-    out_dir = prepared_dir(ctx, member["id"])
-    shutil.rmtree(out_dir, ignore_errors=True)
-    os.makedirs(out_dir)
+    out_dir = _fresh_dir(ctx, member["id"])
     source = image_source(image)
     if source is None:
         raise JobFailed("source_missing", f"Stash has no file for {member['source_title']}.")
+    downloaded = None
     if isinstance(source, HttpStream):
-        path = os.path.join(out_dir, "source")
-        api.download(ctx.stash, source.url, path)
-    else:
-        path = source.path
+        downloaded = os.path.join(out_dir, "source")
+        api.download(ctx.stash, source.url, downloaded)
+    try:
+        return _process_picture(ctx, member, downloaded or source.path, out_dir, tools, should_cancel)
+    finally:
+        if downloaded and os.path.exists(downloaded):
+            os.remove(downloaded)
 
+
+def prepare_still(ctx: Context, member: dict[str, Any], tools: tuple[str, str], should_cancel) -> dict[str, Any]:
+    frame = member["source_path"]
+    if not frame or not os.path.isfile(frame):
+        raise JobFailed("source_missing", "This still's frame is missing. Save the still again from its clip.")
+    out_dir = os.path.join(prepared_dir(ctx, member["id"]), "out")
+    shutil.rmtree(out_dir, ignore_errors=True)
+    os.makedirs(out_dir)
+    return _process_picture(ctx, member, frame, out_dir, tools, should_cancel)
+
+
+def _fresh_dir(ctx: Context, item_id: str) -> str:
+    out_dir = prepared_dir(ctx, item_id)
+    shutil.rmtree(out_dir, ignore_errors=True)
+    os.makedirs(out_dir)
+    return out_dir
+
+
+def _process_picture(ctx, member, path, out_dir, tools, should_cancel) -> dict[str, Any]:
+    """Strip, orient, crop and convert one still picture (an image or a frame grab)."""
+    ffmpeg, ffprobe = tools
     crop = member["crop"] or {}
     aspect = crop.get("aspect") or "original"
     position = float(crop.get("position", 0.5))
@@ -129,11 +149,65 @@ def prepare_image(ctx: Context, member: dict[str, Any], tools: tuple[str, str], 
         raise JobFailed("unsupported_image", f"{member['source_title']}: {e}") from None
     except FfmpegError as e:
         raise JobFailed("ffmpeg_failed", f"{member['source_title']}: {e}") from None
-    finally:
-        if isinstance(source, HttpStream) and os.path.exists(os.path.join(out_dir, "source")):
-            os.remove(os.path.join(out_dir, "source"))
     return repo.update_item(ctx.db, member["id"], output_path=output, output_bytes=size, output_mime=mime,
                             error_code=None, error_detail=None)  # type: ignore[return-value]
+
+
+def clip_source(ctx: Context, item: dict[str, Any]) -> tuple[str, dict[str, str] | None]:
+    """The video a clip (or a still's clip) is cut from: a readable local path, else Stash's stream URL
+    with auth headers for ffmpeg."""
+    if item["stash_marker_id"]:
+        marker = api.find_marker(ctx.stash, item["stash_marker_id"])
+        if marker is None or marker.scene is None:
+            raise JobFailed("source_deleted", f"The marker for {item['source_title']} no longer exists in Stash.")
+        source = scene_source(marker.scene)
+    elif item["stash_image_id"]:
+        image = api.find_image(ctx.stash, item["stash_image_id"])
+        if image is None:
+            raise JobFailed("source_deleted", f"{item['source_title']} no longer exists in Stash.")
+        source = image_source(image)
+    else:
+        raise JobFailed("source_missing", "This clip has no source in Stash.")
+    if isinstance(source, LocalFile):
+        return source.path, None
+    if isinstance(source, HttpStream):
+        return source.url, api.auth_headers(ctx.stash)
+    raise JobFailed("source_missing", f"Stash has no video file for {item['source_title']}.")
+
+
+def prepare_clip(ctx: Context, member: dict[str, Any], tools: tuple[str, str], should_cancel, progress) -> dict[str, Any]:
+    ffmpeg, ffprobe = tools
+    src, headers = clip_source(ctx, member)
+    crop = member["crop"] or {}
+    try:
+        result = export_clip(
+            src, _fresh_dir(ctx, member["id"]), title=member["source_title"] or "clip",
+            in_s=float(member["in_s"] or 0), out_s=float(member["out_s"] or 0),
+            settings=VideoSettings(ffmpeg, ffprobe), headers=headers,
+            aspect=crop.get("aspect") or "original", position=float(crop.get("position", 0.5)),
+            mute=bool(member["mute"]), progress_cb=progress, should_cancel=should_cancel,
+        )
+    except (UnsupportedMedia, ValueError) as e:
+        raise JobFailed("unsupported_video", f"{member['source_title']}: {e}") from None
+    except FfmpegError as e:
+        raise JobFailed("ffmpeg_failed", f"{member['source_title']}: {e}") from None
+    if result.hdr:
+        log.warning(f"{member['source_title']}: HDR source; colours may look washed out (tone mapping isn't supported)")
+    return repo.update_item(ctx.db, member["id"], output_path=result.path, output_bytes=result.bytes,
+                            output_mime="video/mp4", hdr_warning=result.hdr, error_code=None,
+                            error_detail=None)  # type: ignore[return-value]
+
+
+def grab_still(ctx: Context, clip: dict[str, Any], t: float, still_id: str) -> str:
+    """Grab the frame at t seconds from the clip's source video into the still's folder."""
+    ffmpeg, _ = media_tools(ctx)
+    src, headers = clip_source(ctx, clip)
+    out_dir = prepared_dir(ctx, still_id)
+    os.makedirs(out_dir, exist_ok=True)
+    try:
+        return grab_frame(src, t, os.path.join(out_dir, "frame.jpg"), ffmpeg, headers=headers)
+    except FfmpegError as e:
+        raise JobFailed("ffmpeg_failed", f"Couldn't grab that frame: {e}") from None
 
 
 def _is_prepared(member: dict[str, Any]) -> bool:
@@ -207,10 +281,16 @@ def run_send(ctx: Context, item_id: str) -> None:
             if should_cancel():
                 raise Cancelled()
             if not _is_prepared(member):
-                if member["kind"] != "image":
-                    raise JobFailed("not_supported_yet", "Only images can be sent so far.")
                 tools = tools or media_tools(ctx)
-                members[n] = prepare_image(ctx, member, tools, should_cancel)
+                if member["kind"] == "clip":
+                    def clip_progress(fraction: float, n: int = n) -> None:
+                        log.progress(0.4 * (n + fraction) / len(members))
+
+                    members[n] = prepare_clip(ctx, member, tools, should_cancel, clip_progress)
+                elif member["kind"] == "still":
+                    members[n] = prepare_still(ctx, member, tools, should_cancel)
+                else:
+                    members[n] = prepare_image(ctx, member, tools, should_cancel)
             log.progress(0.4 * (n + 1) / len(members))
             repo.update_item(ctx.db, item_id, progress=0.4 * (n + 1) / len(members))
 
@@ -268,7 +348,11 @@ def run_send(ctx: Context, item_id: str) -> None:
     failed = []
     for m in members:
         try:
-            if m["stash_image_id"]:
+            if m["stash_marker_id"]:
+                marker = api.find_marker(ctx.stash, m["stash_marker_id"])
+                if marker:
+                    api.marker_swap_tags(ctx.stash, marker, queue_tag, done_tag)
+            elif m["stash_image_id"]:
                 api.image_swap_tags(ctx.stash, m["stash_image_id"], queue_tag, done_tag)
         except StashError as e:
             failed.append(f"{m['source_title']} ({e})")

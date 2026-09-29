@@ -60,7 +60,7 @@
       try {
         const result = await runOperation("add_images", { image_ids: ids, as_one_post: asOnePost });
         Toast.success(addedMessage(result, asOnePost));
-        if (asOnePost && result.post_id) history.push(`${ROUTE}?open=${result.post_id}`);
+        if (asOnePost && result.post_id) history.push(`${ROUTE}?tab=images&open=${result.post_id}`);
       } catch (e) {
         Toast.error(e);
       }
@@ -101,7 +101,7 @@
               return;
             }
             Toast.success(addedMessage(result, true));
-            if (result.post_id) history.push(`${ROUTE}?open=${result.post_id}`);
+            if (result.post_id) history.push(`${ROUTE}?tab=images&open=${result.post_id}`);
           } catch (e) {
             Toast.error(e);
           }
@@ -289,6 +289,225 @@
     failed: "danger"
   };
 
+  // src/ui/lib/clip.ts
+  var DIRECT_CODECS = { h264: "avc1.42E01E", vp8: "vp8", vp9: "vp9", av1: "av01.0.05M.08", hevc: "hvc1" };
+  var CONTAINER_MIME = { mp4: "video/mp4", m4v: "video/mp4", mov: "video/mp4", webm: "video/webm" };
+  function directMime(info) {
+    const container = CONTAINER_MIME[(info.format ?? "").toLowerCase()];
+    const codec = DIRECT_CODECS[(info.video_codec ?? "").toLowerCase()];
+    return container && codec ? `${container}; codecs="${codec}"` : null;
+  }
+  function pickStream(direct, streams, info, canPlay) {
+    const mime = directMime(info);
+    if (mime && canPlay(mime)) return direct;
+    const mp4 = streams.find((s) => (s.mime_type ?? "").startsWith("video/mp4") && !/direct/i.test(s.label ?? ""));
+    return mp4?.url ?? direct;
+  }
+  function sameOrigin(url, origin) {
+    const u = new URL(url, origin);
+    return origin + u.pathname + u.search;
+  }
+  var MIN_CLIP = 0.1;
+  function clampTrim(inS, outS, duration, moved) {
+    const max = duration && duration > 0 ? duration : Number.POSITIVE_INFINITY;
+    let a = Math.max(0, Math.min(inS, max));
+    let b = Math.max(0, Math.min(outS, max));
+    if (b - a < MIN_CLIP) {
+      if (moved === "in") a = Math.max(0, b - MIN_CLIP);
+      else b = Math.min(max, a + MIN_CLIP);
+    }
+    return { inS: Math.round(a * 1e3) / 1e3, outS: Math.round(b * 1e3) / 1e3 };
+  }
+
+  // src/ui/lib/format.ts
+  function fmtTime(s, decimals = 1) {
+    if (s == null || !isFinite(s)) return "\u2013";
+    const sign = s < 0 ? "-" : "";
+    s = Math.abs(s);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor(s % 3600 / 60);
+    const sec = s % 60;
+    const secStr = sec.toFixed(decimals).padStart(decimals ? 3 + decimals : 2, "0");
+    return h ? `${sign}${h}:${String(m).padStart(2, "0")}:${secStr}` : `${sign}${m}:${secStr}`;
+  }
+  function parseTime(text) {
+    const t = text.trim();
+    if (!t) return null;
+    const parts = t.split(":").map((p) => p.trim());
+    if (parts.some((p) => p === "" || !/^\d*\.?\d*$/.test(p))) return null;
+    let total = 0;
+    for (const p of parts) total = total * 60 + parseFloat(p || "0");
+    return isFinite(total) ? total : null;
+  }
+  function fmtDims(w, h) {
+    return w && h ? `${w}\xD7${h}` : "\u2013";
+  }
+  function fmtDate(iso) {
+    if (!iso) return "\u2013";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleString(void 0, { dateStyle: "medium", timeStyle: "short" });
+  }
+
+  // src/ui/editor/ClipPanel.tsx
+  var SCENE_PLAYBACK = `query($id: ID!) { findScene(id: $id) {
+  paths { stream screenshot } sceneStreams { url mime_type label }
+  files { video_codec format width height duration } } }`;
+  var IMAGE_PLAYBACK = `query($id: ID!) { findImage(id: $id) {
+  paths { image thumbnail }
+  visual_files { ... on VideoFile { video_codec format width height duration } } } }`;
+  async function loadPlayback(sceneId, imageId) {
+    const canPlay = (mime) => document.createElement("video").canPlayType(mime) !== "";
+    const origin = window.location.origin;
+    if (sceneId) {
+      const { findScene: s } = await gql(SCENE_PLAYBACK, { id: sceneId });
+      const file = s.files[0] ?? {};
+      return {
+        url: sameOrigin(pickStream(s.paths.stream, s.sceneStreams, file, canPlay), origin),
+        poster: s.paths.screenshot ? sameOrigin(s.paths.screenshot, origin) : null,
+        duration: file.duration ?? null
+      };
+    }
+    const { findImage: i } = await gql(IMAGE_PLAYBACK, { id: imageId });
+    return {
+      url: sameOrigin(i.paths.image, origin),
+      poster: i.paths.thumbnail ? sameOrigin(i.paths.thumbnail, origin) : null,
+      duration: i.visual_files[0]?.duration ?? null
+    };
+  }
+  function TimeRow({ label, value, disabled, onSet, onNudge, onType }) {
+    const { Button, Form } = PluginApi.libraries.Bootstrap;
+    const [text, setText] = react_default.useState(fmtTime(value));
+    react_default.useEffect(() => setText(fmtTime(value)), [value]);
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-time-row" }, /* @__PURE__ */ react_default.createElement(Form.Label, { className: "imaglr-time-label" }, label), /* @__PURE__ */ react_default.createElement(
+      Form.Control,
+      {
+        className: "text-input imaglr-time-input",
+        value: text,
+        disabled,
+        "aria-label": `${label} time`,
+        onChange: (e) => setText(e.target.value),
+        onBlur: () => {
+          const t = parseTime(text);
+          if (t === null) setText(fmtTime(value));
+          else onType(t);
+        }
+      }
+    ), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-time-buttons" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onNudge(-1), "aria-label": `${label} back 1 second` }, "\u22121s"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onNudge(-0.1), "aria-label": `${label} back a tenth` }, "\u22120.1"), /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", disabled, onClick: onSet }, "Set here"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onNudge(0.1), "aria-label": `${label} forward a tenth` }, "+0.1"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onNudge(1), "aria-label": `${label} forward 1 second` }, "+1s")));
+  }
+  function ClipPanel({ sceneId, imageId, value, disabled, onChange, onSaveStill }) {
+    const { Button, ButtonGroup, Form } = PluginApi.libraries.Bootstrap;
+    const video = react_default.useRef(null);
+    const box = react_default.useRef(null);
+    const [playback, setPlayback] = react_default.useState(null);
+    const [error, setError] = react_default.useState(null);
+    const [looping, setLooping] = react_default.useState(false);
+    const [size, setSize] = react_default.useState({ w: 0, h: 0, vw: 0, vh: 0 });
+    const valueRef = react_default.useRef(value);
+    valueRef.current = value;
+    react_default.useEffect(() => {
+      loadPlayback(sceneId, imageId).then(setPlayback, (e) => setError(e.message));
+    }, [sceneId, imageId]);
+    react_default.useEffect(() => {
+      const onResize = () => measure();
+      window.addEventListener("resize", onResize);
+      return () => window.removeEventListener("resize", onResize);
+    }, []);
+    function measure() {
+      const v = video.current;
+      const b = box.current;
+      if (v && b) setSize({ w: b.clientWidth, h: b.clientHeight, vw: v.videoWidth, vh: v.videoHeight });
+    }
+    const duration = playback?.duration ?? null;
+    const now = () => video.current?.currentTime ?? 0;
+    function trim(inS, outS, moved) {
+      const t = clampTrim(inS, outS, duration, moved);
+      onChange({ ...value, inS: t.inS, outS: t.outS });
+      if (video.current) video.current.currentTime = moved === "in" ? t.inS : Math.max(t.inS, t.outS - 1);
+    }
+    function playClip() {
+      const v = video.current;
+      if (!v) return;
+      v.currentTime = value.inS;
+      setLooping(true);
+      void v.play();
+    }
+    const rect = overlayRect(size.w, size.h, size.vw, size.vh, value.crop.aspect, value.crop.position);
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-clip" }, error ? /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-danger" }, "Can't play this video: ", error) : null, /* @__PURE__ */ react_default.createElement("div", { ref: box, className: "imaglr-preview imaglr-video" }, playback ? /* @__PURE__ */ react_default.createElement(
+      "video",
+      {
+        ref: video,
+        src: playback.url,
+        poster: playback.poster ?? void 0,
+        playsInline: true,
+        controls: true,
+        preload: "metadata",
+        muted: value.mute,
+        onLoadedMetadata: () => {
+          if (video.current) video.current.currentTime = value.inS;
+          measure();
+        },
+        onTimeUpdate: () => {
+          const v = video.current;
+          if (v && looping && v.currentTime >= valueRef.current.outS) v.currentTime = valueRef.current.inS;
+        },
+        onPause: () => setLooping(false)
+      }
+    ) : null, rect.axis !== "none" ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-crop", style: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } }) : null), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-clip-summary" }, /* @__PURE__ */ react_default.createElement("span", null, fmtTime(value.inS), " \u2192 ", fmtTime(value.outS), " \xB7 ", /* @__PURE__ */ react_default.createElement("strong", null, (value.outS - value.inS).toFixed(1), " s")), /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-clip-actions" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: playClip }, "Play clip"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onSaveStill(now()) }, "Save still"))), /* @__PURE__ */ react_default.createElement(
+      TimeRow,
+      {
+        label: "In",
+        value: value.inS,
+        disabled,
+        onSet: () => trim(now(), value.outS, "in"),
+        onNudge: (d) => trim(value.inS + d, value.outS, "in"),
+        onType: (t) => trim(t, value.outS, "in")
+      }
+    ), /* @__PURE__ */ react_default.createElement(
+      TimeRow,
+      {
+        label: "Out",
+        value: value.outS,
+        disabled,
+        onSet: () => trim(value.inS, now(), "out"),
+        onNudge: (d) => trim(value.inS, value.outS + d, "out"),
+        onType: (t) => trim(value.inS, t, "out")
+      }
+    ), /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Crop"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(ASPECTS).map((a) => /* @__PURE__ */ react_default.createElement(
+      Button,
+      {
+        key: a,
+        variant: value.crop.aspect === a ? "primary" : "secondary",
+        disabled,
+        onClick: () => onChange({ ...value, crop: { ...value.crop, aspect: a } })
+      },
+      a === "original" ? "Original" : a
+    )))), value.crop.aspect !== "original" ? /* @__PURE__ */ react_default.createElement(
+      Form.Control,
+      {
+        type: "range",
+        min: 0,
+        max: 1,
+        step: 0.01,
+        value: value.crop.position,
+        disabled,
+        "aria-label": "Crop position",
+        className: "mt-2",
+        onChange: (e) => onChange({ ...value, crop: { ...value.crop, position: Number(e.target.value) } })
+      }
+    ) : null), /* @__PURE__ */ react_default.createElement(
+      Form.Check,
+      {
+        id: "imaglr-mute",
+        type: "switch",
+        label: "Remove sound",
+        checked: value.mute,
+        disabled,
+        onChange: (e) => onChange({ ...value, mute: e.target.checked })
+      }
+    ));
+  }
+
   // src/ui/editor/TagEditor.tsx
   var SOURCE_LABELS = {
     marker: "marker",
@@ -404,6 +623,7 @@
     const [chips, setChips] = react_default.useState([]);
     const [caption, setCaption] = react_default.useState("");
     const [crop, setCrop] = react_default.useState({ aspect: "original", position: 0.5 });
+    const [trim, setTrim] = react_default.useState({ inS: 0, outS: 0, mute: false });
     const [blogId, setBlogId] = react_default.useState(null);
     const [action, setAction] = react_default.useState(null);
     const [confirmPublish, setConfirmPublish] = react_default.useState(false);
@@ -416,6 +636,7 @@
         setChips(chipsFromSuggestions(d.suggestions, d.item.tags));
         setCaption(d.item.caption);
         setCrop(d.item.crop);
+        setTrim({ inS: d.item.in_s ?? 0, outS: d.item.out_s ?? 0, mute: d.item.mute });
         setBlogId(d.item.blog_id);
         setAction(d.item.action);
         setDirty(false);
@@ -432,6 +653,7 @@
     const sendAction = effectiveAction(blog, action);
     const problem = blog ? blogProblem(blog) : null;
     const single = files.length === 1 && item.kind !== "set";
+    const isClip = item.kind === "clip";
     function edit(setter) {
       return (value) => {
         setter(value);
@@ -442,7 +664,14 @@
       if (!dirty) return;
       await runOperation("item_update", {
         item_id: item.id,
-        changes: { tags: activeNames(chips), caption, crop, blog_id: blogId, action }
+        changes: {
+          tags: activeNames(chips),
+          caption,
+          crop,
+          blog_id: blogId,
+          action,
+          ...isClip ? { in_s: trim.inS, out_s: trim.outS, mute: trim.mute } : {}
+        }
       });
       setDirty(false);
       setChanged(true);
@@ -482,6 +711,15 @@
         Toast.error(e);
       }
     }
+    async function saveStill(t) {
+      try {
+        await runOperation("still_create", { item_id: item.id, t });
+        setChanged(true);
+        Toast.success(`Still saved at ${t.toFixed(1)} s. It's on the Images tab.`);
+      } catch (e) {
+        Toast.error(e);
+      }
+    }
     async function cancelSend() {
       await runOperation("cancel", { item_id: item.id }).catch((e) => Toast.error(e));
       onClose(true);
@@ -497,7 +735,20 @@
         Toast.error(e);
       }
     }
-    return /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: close, size: "lg", dialogClassName: "imaglr-editor", scrollable: true }, /* @__PURE__ */ react_default.createElement(Modal.Header, { closeButton: true }, /* @__PURE__ */ react_default.createElement(Modal.Title, null, item.kind === "set" ? `Post of ${files.length}` : item.source_title, " ", /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, STATUS_LABELS[item.status]))), /* @__PURE__ */ react_default.createElement(Modal.Body, null, item.error_detail && !BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, item.error_detail) : null, BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement("div", { className: "mb-3" }, /* @__PURE__ */ react_default.createElement(ProgressBar, { now: Math.round(item.progress * 100), label: STATUS_LABELS[item.status] })) : null, single ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(CropPreview, { file: files[0], aspect: crop.aspect, position: crop.position }), /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Crop"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(ASPECTS).map((a) => /* @__PURE__ */ react_default.createElement(
+    return /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: close, size: "lg", dialogClassName: "imaglr-editor", scrollable: true }, /* @__PURE__ */ react_default.createElement(Modal.Header, { closeButton: true }, /* @__PURE__ */ react_default.createElement(Modal.Title, null, item.kind === "set" ? `Post of ${files.length}` : item.source_title, " ", /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, STATUS_LABELS[item.status]))), /* @__PURE__ */ react_default.createElement(Modal.Body, null, item.error_detail && !BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, item.error_detail) : null, BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement("div", { className: "mb-3" }, /* @__PURE__ */ react_default.createElement(ProgressBar, { now: Math.round(item.progress * 100), label: STATUS_LABELS[item.status] })) : null, item.hdr_warning ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info" }, "This video is HDR. Colours may look flatter on imaglr (HDR isn't converted).") : null, isClip ? /* @__PURE__ */ react_default.createElement(
+      ClipPanel,
+      {
+        sceneId: files[0].stash_scene_id,
+        imageId: files[0].stash_marker_id ? null : files[0].stash_image_id,
+        value: { ...trim, crop },
+        disabled: locked,
+        onChange: (v) => {
+          edit(setTrim)({ inS: v.inS, outS: v.outS, mute: v.mute });
+          setCrop(v.crop);
+        },
+        onSaveStill: saveStill
+      }
+    ) : single ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(CropPreview, { file: files[0], aspect: crop.aspect, position: crop.position }), /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Crop"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(ASPECTS).map((a) => /* @__PURE__ */ react_default.createElement(
       Button,
       {
         key: a,
@@ -555,40 +806,45 @@
     ))))), blogs.length === 0 ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info" }, "Add your imaglr blog first: use the Blogs button on the page.") : null, problem ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, problem) : null), /* @__PURE__ */ react_default.createElement(Modal.Footer, { className: "imaglr-editor-footer" }, BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: cancelSend }, "Stop sending") : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger mr-auto", onClick: remove, disabled: locked }, "Don't send"), confirmPublish ? /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-confirm" }, "Posts publicly on ", blog?.label, " right away.", /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setConfirmPublish(false) }, "Cancel"), /* @__PURE__ */ react_default.createElement(Button, { variant: "danger", onClick: send, disabled: busy }, "Publish now")) : /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: send, disabled: locked || !blog || !!problem }, busy ? "Starting\u2026" : sendButtonLabel(sendAction, blog)))));
   }
 
-  // src/ui/lib/format.ts
-  function fmtDims(w, h) {
-    return w && h ? `${w}\xD7${h}` : "\u2013";
-  }
-  function fmtDate(iso) {
-    if (!iso) return "\u2013";
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return iso;
-    return d.toLocaleString(void 0, { dateStyle: "medium", timeStyle: "short" });
-  }
-
   // src/ui/queue/ItemCard.tsx
   function ItemCard({ card, highlighted }) {
     const { Badge } = PluginApi.libraries.Bootstrap;
     const ref = react_default.useRef(null);
     const count = card.members?.length ?? 0;
+    const [hover, setHover] = react_default.useState(false);
+    const canHover = typeof window !== "undefined" && window.matchMedia?.("(hover: hover)").matches;
     react_default.useEffect(() => {
       if (highlighted) ref.current?.scrollIntoView({ block: "center", behavior: "smooth" });
     }, [highlighted]);
-    const detail = count ? `${count} files in one post` : [card.format?.toUpperCase(), fmtDims(card.width, card.height), card.animated ? "animated" : null].filter(Boolean).join(" \xB7 ");
+    const detail = count ? `${count} files in one post` : card.kind === "clip" ? [`${(card.duration ?? 0).toFixed(1)} s`, fmtDims(card.width, card.height)].filter(Boolean).join(" \xB7 ") : [card.format?.toUpperCase(), fmtDims(card.width, card.height), card.animated ? "animated" : null].filter(Boolean).join(" \xB7 ");
     return /* @__PURE__ */ react_default.createElement(
       "div",
       {
         ref,
         className: `imaglr-card card${count ? " imaglr-card-stack" : ""}${highlighted ? " imaglr-card-highlight" : ""}`
       },
-      /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-card-thumb" }, card.thumb ? /* @__PURE__ */ react_default.createElement("img", { src: baseUrl() + card.thumb, alt: "", loading: "lazy" }) : null, count ? /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-card-count" }, count) : null, /* @__PURE__ */ react_default.createElement(Badge, { variant: STATUS_VARIANTS[card.status], className: "imaglr-card-status" }, STATUS_LABELS[card.status])),
+      /* @__PURE__ */ react_default.createElement(
+        "div",
+        {
+          className: "imaglr-card-thumb",
+          onMouseEnter: () => canHover && card.preview && setHover(true),
+          onMouseLeave: () => setHover(false)
+        },
+        hover && card.preview ? /* @__PURE__ */ react_default.createElement("video", { src: baseUrl() + card.preview, autoPlay: true, muted: true, loop: true, playsInline: true }) : card.thumb ? /* @__PURE__ */ react_default.createElement("img", { src: baseUrl() + card.thumb, alt: "", loading: "lazy" }) : null,
+        count ? /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-card-count" }, count) : null,
+        /* @__PURE__ */ react_default.createElement(Badge, { variant: STATUS_VARIANTS[card.status], className: "imaglr-card-status" }, STATUS_LABELS[card.status])
+      ),
       /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-card-body" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-card-title", title: card.title }, card.title), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-card-detail text-muted" }, detail))
     );
   }
 
-  // src/ui/queue/ImagesTab.tsx
+  // src/ui/queue/QueueTab.tsx
   var POLL_MS = 2e3;
-  function ImagesTab({ openId }) {
+  var EMPTY = {
+    clips: (tag) => /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("p", null, "No clips waiting."), /* @__PURE__ */ react_default.createElement("p", null, "Open a scene in Stash and use its ", /* @__PURE__ */ react_default.createElement("strong", null, "imaglr"), " tab to make a clip, or tag any scene marker", " ", /* @__PURE__ */ react_default.createElement("strong", null, tag), ".")),
+    images: (tag) => /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("p", null, "No images waiting."), /* @__PURE__ */ react_default.createElement("p", null, "In Stash, tag images ", /* @__PURE__ */ react_default.createElement("strong", null, tag), ", or tick images in any image list and choose", " ", /* @__PURE__ */ react_default.createElement("strong", null, "\u22EF \u2192 Add to imaglr"), ". Stills saved from clips appear here too."))
+  };
+  function QueueTab({ tab, openId }) {
     const { Button } = PluginApi.libraries.Bootstrap;
     const { LoadingIndicator } = PluginApi.components;
     const [data, setData] = react_default.useState(null);
@@ -597,7 +853,7 @@
     const [editing, setEditing] = react_default.useState(openId);
     const load = react_default.useCallback(() => {
       setLoading(true);
-      return runOperation("images_queue").then((d) => {
+      return runOperation("queue").then((d) => {
         setData(d);
         setError(null);
       }, (e) => setError(e.message)).finally(() => setLoading(false));
@@ -605,7 +861,8 @@
     react_default.useEffect(() => {
       runOperation("recover").catch(() => void 0).finally(load);
     }, [load]);
-    const inFlight = data?.items.some((c) => c.status === "exporting" || c.status === "sending");
+    const items = data?.items.filter((c) => c.tab === tab) ?? [];
+    const inFlight = items.some((c) => c.status === "exporting" || c.status === "sending");
     react_default.useEffect(() => {
       if (!inFlight || editing) return;
       const timer = window.setTimeout(load, POLL_MS);
@@ -615,7 +872,7 @@
       return /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-danger" }, "Couldn't load the queue: ", error, " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0", onClick: load }, "Try again"));
     }
     if (!data) return LoadingIndicator ? /* @__PURE__ */ react_default.createElement(LoadingIndicator, null) : /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Loading\u2026");
-    return /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-toolbar" }, /* @__PURE__ */ react_default.createElement("span", { className: "text-muted" }, data.items.length, " ", data.items.length === 1 ? "item" : "items"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", size: "sm", onClick: load, disabled: loading }, loading ? "Refreshing\u2026" : "Refresh")), data.items.length === 0 ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-empty text-muted" }, /* @__PURE__ */ react_default.createElement("p", null, "No images waiting."), /* @__PURE__ */ react_default.createElement("p", null, "In Stash, tag images ", /* @__PURE__ */ react_default.createElement("strong", null, data.tags.queue.name), ", or tick images in any image list and choose ", /* @__PURE__ */ react_default.createElement("strong", null, "\u22EF \u2192 Add to imaglr"), ".")) : /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-grid" }, data.items.map((card) => /* @__PURE__ */ react_default.createElement("button", { key: card.id, type: "button", className: "imaglr-card-button", onClick: () => setEditing(card.id) }, /* @__PURE__ */ react_default.createElement(ItemCard, { card, highlighted: card.id === openId })))), editing ? /* @__PURE__ */ react_default.createElement(
+    return /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-toolbar" }, /* @__PURE__ */ react_default.createElement("span", { className: "text-muted" }, items.length, " ", items.length === 1 ? "item" : "items"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", size: "sm", onClick: load, disabled: loading }, loading ? "Refreshing\u2026" : "Refresh")), items.length === 0 ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-empty text-muted" }, EMPTY[tab](data.tags.queue.name)) : /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-grid" }, items.map((card) => /* @__PURE__ */ react_default.createElement("button", { key: card.id, type: "button", className: "imaglr-card-button", onClick: () => setEditing(card.id) }, /* @__PURE__ */ react_default.createElement(ItemCard, { card, highlighted: card.id === openId })))), editing ? /* @__PURE__ */ react_default.createElement(
       Editor,
       {
         itemId: editing,
@@ -777,7 +1034,7 @@
     const params = new URLSearchParams(useLocation().search);
     const openId = params.get("open");
     const requested = params.get("tab");
-    const tab = isTab(requested) ? requested : "images";
+    const tab = isTab(requested) ? requested : "clips";
     const [blogs, setBlogs] = react_default.useState(null);
     const [showBlogs, setShowBlogs] = react_default.useState(false);
     const [reloadKey, setReloadKey] = react_default.useState(0);
@@ -795,7 +1052,7 @@
     function setTab(key) {
       history.replace({ search: `?tab=${key}` });
     }
-    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-page container-fluid" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-page-header" }, /* @__PURE__ */ react_default.createElement("h2", { className: "imaglr-page-title" }, "Post to imaglr"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setShowBlogs(true) }, /* @__PURE__ */ react_default.createElement(Icon, { icon: PluginApi.libraries.FontAwesomeSolid.faCog }), " Blogs")), blogs && blogs.length === 0 ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info", className: "imaglr-welcome" }, /* @__PURE__ */ react_default.createElement("strong", null, "Add your imaglr blog to start."), " You'll need an API key from imaglr (paid supporters only).", " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", size: "sm", onClick: () => setShowBlogs(true) }, "Add blog")) : null, /* @__PURE__ */ react_default.createElement(Tab.Container, { activeKey: tab, onSelect: (key) => key && setTab(key) }, /* @__PURE__ */ react_default.createElement(Nav, { variant: "tabs", className: "imaglr-tabs" }, TABS.map(({ key, title }) => /* @__PURE__ */ react_default.createElement(Nav.Item, { key }, /* @__PURE__ */ react_default.createElement(Nav.Link, { eventKey: key }, title)))), /* @__PURE__ */ react_default.createElement(Tab.Content, { className: "imaglr-tab-content", key: reloadKey }, /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "clips" }, /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Clips are coming next.")), /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "images" }, tab === "images" ? /* @__PURE__ */ react_default.createElement(ImagesTab, { openId }) : null), /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "sent" }, tab === "sent" ? /* @__PURE__ */ react_default.createElement(SentTab, null) : null))), /* @__PURE__ */ react_default.createElement(BackendStatus, null), showBlogs ? /* @__PURE__ */ react_default.createElement(
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-page container-fluid" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-page-header" }, /* @__PURE__ */ react_default.createElement("h2", { className: "imaglr-page-title" }, "Post to imaglr"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setShowBlogs(true) }, /* @__PURE__ */ react_default.createElement(Icon, { icon: PluginApi.libraries.FontAwesomeSolid.faCog }), " Blogs")), blogs && blogs.length === 0 ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info", className: "imaglr-welcome" }, /* @__PURE__ */ react_default.createElement("strong", null, "Add your imaglr blog to start."), " You'll need an API key from imaglr (paid supporters only).", " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", size: "sm", onClick: () => setShowBlogs(true) }, "Add blog")) : null, /* @__PURE__ */ react_default.createElement(Tab.Container, { activeKey: tab, onSelect: (key) => key && setTab(key) }, /* @__PURE__ */ react_default.createElement(Nav, { variant: "tabs", className: "imaglr-tabs" }, TABS.map(({ key, title }) => /* @__PURE__ */ react_default.createElement(Nav.Item, { key }, /* @__PURE__ */ react_default.createElement(Nav.Link, { eventKey: key }, title)))), /* @__PURE__ */ react_default.createElement(Tab.Content, { className: "imaglr-tab-content", key: reloadKey }, /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "clips" }, tab === "clips" ? /* @__PURE__ */ react_default.createElement(QueueTab, { tab: "clips", openId }) : null), /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "images" }, tab === "images" ? /* @__PURE__ */ react_default.createElement(QueueTab, { tab: "images", openId }) : null), /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "sent" }, tab === "sent" ? /* @__PURE__ */ react_default.createElement(SentTab, null) : null))), /* @__PURE__ */ react_default.createElement(BackendStatus, null), showBlogs ? /* @__PURE__ */ react_default.createElement(
       BlogSettings,
       {
         onClose: (changed) => {
@@ -809,6 +1066,136 @@
     ) : null);
   }
 
+  // src/ui/scene/SceneTab.tsx
+  function playerTime() {
+    const video = document.querySelector("#VideoJsPlayer video, .video-js video");
+    return video ? Math.round(video.currentTime * 10) / 10 : null;
+  }
+  function TagPicker({ value, placeholder, onChange }) {
+    const { Form, Button } = PluginApi.libraries.Bootstrap;
+    const [text, setText] = react_default.useState("");
+    const [options, setOptions] = react_default.useState([]);
+    react_default.useEffect(() => {
+      if (!text.trim()) {
+        setOptions([]);
+        return;
+      }
+      const timer = window.setTimeout(() => {
+        runOperation("tags_find", { q: text }).then((r) => setOptions(r.tags.slice(0, 8)), () => void 0);
+      }, 250);
+      return () => window.clearTimeout(timer);
+    }, [text]);
+    if (value) {
+      return /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-chip" }, value.name, /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "imaglr-chip-remove", "aria-label": "Use the default tag", onClick: () => onChange(null) }, "\xD7")));
+    }
+    return /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(
+      Form.Control,
+      {
+        className: "text-input",
+        value: text,
+        placeholder,
+        onChange: (e) => setText(e.target.value)
+      }
+    ), options.length ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-chips mt-1" }, options.map((t) => /* @__PURE__ */ react_default.createElement(Button, { key: t.id, variant: "secondary", size: "sm", onClick: () => {
+      onChange(t);
+      setText("");
+    } }, t.name))) : null);
+  }
+  function SceneImaglrTab({ sceneId, setTimestamp }) {
+    const { Button, Form, Badge } = PluginApi.libraries.Bootstrap;
+    const { Link } = PluginApi.libraries.ReactRouterDOM;
+    const Toast = PluginApi.hooks.useToast();
+    const [data, setData] = react_default.useState(null);
+    const [start, setStart] = react_default.useState(null);
+    const [end, setEnd] = react_default.useState(null);
+    const [title, setTitle] = react_default.useState("");
+    const [primary, setPrimary] = react_default.useState(null);
+    const [busy, setBusy] = react_default.useState(false);
+    const load = react_default.useCallback(() => {
+      runOperation("scene_markers", { scene_id: sceneId }).then(setData, (e) => Toast.error(e));
+    }, [sceneId]);
+    react_default.useEffect(load, [load]);
+    function mark(which) {
+      const t = playerTime();
+      if (t === null) {
+        Toast.error("Start the video player first.");
+        return;
+      }
+      (which === "start" ? setStart : setEnd)(t);
+    }
+    async function toggle(marker) {
+      try {
+        await runOperation("marker_set_queued", { marker_id: marker.id, queued: !marker.queued });
+        load();
+      } catch (e) {
+        Toast.error(e);
+      }
+    }
+    async function create() {
+      if (start === null || end === null) return;
+      setBusy(true);
+      try {
+        await runOperation("marker_create", {
+          scene_id: sceneId,
+          seconds: start,
+          end_seconds: end,
+          title,
+          primary_tag_id: primary?.id ?? null
+        });
+        Toast.success("Clip created and added to imaglr.");
+        setStart(null);
+        setEnd(null);
+        setTitle("");
+        load();
+      } catch (e) {
+        Toast.error(e);
+      } finally {
+        setBusy(false);
+      }
+    }
+    const valid = start !== null && end !== null && end - start >= 0.1;
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-scene-tab" }, /* @__PURE__ */ react_default.createElement("h6", null, "New clip"), /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted" }, "Play the video above, then set where the clip starts and ends."), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-new-clip" }, /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => mark("start") }, "Set start"), /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-new-clip-time" }, start === null ? "\u2014" : fmtTime(start))), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => mark("end") }, "Set end"), /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-new-clip-time" }, end === null ? "\u2014" : fmtTime(end))), start !== null ? /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0", onClick: () => setTimestamp(start) }, "Jump to start") : null), start !== null && end !== null && !valid ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning" }, "The end must be after the start.") : null, /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Title ", /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, "(optional)")), /* @__PURE__ */ react_default.createElement(
+      Form.Control,
+      {
+        className: "text-input",
+        value: title,
+        onChange: (e) => setTitle(e.target.value)
+      }
+    )), /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Marker tag ", /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, "(optional)")), /* @__PURE__ */ react_default.createElement(
+      TagPicker,
+      {
+        value: primary,
+        onChange: setPrimary,
+        placeholder: `Search Stash tags, or leave empty to use "${data?.tags.queue.name ?? "imaglr"}"`
+      }
+    )), /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", disabled: !valid || busy, onClick: create }, busy ? "Creating\u2026" : "Create clip"), /* @__PURE__ */ react_default.createElement("h6", { className: "mt-4" }, "Markers in this scene"), !data ? /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Loading\u2026") : null, data && data.markers.length === 0 ? /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "This scene has no markers yet.") : null, /* @__PURE__ */ react_default.createElement("ul", { className: "imaglr-marker-list" }, data?.markers.map((m) => /* @__PURE__ */ react_default.createElement("li", { key: m.id, className: "imaglr-marker" }, /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "imaglr-marker-thumb", onClick: () => setTimestamp(m.seconds), "aria-label": `Jump to ${m.title}` }, m.thumb ? /* @__PURE__ */ react_default.createElement("img", { src: baseUrl() + m.thumb, alt: "", loading: "lazy" }) : null), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-marker-body" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-card-title" }, m.title), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted" }, fmtTime(m.seconds), m.end_seconds ? ` \u2192 ${fmtTime(m.end_seconds)}` : "", m.sent ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, " \xB7 ", /* @__PURE__ */ react_default.createElement(Badge, { variant: "primary" }, "Sent")) : null, m.queued ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, " \xB7 ", /* @__PURE__ */ react_default.createElement(Badge, { variant: "success" }, "On imaglr page")) : null)), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-marker-actions" }, m.queued && m.item_id ? /* @__PURE__ */ react_default.createElement(Link, { to: `${ROUTE}?tab=clips&open=${m.item_id}`, className: "btn btn-secondary" }, "Open") : null, /* @__PURE__ */ react_default.createElement(
+      Button,
+      {
+        variant: m.queued ? "secondary" : "primary",
+        onClick: () => toggle(m),
+        disabled: m.queued && m.queue_is_primary,
+        title: m.queued && m.queue_is_primary ? "It's this marker's main tag; change that in Stash first" : void 0
+      },
+      m.queued ? "Remove" : "Add to imaglr"
+    ))))));
+  }
+  function patchScenePage() {
+    PluginApi.patch.before("ScenePage.Tabs", (props) => {
+      const { Nav } = PluginApi.libraries.Bootstrap;
+      return [{
+        ...props,
+        children: /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, props.children, /* @__PURE__ */ react_default.createElement(Nav.Item, null, /* @__PURE__ */ react_default.createElement(Nav.Link, { eventKey: "imaglr-panel" }, "imaglr")))
+      }];
+    });
+    PluginApi.patch.before("ScenePage.TabContent", (props) => {
+      const { Tab } = PluginApi.libraries.Bootstrap;
+      return [{
+        ...props,
+        children: /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, props.children, /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "imaglr-panel", mountOnEnter: true }, /* @__PURE__ */ react_default.createElement(SceneImaglrTab, { sceneId: props.scene.id, setTimestamp: props.setTimestamp })))
+      }];
+    });
+  }
+
   // src/ui/index.tsx
   PluginApi.register.route(ROUTE, PostPage);
   PluginApi.patch.before("MainNavBar.MenuItems", (props) => [
@@ -818,4 +1205,5 @@
     }
   ]);
   patchImageLists();
+  patchScenePage();
 })();

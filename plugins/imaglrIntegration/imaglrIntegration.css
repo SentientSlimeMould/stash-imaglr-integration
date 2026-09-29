@@ -324,3 +324,119 @@
   min-width: 10.5rem;
   min-height: 38px;
 }
+.imaglr-card-thumb video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.imaglr-video video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+.imaglr-clip-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+.imaglr-clip-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+.imaglr-clip-actions .btn,
+.imaglr-time-buttons .btn {
+  min-height: 44px;
+}
+.imaglr-time-row {
+  display: grid;
+  grid-template-columns: 2.5rem 6.5rem 1fr;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.imaglr-time-label {
+  margin: 0;
+  font-weight: bold;
+}
+.imaglr-time-buttons {
+  display: flex;
+  gap: 0.25rem;
+}
+.imaglr-time-buttons .btn {
+  flex: 1;
+  padding-left: 0.25rem;
+  padding-right: 0.25rem;
+}
+@media (max-width: 575.98px) {
+  .imaglr-time-row {
+    grid-template-columns: 2.5rem 1fr;
+  }
+  .imaglr-time-buttons {
+    grid-column: 1 / -1;
+  }
+}
+.imaglr-scene-tab {
+  padding: 0.75rem 0;
+}
+.imaglr-new-clip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.25rem;
+}
+.imaglr-new-clip .btn,
+.imaglr-marker-actions .btn {
+  min-height: 44px;
+}
+.imaglr-new-clip-time {
+  margin-left: 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+.imaglr-marker-list {
+  list-style: none;
+  padding: 0;
+}
+.imaglr-marker {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #394b59;
+}
+.imaglr-marker-thumb {
+  flex: 0 0 auto;
+  background: #000;
+  border: 0;
+  padding: 0;
+  width: 96px;
+  height: 54px;
+}
+.imaglr-marker-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.imaglr-marker-body {
+  flex: 1;
+  min-width: 0;
+}
+.imaglr-marker-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+@media (max-width: 575.98px) {
+  .imaglr-marker {
+    flex-wrap: wrap;
+  }
+  .imaglr-marker-actions {
+    width: 100%;
+  }
+  .imaglr-marker-actions .btn {
+    flex: 1;
+  }
+}

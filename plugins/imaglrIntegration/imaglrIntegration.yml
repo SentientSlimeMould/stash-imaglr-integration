@@ -11,6 +11,10 @@ ui:
     - imaglrIntegration.js
   css:
     - imaglrIntegration.css
+  # Previews of prepared files (frame grabs, processed outputs). Only data/prepared is served, never the
+  # database next to it; Stash's file server refuses paths that climb out of the mapped folder.
+  assets:
+    /prepared: data/prepared
 settings:
   # Stash lists settings sorted by these keys, so they are named to keep the order sensible.
   # Numbers are STRING settings so an unsaved value shows empty rather than 0.

@@ -217,3 +217,13 @@ def auth_headers(client: StashClient) -> dict[str, str]:
 def download(client: StashClient, url: str, dest: str) -> str:
     """Fetch a Stash media URL (image `paths.image`, scene `paths.stream`) to dest. Returns its Content-Type."""
     return paths.fetch(url, dest, auth_headers(client), client.timeout, client.ssl_context)
+
+
+def generate_marker_previews(client: StashClient, scene_id: str) -> str | None:
+    """Ask Stash to make marker screenshots and previews for a scene (a normal Stash Generate job).
+
+    By scene, not by marker: Stash v0.31.1 only creates the scene's marker folder when generating
+    by scene, so generating a single new marker fails if its scene had none before.
+    """
+    data = client.gql(q.GENERATE_MARKER_PREVIEWS, {"ids": [scene_id]})
+    return data.get("metadataGenerate")

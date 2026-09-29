@@ -8,7 +8,8 @@ from typing import Any
 from . import items as repo
 from . import blogs, services, settings
 from .context import Context, UserError
-from .stash import Image, api
+from .stash import api
+from .tags.pipeline import merge_suggestions
 
 GALLERY_IMAGE_IDS = """
 query GalleryImageIds($id: ID!) {
@@ -23,32 +24,39 @@ def _workflow(ctx: Context):
     return config, api.workflow_tags(ctx.stash, config.queue_tag, config.done_tag)
 
 
-def op_images_queue(ctx: Context) -> dict[str, Any]:
-    """Everything on the Images tab: queued Stash images as items, grouped into posts where grouped."""
+def op_queue(ctx: Context) -> dict[str, Any]:
+    """Everything waiting to be sent: queued markers and images (as items), stills, and posts grouping them.
+    Each card says which tab it belongs on."""
     config, tags = _workflow(ctx)
     db = ctx.db
-    queued = api.queued_images(ctx.stash, tags[0].id)
-    seen = services.mark_seen(db, [f"image:{i.id}" for i in queued])
-    by_item: dict[str, tuple[dict[str, Any], Image]] = {}
-    for image in queued:
+    markers = api.queued_markers(ctx.stash, tags[0].id)
+    images = api.queued_images(ctx.stash, tags[0].id)
+    seen = services.mark_seen(db, [f"marker:{m.id}" for m in markers] + [f"image:{i.id}" for i in images])
+
+    cards: dict[str, dict[str, Any]] = {}
+    for marker in markers:
+        item = services.item_from_marker(db, config, marker)
+        cards[item["id"]] = services.clip_card(item, marker, seen.get(f"marker:{marker.id}"))
+    for image in images:
         item = services.item_from_image(db, config, image)
-        by_item[item["id"]] = (item, image)
+        cards[item["id"]] = services.image_card(item, image, seen.get(f"image:{image.id}"))
+    for item in repo.list_items(db, kinds=("still",), statuses=repo.ACTIVE_STATUSES):
+        cards[item["id"]] = services.still_card(item)
 
     member_of = repo.members_index(db)
-    cards, posts = [], {}
-    for item_id, (item, image) in by_item.items():
-        card = services.image_card(item, image, seen.get(f"image:{image.id}"))
+    out, posts = [], {}  # type: ignore[var-annotated]
+    for item_id, card in cards.items():
         set_id = member_of.get(item_id)
         if set_id:
             posts.setdefault(set_id, []).append(card)
         else:
-            cards.append(card)
-    for set_id in posts:
+            out.append(card)
+    for set_id, members in posts.items():
         post = repo.get_item(db, set_id)
         order = [m["id"] for m in repo.set_members(db, set_id)]
-        members = sorted(posts[set_id], key=lambda c: order.index(c["id"]))
-        cards.append(services.post_card(post, members))  # type: ignore[arg-type]
-    return {"items": cards, "tags": services.queue_tags(tags)}
+        members.sort(key=lambda c: order.index(c["id"]))
+        out.append(services.post_card(post, members))  # type: ignore[arg-type]
+    return {"items": out, "tags": services.queue_tags(tags)}
 
 
 def _add_images(ctx: Context, image_ids: list[str], as_one_post: bool) -> dict[str, Any]:
@@ -119,25 +127,44 @@ def _item(ctx: Context) -> dict[str, Any]:
     return item
 
 
+def _file_view(ctx: Context, config, member: dict[str, Any]):
+    """One file of an item for the editor, plus the tag suggestions its Stash source gives."""
+    if member["kind"] == "clip" and member["stash_marker_id"]:
+        marker = api.find_marker(ctx.stash, member["stash_marker_id"])
+        card = services.clip_card(member, marker, None)
+        sugg = services.marker_suggestions(ctx.db, config, marker) if marker else None
+    elif member["kind"] == "still":
+        card = services.still_card(member)
+        card["image"] = card["thumb"]
+        source = repo.get_item(ctx.db, member["source_item_id"]) if member["source_item_id"] else None
+        sugg = None
+        if source and source["stash_marker_id"]:
+            marker = api.find_marker(ctx.stash, source["stash_marker_id"])
+            sugg = services.marker_suggestions(ctx.db, config, marker) if marker else None
+    else:
+        image = api.find_image(ctx.stash, member["stash_image_id"]) if member["stash_image_id"] else None
+        card = services.image_card(member, image, None)
+        card["image"] = services.relative_url(image.image_url) if image else None
+        sugg = services.image_suggestions(ctx.db, config, image) if image else None
+    card.update({k: member[k] for k in ("crop", "in_s", "out_s", "mute", "stash_marker_id", "stash_scene_id",
+                                        "stash_image_id")})
+    card["prepared"] = services.prepared_url(member["id"], member["output_path"]) if member["output_path"] else None
+    return card, sugg
+
+
 def op_item_detail(ctx: Context) -> dict[str, Any]:
     """Everything the editor needs: the item, its files, tag suggestions and the blogs to choose from."""
     item = _item(ctx)
     config = settings.load(ctx.stash)
     members = repo.set_members(ctx.db, item["id"]) if item["kind"] == "set" else [item]
-    images = [api.find_image(ctx.stash, m["stash_image_id"]) if m["stash_image_id"] else None for m in members]
-    files = []
-    for member, image in zip(members, images):
-        card = services.image_card(member, image, None)
-        card["image"] = services.relative_url(image.image_url) if image else None
-        card["crop"] = member["crop"]
-        files.append(card)
-    found = [i for i in images if i is not None]
-    suggestions = services.post_suggestions(ctx.db, config, found) if found else None
+    views = [_file_view(ctx, config, m) for m in members]
+    suggestions = merge_suggestions([s for _, s in views if s is not None])
     return {
         "item": {k: item[k] for k in ("id", "kind", "status", "tags", "caption", "blog_id", "action", "crop",
-                                      "error_code", "error_detail", "progress", "source_title")},
-        "files": files,
-        "suggestions": suggestions.to_dict() if suggestions else {"active": [], "greyed": []},
+                                      "error_code", "error_detail", "progress", "source_title", "in_s", "out_s",
+                                      "mute", "hdr_warning")},
+        "files": [card for card, _ in views],
+        "suggestions": suggestions.to_dict(),
         "blogs": [blogs.public(b) for b in blogs.list_blogs(ctx.db)],
         "lowercase_tags": not config.keep_tag_case,
     }
@@ -180,7 +207,7 @@ OPERATIONS = {
     "item_detail": op_item_detail,
     "post_arrange": op_post_arrange,
     "remove_from_queue": op_remove_from_queue,
-    "images_queue": op_images_queue,
+    "queue": op_queue,
     "add_images": op_add_images,
     "add_gallery": op_add_gallery,
     "post_create": op_post_create,

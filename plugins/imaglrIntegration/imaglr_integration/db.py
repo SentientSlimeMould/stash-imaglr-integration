@@ -102,6 +102,10 @@ MIGRATIONS = [
 
     CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     """,
+    # v2: stills keep the frame grabbed from their clip
+    """
+    ALTER TABLE items ADD COLUMN source_path TEXT;
+    """,
 ]
 
 

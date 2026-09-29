@@ -97,13 +97,15 @@ def setup(stash):
     )["metadataScan"]
     stash.wait_for_job(job, "scan")
 
-    ids = seed_metadata(stash)
+    seed_metadata(stash)
+    scene_ids = [s["id"] for s in stash.gql("{ findScenes(filter: {per_page: -1}) { scenes { id } } }")["findScenes"]["scenes"]]
 
     job = stash.gql(
-        """mutation($markers: [ID!]) { metadataGenerate(input: {
-             markers: true, markerImagePreviews: true, markerScreenshots: true, markerIDs: $markers,
+        # By scene: Stash v0.31.1 doesn't create a scene's marker folder when generating by marker id.
+        """mutation($scenes: [ID!]) { metadataGenerate(input: {
+             markers: true, markerImagePreviews: true, markerScreenshots: true, sceneIDs: $scenes,
              transcodes: true }) }""",
-        markers=ids,
+        scenes=scene_ids,
     )["metadataGenerate"]
     stash.wait_for_job(job, "generate markers and transcodes")
 

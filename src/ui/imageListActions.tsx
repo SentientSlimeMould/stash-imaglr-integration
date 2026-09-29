@@ -32,7 +32,7 @@ function ImageListWithImaglr({ props, Original }: { props: ListProps; Original: 
     try {
       const result = await runOperation<AddResult>("add_images", { image_ids: ids, as_one_post: asOnePost });
       Toast.success(addedMessage(result, asOnePost));
-      if (asOnePost && result.post_id) history.push(`${ROUTE}?open=${result.post_id}`);
+      if (asOnePost && result.post_id) history.push(`${ROUTE}?tab=images&open=${result.post_id}`);
     } catch (e) {
       Toast.error(e);
     }
@@ -76,7 +76,7 @@ function ImageListWithImaglr({ props, Original }: { props: ListProps; Original: 
             return;
           }
           Toast.success(addedMessage(result, true));
-          if (result.post_id) history.push(`${ROUTE}?open=${result.post_id}`);
+          if (result.post_id) history.push(`${ROUTE}?tab=images&open=${result.post_id}`);
         } catch (e) {
           Toast.error(e);
         }

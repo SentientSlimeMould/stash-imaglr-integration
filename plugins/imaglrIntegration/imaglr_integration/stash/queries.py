@@ -2,7 +2,7 @@
 """Every Stash GraphQL document the backend uses, checked against Stash v0.31.1.
 
 The only writes are the ones reference spec §5 allows: marker create/update, image tag ADD/REMOVE and
-creating the two workflow tags. Playback fields (sceneStreams) are gone: the UI plays Stash URLs itself.
+creating the two workflow tags, plus asking Stash to generate previews for markers the plugin created or moved. Playback fields (sceneStreams) are gone: the UI plays Stash URLs itself.
 """
 
 VERSION = """
@@ -175,3 +175,9 @@ query SceneById($id: ID!) {
 }
 """
 )
+
+GENERATE_MARKER_PREVIEWS = """
+mutation GenerateMarkerPreviews($ids: [ID!]) {
+  metadataGenerate(input: { markers: true, markerScreenshots: true, markerImagePreviews: false, sceneIDs: $ids })
+}
+"""

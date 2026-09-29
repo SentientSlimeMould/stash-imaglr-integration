@@ -14,6 +14,8 @@ export function ItemCard({ card, highlighted }: Props) {
   const { Badge } = PluginApi.libraries.Bootstrap;
   const ref = React.useRef<HTMLDivElement>(null);
   const count = card.members?.length ?? 0;
+  const [hover, setHover] = React.useState(false);
+  const canHover = typeof window !== "undefined" && window.matchMedia?.("(hover: hover)").matches;
 
   React.useEffect(() => {
     if (highlighted) ref.current?.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -21,6 +23,8 @@ export function ItemCard({ card, highlighted }: Props) {
 
   const detail = count
     ? `${count} files in one post`
+    : card.kind === "clip"
+    ? [`${(card.duration ?? 0).toFixed(1)} s`, fmtDims(card.width, card.height)].filter(Boolean).join(" · ")
     : [card.format?.toUpperCase(), fmtDims(card.width, card.height), card.animated ? "animated" : null]
         .filter(Boolean)
         .join(" · ");
@@ -30,8 +34,14 @@ export function ItemCard({ card, highlighted }: Props) {
       ref={ref}
       className={`imaglr-card card${count ? " imaglr-card-stack" : ""}${highlighted ? " imaglr-card-highlight" : ""}`}
     >
-      <div className="imaglr-card-thumb">
-        {card.thumb ? <img src={baseUrl() + card.thumb} alt="" loading="lazy" /> : null}
+      <div className="imaglr-card-thumb"
+        onMouseEnter={() => canHover && card.preview && setHover(true)}
+        onMouseLeave={() => setHover(false)}>
+        {hover && card.preview ? (
+          <video src={baseUrl() + card.preview} autoPlay muted loop playsInline />
+        ) : card.thumb ? (
+          <img src={baseUrl() + card.thumb} alt="" loading="lazy" />
+        ) : null}
         {count ? <span className="imaglr-card-count">{count}</span> : null}
         <Badge variant={STATUS_VARIANTS[card.status]} className="imaglr-card-status">
           {STATUS_LABELS[card.status]}

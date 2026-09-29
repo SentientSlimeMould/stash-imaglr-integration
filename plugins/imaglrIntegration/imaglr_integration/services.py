@@ -10,8 +10,16 @@ from typing import Any
 from . import items as repo
 from .db import Database, now_iso
 from .settings import Settings
-from .stash import Image, Tag
-from .tags.pipeline import TagConfig, collect_image_sources, merge_suggestions, parse_patterns, suggest
+from .settings import PLUGIN_ID
+from .stash import Image, Marker, Tag
+from .tags.pipeline import (
+    TagConfig,
+    collect_clip_sources,
+    collect_image_sources,
+    merge_suggestions,
+    parse_patterns,
+    suggest,
+)
 
 SET_KINDS = ("image", "still", "clip")
 BUSY_STATUSES = ("exporting", "sending", "sent")
@@ -41,6 +49,46 @@ def relative_url(url: str | None) -> str | None:
 
 def image_suggestions(db: Database, settings: Settings, image: Image):
     return suggest(collect_image_sources(image), tag_config(settings), repo.tag_mapping(db))
+
+
+def marker_suggestions(db: Database, settings: Settings, marker: Marker):
+    return suggest(collect_clip_sources(marker, marker.scene), tag_config(settings), repo.tag_mapping(db))
+
+
+def marker_bounds(marker: Marker, default_len: float) -> tuple[float, float]:
+    """The marker's own in/out points; a marker without an end gets the default clip length."""
+    in_s = float(marker.seconds or 0)
+    out_s = marker.end_seconds if marker.end_seconds and marker.end_seconds > in_s else in_s + default_len
+    duration = marker.scene.duration if marker.scene else None
+    if duration and out_s > duration:
+        out_s = max(in_s + 0.5, duration)
+    return in_s, out_s
+
+
+def marker_title(marker: Marker) -> str:
+    title = marker.display_title
+    scene = marker.scene.display_title if marker.scene else ""
+    return f"{scene} — {title}" if scene and scene != title else title
+
+
+def item_from_marker(db: Database, settings: Settings, marker: Marker) -> dict[str, Any]:
+    """The marker's current (unsent) clip item, creating it with the marker's in/out points if needed."""
+    existing = repo.active_for_marker(db, marker.id)
+    if existing:
+        return existing
+    in_s, out_s = marker_bounds(marker, settings.default_clip_seconds)
+    return repo.create_item(
+        db, kind="clip", stash_marker_id=marker.id, stash_scene_id=marker.scene.id if marker.scene else None,
+        source_title=marker_title(marker), in_s=in_s, out_s=out_s,
+        tags=marker_suggestions(db, settings, marker).active_names(),
+    )
+
+
+def prepared_url(item_id: str, path: str | None) -> str | None:
+    """Browser URL (relative to Stash's base) of a file in data/prepared, served via the plugin's ui.assets."""
+    if not path:
+        return None
+    return f"plugin/{PLUGIN_ID}/assets/prepared/{item_id}/{urllib.parse.quote(path.replace(chr(92), '/').rsplit('/', 1)[-1])}"
 
 
 def item_from_image(db: Database, settings: Settings, image: Image) -> dict[str, Any]:
@@ -126,16 +174,8 @@ def post_suggestions(db: Database, settings: Settings, members: list[Image]):
 def image_card(item: dict[str, Any], image: Image | None, first_seen: str | None) -> dict[str, Any]:
     f = image.primary_file if image else None
     return {
-        "id": item["id"],
-        "kind": item["kind"],
-        "title": item["source_title"],
-        "status": item["status"],
-        "progress": item["progress"],
-        "error_code": item["error_code"],
-        "error_detail": item["error_detail"],
-        "blog_id": item["blog_id"],
-        "action": item["action"],
-        "tag_count": len(item["tags"]),
+        **_state(item),
+        "tab": "clips" if item["kind"] == "clip" else "images",
         "stash_image_id": item["stash_image_id"],
         "thumb": relative_url(image.thumbnail_url) if image else None,
         "width": f.width if f else None,
@@ -151,10 +191,49 @@ def image_card(item: dict[str, Any], image: Image | None, first_seen: str | None
     }
 
 
+def clip_card(item: dict[str, Any], marker: Marker | None, first_seen: str | None) -> dict[str, Any]:
+    scene = marker.scene if marker else None
+    f = scene.primary_file if scene else None
+    return {
+        **_state(item),
+        "tab": "clips",
+        "stash_marker_id": item["stash_marker_id"],
+        "stash_scene_id": item["stash_scene_id"],
+        "thumb": relative_url(marker.screenshot_url) if marker else None,
+        "preview": relative_url(marker.preview_url) if marker else None,
+        "width": f.width if f else None,
+        "height": f.height if f else None,
+        "duration": (item["out_s"] or 0) - (item["in_s"] or 0),
+        "in_s": item["in_s"],
+        "out_s": item["out_s"],
+        "format": (f.video_codec or "").upper() if f else None,
+        "created_at": marker.created_at if marker else item["created_at"],
+        "date": scene.date if scene else None,
+        "first_seen": first_seen,
+    }
+
+
+def still_card(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **_state(item),
+        "tab": "images",
+        "thumb": prepared_url(item["id"], item["source_path"]),
+        "format": "JPEG",
+        "created_at": item["created_at"],
+        "first_seen": item["created_at"],
+    }
+
+
+def _state(item: dict[str, Any]) -> dict[str, Any]:
+    return {k: item[k] for k in ("id", "kind", "status", "progress", "error_code", "error_detail", "blog_id",
+                                 "action")} | {"title": item["source_title"], "tag_count": len(item["tags"])}
+
+
 def post_card(post: dict[str, Any], member_cards: list[dict[str, Any]]) -> dict[str, Any]:
     card = {k: post[k] for k in ("id", "kind", "status", "progress", "error_code", "error_detail", "blog_id",
                                  "action")}
     card.update(
+        tab="images" if any(m.get("tab") == "images" for m in member_cards) else "clips",
         title=member_cards[0]["title"] if member_cards else post["source_title"],
         tag_count=len(post["tags"]),
         members=member_cards,

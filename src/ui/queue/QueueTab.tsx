@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The Images tab: queued Stash images and multi-image posts. Tap a card to edit and send it.
+// The Clips and Images tabs: what's waiting to be sent, one card per item or post. Tap a card to edit and send.
 import React from "react";
 import { runOperation } from "../api.ts";
 import { Editor } from "../editor/Editor.tsx";
@@ -8,7 +8,28 @@ import { ItemCard } from "./ItemCard.tsx";
 
 const POLL_MS = 2000;
 
-export function ImagesTab({ openId }: { openId: string | null }) {
+const EMPTY = {
+  clips: (tag: string) => (
+    <>
+      <p>No clips waiting.</p>
+      <p>
+        Open a scene in Stash and use its <strong>imaglr</strong> tab to make a clip, or tag any scene marker{" "}
+        <strong>{tag}</strong>.
+      </p>
+    </>
+  ),
+  images: (tag: string) => (
+    <>
+      <p>No images waiting.</p>
+      <p>
+        In Stash, tag images <strong>{tag}</strong>, or tick images in any image list and choose{" "}
+        <strong>⋯ → Add to imaglr</strong>. Stills saved from clips appear here too.
+      </p>
+    </>
+  ),
+};
+
+export function QueueTab({ tab, openId }: { tab: "clips" | "images"; openId: string | null }) {
   const { Button } = PluginApi.libraries.Bootstrap;
   const { LoadingIndicator } = PluginApi.components;
   const [data, setData] = React.useState<QueueResponse | null>(null);
@@ -18,7 +39,7 @@ export function ImagesTab({ openId }: { openId: string | null }) {
 
   const load = React.useCallback(() => {
     setLoading(true);
-    return runOperation<QueueResponse>("images_queue")
+    return runOperation<QueueResponse>("queue")
       .then((d) => {
         setData(d);
         setError(null);
@@ -32,7 +53,8 @@ export function ImagesTab({ openId }: { openId: string | null }) {
   }, [load]);
 
   // While anything is being sent, keep the cards' progress fresh.
-  const inFlight = data?.items.some((c) => c.status === "exporting" || c.status === "sending");
+  const items = data?.items.filter((c) => c.tab === tab) ?? [];
+  const inFlight = items.some((c) => c.status === "exporting" || c.status === "sending");
   React.useEffect(() => {
     if (!inFlight || editing) return;
     const timer = window.setTimeout(load, POLL_MS);
@@ -53,23 +75,17 @@ export function ImagesTab({ openId }: { openId: string | null }) {
     <>
       <div className="imaglr-toolbar">
         <span className="text-muted">
-          {data.items.length} {data.items.length === 1 ? "item" : "items"}
+          {items.length} {items.length === 1 ? "item" : "items"}
         </span>
         <Button variant="secondary" size="sm" onClick={load} disabled={loading}>
           {loading ? "Refreshing…" : "Refresh"}
         </Button>
       </div>
-      {data.items.length === 0 ? (
-        <div className="imaglr-empty text-muted">
-          <p>No images waiting.</p>
-          <p>
-            In Stash, tag images <strong>{data.tags.queue.name}</strong>, or tick images in any image list and
-            choose <strong>⋯ → Add to imaglr</strong>.
-          </p>
-        </div>
+      {items.length === 0 ? (
+        <div className="imaglr-empty text-muted">{EMPTY[tab](data.tags.queue.name)}</div>
       ) : (
         <div className="imaglr-grid">
-          {data.items.map((card) => (
+          {items.map((card) => (
             <button key={card.id} type="button" className="imaglr-card-button" onClick={() => setEditing(card.id)}>
               <ItemCard card={card} highlighted={card.id === openId} />
             </button>

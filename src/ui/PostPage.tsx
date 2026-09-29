@@ -3,7 +3,7 @@
 import React from "react";
 import { runOperation, type Ping } from "./api.ts";
 import type { Blog } from "./model.ts";
-import { ImagesTab } from "./queue/ImagesTab.tsx";
+import { QueueTab } from "./queue/QueueTab.tsx";
 import { SentTab } from "./sent/SentTab.tsx";
 import { BlogSettings } from "./settings/BlogSettings.tsx";
 
@@ -44,7 +44,7 @@ export function PostPage() {
   const params = new URLSearchParams(useLocation().search);
   const openId = params.get("open");
   const requested = params.get("tab");
-  const tab: TabKey = isTab(requested) ? requested : "images";
+  const tab: TabKey = isTab(requested) ? requested : "clips";
   const [blogs, setBlogs] = React.useState<Blog[] | null>(null);
   const [showBlogs, setShowBlogs] = React.useState(false);
   const [reloadKey, setReloadKey] = React.useState(0);
@@ -89,10 +89,8 @@ export function PostPage() {
           ))}
         </Nav>
         <Tab.Content className="imaglr-tab-content" key={reloadKey}>
-          <Tab.Pane eventKey="clips">
-            <p className="text-muted">Clips are coming next.</p>
-          </Tab.Pane>
-          <Tab.Pane eventKey="images">{tab === "images" ? <ImagesTab openId={openId} /> : null}</Tab.Pane>
+          <Tab.Pane eventKey="clips">{tab === "clips" ? <QueueTab tab="clips" openId={openId} /> : null}</Tab.Pane>
+          <Tab.Pane eventKey="images">{tab === "images" ? <QueueTab tab="images" openId={openId} /> : null}</Tab.Pane>
           <Tab.Pane eventKey="sent">{tab === "sent" ? <SentTab /> : null}</Tab.Pane>
         </Tab.Content>
       </Tab.Container>
