@@ -1,0 +1,71 @@
+# Local test Stash instances for developing the plugin. See dev/README.md.
+#
+# The project folder may sit on a network share, and SQLite must not, so every database,
+# generated file and test media file lives in a Docker volume. Only the plugin code is
+# bind-mounted from the repo (read-only), with the plugin's own data folder overlaid by a volume.
+name: imaglr-dev
+
+x-stash: &stash
+  restart: "no"
+  environment:
+    STASH_STASH: /data/
+    STASH_GENERATED: /generated/
+    STASH_METADATA: /metadata/
+    STASH_CACHE: /cache/
+    STASH_PORT: "9999"
+
+services:
+  # Oldest supported release.
+  stash-v0311:
+    <<: *stash
+    image: stashapp/stash:v0.31.1
+    ports: ["127.0.0.1:9931:9999"]
+    volumes:
+      - v0311-config:/root/.stash
+      - v0311-generated:/generated
+      - v0311-metadata:/metadata
+      - v0311-cache:/cache
+      - v0311-blobs:/blobs
+      - media:/data:ro
+      - ../plugins/imaglrIntegration:/root/.stash/plugins/imaglrIntegration:ro
+      - v0311-plugin-data:/root/.stash/plugins/imaglrIntegration/data
+
+  # Stash's development build: early warning of upcoming changes.
+  stash-dev:
+    <<: *stash
+    image: stashapp/stash:development
+    ports: ["127.0.0.1:9932:9999"]
+    volumes:
+      - dev-config:/root/.stash
+      - dev-generated:/generated
+      - dev-metadata:/metadata
+      - dev-cache:/cache
+      - dev-blobs:/blobs
+      - media:/data:ro
+      - ../plugins/imaglrIntegration:/root/.stash/plugins/imaglrIntegration:ro
+      - dev-plugin-data:/root/.stash/plugins/imaglrIntegration/data
+
+  # One-off: generates synthetic test media into the shared media volume.
+  #   docker compose run --rm make-media
+  make-media:
+    image: stashapp/stash:v0.31.1
+    profiles: [tools]
+    entrypoint: ["python3", "/scripts/make_media.py", "/out"]
+    volumes:
+      - media:/out
+      - ./make_media.py:/scripts/make_media.py:ro
+
+volumes:
+  media:
+  v0311-config:
+  v0311-generated:
+  v0311-metadata:
+  v0311-cache:
+  v0311-blobs:
+  v0311-plugin-data:
+  dev-config:
+  dev-generated:
+  dev-metadata:
+  dev-cache:
+  dev-blobs:
+  dev-plugin-data:

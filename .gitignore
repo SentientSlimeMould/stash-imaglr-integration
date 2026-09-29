@@ -26,3 +26,6 @@ plugins/imaglrIntegration/data/
 .DS_Store
 .vscode/*
 !.vscode/extensions.json
+
+# SMB network-share temporary files
+.smbdelete*

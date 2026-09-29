@@ -262,6 +262,19 @@ Official image `stashapp/stash:v0.31.1` (checked from its layers):
 - `CommunityScriptsUILibrary/cs-ui-lib.js`: base-path-aware GraphQL, plugin config get/set.
 - `SmartResolve`: toast capture.
 
+## 10a. Observed on the local test Stash (v0.31.1 and development build, 2026-09-29)
+
+- Animated GIF → `VideoFile` with `format: "gif"`. Animated WebP → `ImageFile` with `format: "webp"`.
+  Both must be sent as animations.
+- JPEGs written by ffmpeg report `format: "mjpeg"`; JPEGs decoded from inside a zip report `"jpeg"`.
+  Treat both as JPEG.
+- TIFF and BMP are not scanned with Stash's default image extensions. AVIF is.
+- **Byte-identical files become one image with several `visual_files`** (here a loose JPEG and a zip member).
+  The plugin must pick one file deliberately (the first in `visual_files`, as Stash does) and not assume one.
+- ffprobe reports 0×0 for animated WebP; Stash falls back to another decoder. Our ffprobe use must handle this.
+- First-run setup can be scripted with the `setup` mutation; login can be toggled with `configureGeneral`
+  (`dev/seed.py`).
+
 ## 11. Design consequences (proposed; owner to confirm where noted)
 
 1. **Python stdlib only.** `urllib` with an explicit `User-Agent` (imaglr only rejects urllib's *default* agent),
