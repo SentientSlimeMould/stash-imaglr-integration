@@ -31,11 +31,3 @@ export interface Suggestions {
   active: SuggestedTag[];
   greyed: SuggestedTag[];
 }
-
-export interface TagChip {
-  name: string;
-  source: string;
-  state: "active" | "parked" | "too_long";
-  reason?: string;
-  original?: string;
-}

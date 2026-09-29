@@ -95,7 +95,6 @@
 }
 .imaglr-editor-footer .btn,
 .imaglr-segmented .btn,
-.imaglr-chip-remove,
 .imaglr-strip-actions button {
   min-height: 44px;
 }
@@ -174,49 +173,6 @@
 .imaglr-tags-header {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 0.4rem;
-}
-.imaglr-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-bottom: 0.5rem;
-}
-.imaglr-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  background: #394b59;
-  color: #f5f8fa;
-  border: 0;
-  border-radius: 1rem;
-  padding: 0.15rem 0.2rem 0.15rem 0.7rem;
-  min-height: 32px;
-}
-.imaglr-chip-source {
-  opacity: 0.6;
-  font-size: 0.7rem;
-}
-.imaglr-chip-remove {
-  background: none;
-  border: 0;
-  color: inherit;
-  font-size: 1.1rem;
-  line-height: 1;
-  min-width: 36px;
-}
-.imaglr-chip-parked {
-  background: transparent;
-  border: 1px dashed #5c7080;
-  padding-right: 0.7rem;
-  min-height: 44px;
-}
-.imaglr-chip-parked:disabled {
-  text-decoration: line-through;
-  opacity: 0.6;
-}
-.imaglr-parked summary {
-  cursor: pointer;
   margin-bottom: 0.4rem;
 }
 .imaglr-sent {
@@ -360,31 +316,6 @@
   width: 22px;
   height: 22px;
 }
-.imaglr-chip-name {
-  background: none;
-  border: 0;
-  padding: 0;
-  color: inherit;
-  text-decoration: underline dotted;
-  text-underline-offset: 3px;
-}
-.imaglr-suggestions {
-  margin-top: 0.5rem;
-}
-.imaglr-suggestions .btn {
-  min-height: 36px;
-}
-.imaglr-rule {
-  margin-top: 0.5rem;
-  padding: 0.6rem;
-  border: 1px solid #394b59;
-  border-radius: 0.25rem;
-}
-.imaglr-rule-actions {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 0.5rem;
-}
 .imaglr-rules {
   list-style: none;
   padding: 0;
@@ -395,4 +326,18 @@
   gap: 0.5rem;
   padding: 0.35rem 0;
   border-bottom: 1px solid #394b59;
+}
+.imaglr-tag-select .react-select__multi-value {
+  max-width: 100%;
+}
+.imaglr-rule-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto auto;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+@media (max-width: 575.98px) {
+  .imaglr-rule-form {
+    grid-template-columns: 1fr 1fr;
+  }
 }

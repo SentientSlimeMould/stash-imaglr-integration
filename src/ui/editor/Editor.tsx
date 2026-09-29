@@ -4,12 +4,11 @@
 import React from "react";
 import { baseUrl, runOperation } from "../api.ts";
 import { ASPECTS, overlayRect } from "../lib/crop.ts";
-import { activeNames, chipsFromSuggestions } from "../lib/tags.ts";
-import type { Aspect, TagChip } from "../lib/types.ts";
+import type { Aspect } from "../lib/types.ts";
 import { ACTION_LABELS, blogProblem, effectiveAction, pickBlog, sendButtonLabel } from "../lib/send.ts";
 import { STATUS_LABELS, type FileCard, type ItemDetail, type SendAction } from "../model.ts";
 import { ClipPanel, type ClipState } from "./ClipPanel.tsx";
-import { TagEditor } from "./TagEditor.tsx";
+import { TagField } from "./TagField.tsx";
 
 interface Props {
   itemId: string;
@@ -86,7 +85,7 @@ export function Editor({ itemId, onClose }: Props) {
   const { Modal, Button, Form, ButtonGroup, Alert, ProgressBar } = PluginApi.libraries.Bootstrap;
   const Toast = PluginApi.hooks.useToast();
   const [detail, setDetail] = React.useState<ItemDetail | null>(null);
-  const [chips, setChips] = React.useState<TagChip[]>([]);
+  const [tags, setTags] = React.useState<string[]>([]);
   const [caption, setCaption] = React.useState("");
   const [crop, setCrop] = React.useState<{ aspect: Aspect; position: number }>({ aspect: "original", position: 0.5 });
   const [trim, setTrim] = React.useState({ inS: 0, outS: 0, mute: false });
@@ -100,7 +99,7 @@ export function Editor({ itemId, onClose }: Props) {
   const load = React.useCallback(() => {
     runOperation<ItemDetail>("item_detail", { item_id: itemId }).then((d) => {
       setDetail(d);
-      setChips(chipsFromSuggestions(d.suggestions, d.item.tags));
+      setTags(d.item.tags);
       setCaption(d.item.caption);
       setCrop(d.item.crop);
       setTrim({ inS: d.item.in_s ?? 0, outS: d.item.out_s ?? 0, mute: d.item.mute });
@@ -137,7 +136,7 @@ export function Editor({ itemId, onClose }: Props) {
     await runOperation("item_update", {
       item_id: item.id,
       changes: {
-        tags: activeNames(chips), caption, crop, blog_id: blogId, action,
+        tags, caption, crop, blog_id: blogId, action,
         ...(isClip ? { in_s: trim.inS, out_s: trim.outS, mute: trim.mute } : {}),
       },
     });
@@ -280,7 +279,8 @@ export function Editor({ itemId, onClose }: Props) {
           </>
         )}
 
-        <TagEditor chips={chips} lowercase={detail.lowercase_tags} disabled={locked} onChange={edit(setChips)} />
+        <TagField tags={tags} suggestions={detail.suggestions} lowercase={detail.lowercase_tags} disabled={locked}
+          onChange={edit(setTags)} />
 
         <Form.Group className="mt-3">
           <Form.Label>Caption <small className="text-muted">(optional)</small></Form.Label>

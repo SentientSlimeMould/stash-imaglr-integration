@@ -164,81 +164,6 @@
     return { left: dx + n.x * dw, top: dy + n.y * dh, width: n.w * dw, height: n.h * dh, axis: n.axis };
   }
 
-  // src/ui/lib/tags.ts
-  var MAX_TAGS = 30;
-  var MAX_LEN = 64;
-  function normalise(name, lowercase) {
-    const s = name.trim().replace(/\s+/g, " ");
-    return lowercase ? s.toLowerCase() : s;
-  }
-  function chipsFromSuggestions(s, selected) {
-    const chips = [];
-    const seen = /* @__PURE__ */ new Set();
-    const sel = selected ? new Set(selected.map((t) => t.toLowerCase())) : null;
-    for (const t of s?.active ?? []) {
-      seen.add(t.tag.toLowerCase());
-      const on = sel ? sel.has(t.tag.toLowerCase()) : true;
-      chips.push({ name: t.tag, source: t.source, state: on ? "active" : "parked", reason: on ? void 0 : "removed", original: t.original });
-    }
-    for (const t of s?.greyed ?? []) {
-      if (seen.has(t.tag.toLowerCase())) continue;
-      seen.add(t.tag.toLowerCase());
-      if (t.reason === "too_long") {
-        chips.push({ name: t.tag, source: t.source, state: "too_long", reason: `over ${MAX_LEN} characters`, original: t.original });
-      } else {
-        const on = sel ? sel.has(t.tag.toLowerCase()) : false;
-        chips.push({
-          name: t.tag,
-          source: t.source,
-          state: on ? "active" : "parked",
-          reason: on ? void 0 : `over the ${MAX_TAGS}-tag limit`,
-          original: t.original
-        });
-      }
-    }
-    for (const t of selected ?? []) {
-      if (!seen.has(t.toLowerCase())) {
-        seen.add(t.toLowerCase());
-        chips.push({ name: t, source: "manual", state: "active" });
-      }
-    }
-    return chips;
-  }
-  function activeNames(chips) {
-    return chips.filter((c) => c.state === "active").map((c) => c.name);
-  }
-  function addTag(chips, raw, lowercase) {
-    const name = normalise(raw, lowercase);
-    if (!name) return { ok: false, error: "Empty tag" };
-    if (name.length > MAX_LEN) return { ok: false, error: `Tag is ${name.length} characters; the limit is ${MAX_LEN}` };
-    const dup = chips.find((c) => c.name.toLowerCase() === name.toLowerCase());
-    if (dup) {
-      if (dup.state === "active") return { ok: false, error: "Already added", existing: dup.name };
-      if (dup.state === "too_long") return { ok: false, error: "That tag is too long", existing: dup.name };
-      return activate(chips, dup.name);
-    }
-    const room = activeNames(chips).length < MAX_TAGS;
-    const chip = room ? { name, source: "manual", state: "active" } : { name, source: "manual", state: "parked", reason: `over the ${MAX_TAGS}-tag limit` };
-    return { ok: true, chips: [...chips, chip], parked: !room };
-  }
-  function activate(chips, name) {
-    if (activeNames(chips).length >= MAX_TAGS) return { ok: false, error: `Remove a tag first (limit ${MAX_TAGS})` };
-    return {
-      ok: true,
-      parked: false,
-      chips: chips.map((c) => c.name === name && c.state !== "too_long" ? { ...c, state: "active", reason: void 0 } : c)
-    };
-  }
-  function removeTag(chips, name) {
-    return chips.map((c) => c.name === name ? c.source === "manual" ? null : { ...c, state: "parked", reason: "removed" } : c).filter((c) => c !== null);
-  }
-  function replaceChip(chips, name, next) {
-    if (next === null) return chips.filter((c) => c.name !== name);
-    const dup = chips.some((c) => c.name.toLowerCase() === next.toLowerCase() && c.name !== name);
-    if (dup) return chips.filter((c) => c.name !== name);
-    return chips.map((c) => c.name === name ? { ...c, name: next, original: c.original ?? c.name } : c);
-  }
-
   // src/ui/lib/send.ts
   var ACTION_LABELS = {
     draft: "Save as draft",
@@ -514,131 +439,100 @@
     ));
   }
 
-  // src/ui/editor/TagEditor.tsx
-  var SOURCE_LABELS = {
-    marker: "marker",
-    scene: "scene",
-    performer: "performer",
-    studio: "studio",
-    image: "image",
-    gallery: "gallery",
-    manual: "added"
+  // src/ui/lib/tags.ts
+  var MAX_TAGS = 30;
+  var MAX_LEN = 64;
+  function normalise(name, lowercase) {
+    const s = name.trim().replace(/\s+/g, " ");
+    return lowercase ? s.toLowerCase() : s;
+  }
+  function checkNewTag(tags, raw, lowercase) {
+    const tag = normalise(raw, lowercase);
+    if (!tag) return { ok: false, error: "Empty tag" };
+    if (tag.length > MAX_LEN) return { ok: false, error: `Tags can be at most ${MAX_LEN} characters` };
+    if (tags.some((t) => t.toLowerCase() === tag.toLowerCase())) return { ok: false, error: "Already added" };
+    if (tags.length >= MAX_TAGS) return { ok: false, error: `imaglr allows ${MAX_TAGS} tags per post` };
+    return { ok: true, tag };
+  }
+  function spareSuggestions(s, tags) {
+    const taken = new Set(tags.map((t) => t.toLowerCase()));
+    const all = [...s?.active ?? [], ...s?.greyed ?? []].filter((t) => !taken.has(t.tag.toLowerCase()));
+    const unique = all.filter((t, i) => all.findIndex((o) => o.tag.toLowerCase() === t.tag.toLowerCase()) === i);
+    return {
+      addable: unique.filter((t) => t.reason !== "too_long").map((t) => t.tag),
+      tooLong: unique.filter((t) => t.reason === "too_long").map((t) => t.original || t.tag)
+    };
+  }
+
+  // src/ui/editor/TagField.tsx
+  var STYLES = {
+    option: (base) => ({ ...base, color: "#000" }),
+    container: (base, state) => ({ ...base, zIndex: state.isFocused ? 10 : base.zIndex }),
+    multiValueRemove: (base, state) => ({ ...base, color: state.isFocused ? base.color : "#333333" })
   };
-  function TagEditor({ chips, lowercase, disabled, onChange }) {
-    const { Button, Form, InputGroup } = PluginApi.libraries.Bootstrap;
-    const [text, setText] = react_default.useState("");
+  var toOption = (tag) => ({ value: tag, label: tag });
+  function TagField({ tags, suggestions, lowercase, disabled, onChange }) {
+    const Select = PluginApi.libraries.ReactSelect.default;
+    const [input, setInput] = react_default.useState("");
+    const [found, setFound] = react_default.useState([]);
     const [message, setMessage] = react_default.useState(null);
-    const [suggestions, setSuggestions] = react_default.useState([]);
-    const [rule, setRule] = react_default.useState(null);
-    const [ruleText, setRuleText] = react_default.useState("");
-    const count = activeNames(chips).length;
+    const spare = spareSuggestions(suggestions, tags);
     react_default.useEffect(() => {
-      const q = text.trim();
-      if (!q) {
-        setSuggestions([]);
+      const q2 = input.trim();
+      if (!q2) {
+        setFound([]);
         return;
       }
       const timer = window.setTimeout(() => {
-        runOperation("tags_suggest", { q }).then((r) => {
-          const taken = new Set(activeNames(chips).map((t) => t.toLowerCase()));
-          setSuggestions(r.tags.filter((t) => !taken.has(t.toLowerCase())).slice(0, 8));
-        }, () => setSuggestions([]));
-      }, 250);
+        runOperation("tags_suggest", { q: q2 }).then((r) => setFound(r.tags), () => setFound([]));
+      }, 200);
       return () => window.clearTimeout(timer);
-    }, [text]);
-    function add(value = text) {
-      const result = addTag(chips, value, lowercase);
-      if (!result.ok) {
-        setMessage(result.error);
+    }, [input]);
+    const taken = new Set(tags.map((t) => t.toLowerCase()));
+    const q = input.trim().toLowerCase();
+    const names = q ? [...spare.addable.filter((t) => t.toLowerCase().includes(q)), ...found] : spare.addable;
+    const options = names.filter((t, i) => !taken.has(t.toLowerCase()) && names.findIndex((o) => o.toLowerCase() === t.toLowerCase()) === i).map(toOption);
+    const typed = checkNewTag(tags, input, lowercase);
+    if (input.trim() && typed.ok && !options.some((o) => o.value.toLowerCase() === typed.tag.toLowerCase())) {
+      options.push({ value: typed.tag, label: `Add "${typed.tag}"`, isNew: true });
+    }
+    function change(selected) {
+      const next = (selected ?? []).map((o) => o.value);
+      if (next.length > MAX_TAGS) {
+        setMessage(`imaglr allows ${MAX_TAGS} tags per post. Remove one first.`);
         return;
       }
-      onChange(result.chips);
-      setText("");
-      setSuggestions([]);
-      setMessage(result.parked ? `Parked: already ${MAX_TAGS} tags. Remove one to use it.` : null);
+      setMessage(null);
+      setInput("");
+      onChange(next);
     }
-    async function saveRule(chip, target) {
-      const stashTag = chip.original ?? chip.name;
-      try {
-        await runOperation("tag_map_set", {
-          stash_tag: stashTag,
-          imaglr_tag: target === null ? null : normalise(target, lowercase)
-        });
-        onChange(replaceChip(chips, chip.name, target === null ? null : normalise(target, lowercase)));
-        setMessage(target === null ? `"${stashTag}" won't be suggested again.` : `"${stashTag}" will always be sent as "${normalise(target, lowercase)}".`);
-        setRule(null);
-      } catch (e) {
-        setMessage(e.message);
-      }
-    }
-    function reactivate(name) {
-      const result = activate(chips, name);
-      if (result.ok) onChange(result.chips);
-      else setMessage(result.error);
-    }
-    const active = chips.filter((c) => c.state === "active");
-    const parked = chips.filter((c) => c.state !== "active");
-    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags-header" }, /* @__PURE__ */ react_default.createElement("strong", null, "Tags"), /* @__PURE__ */ react_default.createElement("span", { className: count > MAX_TAGS ? "text-danger" : "text-muted" }, count, " / ", MAX_TAGS)), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-chips" }, active.length === 0 ? /* @__PURE__ */ react_default.createElement("span", { className: "text-muted" }, "No tags yet.") : null, active.map((chip) => /* @__PURE__ */ react_default.createElement("span", { key: chip.name, className: "imaglr-chip", title: chip.original ? `from Stash: ${chip.original}` : void 0 }, chip.source !== "manual" && !disabled ? /* @__PURE__ */ react_default.createElement(
-      "button",
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags-header" }, /* @__PURE__ */ react_default.createElement("label", { htmlFor: "imaglr-tag-field" }, /* @__PURE__ */ react_default.createElement("strong", null, "Tags")), /* @__PURE__ */ react_default.createElement("span", { className: tags.length >= MAX_TAGS ? "text-warning" : "text-muted" }, tags.length, " / ", MAX_TAGS)), /* @__PURE__ */ react_default.createElement(
+      Select,
       {
-        type: "button",
-        className: "imaglr-chip-name",
-        "aria-label": `Rules for ${chip.name}`,
-        onClick: () => {
-          setRule(chip);
-          setRuleText("");
-        }
-      },
-      chip.name
-    ) : chip.name, /* @__PURE__ */ react_default.createElement("small", { className: "imaglr-chip-source" }, SOURCE_LABELS[chip.source] ?? chip.source), disabled ? null : /* @__PURE__ */ react_default.createElement(
-      "button",
-      {
-        type: "button",
-        className: "imaglr-chip-remove",
-        "aria-label": `Remove ${chip.name}`,
-        onClick: () => onChange(removeTag(chips, chip.name))
-      },
-      "\xD7"
-    )))), disabled ? null : /* @__PURE__ */ react_default.createElement(InputGroup, { className: "imaglr-tag-input" }, /* @__PURE__ */ react_default.createElement(
-      Form.Control,
-      {
-        className: "text-input",
-        value: text,
-        placeholder: "Add a tag",
-        maxLength: 80,
-        onChange: (e) => {
-          setText(e.target.value);
-          setMessage(null);
-        },
-        onKeyDown: (e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            add();
+        inputId: "imaglr-tag-field",
+        className: "react-select tag-select imaglr-tag-select",
+        classNamePrefix: "react-select",
+        isMulti: true,
+        isClearable: true,
+        isDisabled: disabled,
+        closeMenuOnSelect: false,
+        value: tags.map(toOption),
+        options,
+        inputValue: input,
+        onInputChange: (value, meta) => {
+          if (meta.action === "input-change") {
+            setInput(value);
+            setMessage(null);
           }
-        }
+        },
+        onChange: change,
+        filterOption: () => true,
+        placeholder: "Add tags\u2026",
+        noOptionsMessage: () => input.trim() && !typed.ok ? typed.error : null,
+        styles: STYLES,
+        components: { IndicatorSeparator: () => null }
       }
-    ), /* @__PURE__ */ react_default.createElement(InputGroup.Append, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => add(), disabled: !text.trim() }, "Add"))), suggestions.length ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-chips imaglr-suggestions" }, suggestions.map((t) => /* @__PURE__ */ react_default.createElement(Button, { key: t, variant: "secondary", size: "sm", onClick: () => add(t) }, "+ ", t))) : null, rule ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-rule" }, /* @__PURE__ */ react_default.createElement("div", { className: "small mb-1" }, "Stash tag ", /* @__PURE__ */ react_default.createElement("strong", null, rule.original ?? rule.name), ", every time it's suggested:"), /* @__PURE__ */ react_default.createElement(InputGroup, null, /* @__PURE__ */ react_default.createElement(
-      Form.Control,
-      {
-        className: "text-input",
-        value: ruleText,
-        placeholder: "Always send as\u2026",
-        maxLength: 64,
-        onChange: (e) => setRuleText(e.target.value)
-      }
-    ), /* @__PURE__ */ react_default.createElement(InputGroup.Append, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", disabled: !ruleText.trim(), onClick: () => saveRule(rule, ruleText) }, "Save"))), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-rule-actions" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger p-0", onClick: () => saveRule(rule, null) }, "Always drop it"), /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0", onClick: () => setRule(null) }, "Cancel"))) : null, message ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning mt-1" }, message) : null, parked.length ? /* @__PURE__ */ react_default.createElement("details", { className: "imaglr-parked" }, /* @__PURE__ */ react_default.createElement("summary", { className: "text-muted" }, "Not included (", parked.length, ")"), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-chips" }, parked.map((chip) => /* @__PURE__ */ react_default.createElement(
-      "button",
-      {
-        key: chip.name,
-        type: "button",
-        className: "imaglr-chip imaglr-chip-parked",
-        disabled: disabled || chip.state === "too_long",
-        onClick: () => reactivate(chip.name),
-        title: chip.reason
-      },
-      chip.state === "too_long" ? chip.name : `+ ${chip.name}`,
-      /* @__PURE__ */ react_default.createElement("small", { className: "imaglr-chip-source" }, chip.reason)
-    )))) : null);
+    ), message ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning mt-1" }, message) : null, spare.tooLong.length ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "Not usable on imaglr (over 64 characters): ", spare.tooLong.join(", ")) : null);
   }
 
   // src/ui/editor/Editor.tsx
@@ -679,7 +573,7 @@
     const { Modal, Button, Form, ButtonGroup, Alert, ProgressBar } = PluginApi.libraries.Bootstrap;
     const Toast = PluginApi.hooks.useToast();
     const [detail, setDetail] = react_default.useState(null);
-    const [chips, setChips] = react_default.useState([]);
+    const [tags, setTags] = react_default.useState([]);
     const [caption, setCaption] = react_default.useState("");
     const [crop, setCrop] = react_default.useState({ aspect: "original", position: 0.5 });
     const [trim, setTrim] = react_default.useState({ inS: 0, outS: 0, mute: false });
@@ -692,7 +586,7 @@
     const load = react_default.useCallback(() => {
       runOperation("item_detail", { item_id: itemId }).then((d) => {
         setDetail(d);
-        setChips(chipsFromSuggestions(d.suggestions, d.item.tags));
+        setTags(d.item.tags);
         setCaption(d.item.caption);
         setCrop(d.item.crop);
         setTrim({ inS: d.item.in_s ?? 0, outS: d.item.out_s ?? 0, mute: d.item.mute });
@@ -725,7 +619,7 @@
       await runOperation("item_update", {
         item_id: item.id,
         changes: {
-          tags: activeNames(chips),
+          tags,
           caption,
           crop,
           blog_id: blogId,
@@ -828,7 +722,16 @@
           className: "mt-2",
           onChange: (e) => edit(setCrop)({ ...crop, position: Number(e.target.value) })
         }
-      ) : null)) : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("p", { className: "text-muted mb-1" }, "Files in this post, in order:"), /* @__PURE__ */ react_default.createElement(FileStrip, { files, disabled: locked, onArrange: arrange }), locked ? null : /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0 mb-2", onClick: () => arrange([]) }, "Split into separate posts")), /* @__PURE__ */ react_default.createElement(TagEditor, { chips, lowercase: detail.lowercase_tags, disabled: locked, onChange: edit(setChips) }), /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-3" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Caption ", /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, "(optional)")), /* @__PURE__ */ react_default.createElement(
+      ) : null)) : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("p", { className: "text-muted mb-1" }, "Files in this post, in order:"), /* @__PURE__ */ react_default.createElement(FileStrip, { files, disabled: locked, onArrange: arrange }), locked ? null : /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0 mb-2", onClick: () => arrange([]) }, "Split into separate posts")), /* @__PURE__ */ react_default.createElement(
+        TagField,
+        {
+          tags,
+          suggestions: detail.suggestions,
+          lowercase: detail.lowercase_tags,
+          disabled: locked,
+          onChange: edit(setTags)
+        }
+      ), /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-3" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Caption ", /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, "(optional)")), /* @__PURE__ */ react_default.createElement(
         Form.Control,
         {
           className: "text-input",
@@ -1401,6 +1304,18 @@
     react_default.useEffect(() => {
       runOperation("tag_map_list").then((r) => setRules(r.rules), () => void 0);
     }, []);
+    const [ruleFrom, setRuleFrom] = react_default.useState("");
+    const [ruleTo, setRuleTo] = react_default.useState("");
+    async function addRule(drop) {
+      try {
+        await runOperation("tag_map_set", { stash_tag: ruleFrom, imaglr_tag: drop ? null : ruleTo });
+        setRules((await runOperation("tag_map_list")).rules);
+        setRuleFrom("");
+        setRuleTo("");
+      } catch (err) {
+        Toast.error(err);
+      }
+    }
     async function removeRule(stashTag) {
       try {
         setRules((await runOperation("tag_map_delete", { stash_tag: stashTag })).rules);
@@ -1466,7 +1381,26 @@
         },
         Object.keys(ACTION_LABELS).map((a) => /* @__PURE__ */ react_default.createElement("option", { key: a, value: a }, ACTION_LABELS[a]))
       ), /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger", onClick: () => remove(blog) }, "Remove")));
-    })) : null, blogs && blogs.length ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", size: "sm", onClick: check, disabled: checking, className: "mb-3" }, checking ? "Checking with imaglr\u2026" : "Check again") : null, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-add-blog" }, /* @__PURE__ */ react_default.createElement("h6", null, "Tag rules"), rules.length === 0 ? /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted" }, "None yet. In the editor, tap a suggested tag to always send it under another name or always drop it.") : /* @__PURE__ */ react_default.createElement("ul", { className: "imaglr-rules" }, rules.map((r) => /* @__PURE__ */ react_default.createElement("li", { key: r.stash_tag }, /* @__PURE__ */ react_default.createElement("span", null, /* @__PURE__ */ react_default.createElement("strong", null, r.stash_tag), " \u2192 ", r.imaglr_tag ? /* @__PURE__ */ react_default.createElement("strong", null, r.imaglr_tag) : /* @__PURE__ */ react_default.createElement("em", null, "always dropped")), /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger p-0", onClick: () => removeRule(r.stash_tag) }, "Remove"))))), /* @__PURE__ */ react_default.createElement(Form, { onSubmit: add, className: "imaglr-add-blog" }, /* @__PURE__ */ react_default.createElement("h6", null, blogs && blogs.length ? "Add another blog" : "Add your imaglr blog"), /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted" }, "On imaglr, open ", /* @__PURE__ */ react_default.createElement("a", { href: "https://imaglr.com/settings", target: "_blank", rel: "noreferrer" }, "Settings \u2192 API"), " and create a key with the ", /* @__PURE__ */ react_default.createElement("strong", null, "read"), " and ", /* @__PURE__ */ react_default.createElement("strong", null, "manage"), " permissions. Each key belongs to one blog. The key is stored only in this plugin and never shown again."), /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "API key"), /* @__PURE__ */ react_default.createElement(
+    })) : null, blogs && blogs.length ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", size: "sm", onClick: check, disabled: checking, className: "mb-3" }, checking ? "Checking with imaglr\u2026" : "Check again") : null, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-add-blog" }, /* @__PURE__ */ react_default.createElement("h6", null, "Tag rules"), /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted" }, "When a Stash tag is suggested for imaglr, always send it under another name, or never suggest it."), rules.length === 0 ? null : /* @__PURE__ */ react_default.createElement("ul", { className: "imaglr-rules" }, rules.map((r) => /* @__PURE__ */ react_default.createElement("li", { key: r.stash_tag }, /* @__PURE__ */ react_default.createElement("span", null, /* @__PURE__ */ react_default.createElement("strong", null, r.stash_tag), " \u2192 ", r.imaglr_tag ? /* @__PURE__ */ react_default.createElement("strong", null, r.imaglr_tag) : /* @__PURE__ */ react_default.createElement("em", null, "always dropped")), /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger p-0", onClick: () => removeRule(r.stash_tag) }, "Remove")))), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-rule-form" }, /* @__PURE__ */ react_default.createElement(
+      Form.Control,
+      {
+        className: "text-input",
+        value: ruleFrom,
+        placeholder: "Stash tag",
+        "aria-label": "Stash tag",
+        onChange: (e) => setRuleFrom(e.target.value)
+      }
+    ), /* @__PURE__ */ react_default.createElement(
+      Form.Control,
+      {
+        className: "text-input",
+        value: ruleTo,
+        placeholder: "send as\u2026 (imaglr tag)",
+        maxLength: 64,
+        "aria-label": "imaglr tag",
+        onChange: (e) => setRuleTo(e.target.value)
+      }
+    ), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled: !ruleFrom.trim() || !ruleTo.trim(), onClick: () => addRule(false) }, "Add rule"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled: !ruleFrom.trim(), onClick: () => addRule(true) }, "Never suggest"))), /* @__PURE__ */ react_default.createElement(Form, { onSubmit: add, className: "imaglr-add-blog" }, /* @__PURE__ */ react_default.createElement("h6", null, blogs && blogs.length ? "Add another blog" : "Add your imaglr blog"), /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted" }, "On imaglr, open ", /* @__PURE__ */ react_default.createElement("a", { href: "https://imaglr.com/settings", target: "_blank", rel: "noreferrer" }, "Settings \u2192 API"), " and create a key with the ", /* @__PURE__ */ react_default.createElement("strong", null, "read"), " and ", /* @__PURE__ */ react_default.createElement("strong", null, "manage"), " permissions. Each key belongs to one blog. The key is stored only in this plugin and never shown again."), /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "API key"), /* @__PURE__ */ react_default.createElement(
       Form.Control,
       {
         className: "text-input",

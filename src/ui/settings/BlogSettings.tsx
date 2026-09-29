@@ -21,6 +21,20 @@ export function BlogSettings({ onClose }: { onClose: (changed: boolean) => void 
     runOperation<{ rules: typeof rules }>("tag_map_list").then((r) => setRules(r.rules), () => undefined);
   }, []);
 
+  const [ruleFrom, setRuleFrom] = React.useState("");
+  const [ruleTo, setRuleTo] = React.useState("");
+
+  async function addRule(drop: boolean) {
+    try {
+      await runOperation("tag_map_set", { stash_tag: ruleFrom, imaglr_tag: drop ? null : ruleTo });
+      setRules((await runOperation<{ rules: typeof rules }>("tag_map_list")).rules);
+      setRuleFrom("");
+      setRuleTo("");
+    } catch (err) {
+      Toast.error(err);
+    }
+  }
+
   async function removeRule(stashTag: string) {
     try {
       setRules((await runOperation<{ rules: typeof rules }>("tag_map_delete", { stash_tag: stashTag })).rules);
@@ -125,11 +139,10 @@ export function BlogSettings({ onClose }: { onClose: (changed: boolean) => void 
 
         <div className="imaglr-add-blog">
           <h6>Tag rules</h6>
-          {rules.length === 0 ? (
-            <p className="small text-muted">
-              None yet. In the editor, tap a suggested tag to always send it under another name or always drop it.
-            </p>
-          ) : (
+          <p className="small text-muted">
+            When a Stash tag is suggested for imaglr, always send it under another name, or never suggest it.
+          </p>
+          {rules.length === 0 ? null : (
             <ul className="imaglr-rules">
               {rules.map((r) => (
                 <li key={r.stash_tag}>
@@ -141,6 +154,14 @@ export function BlogSettings({ onClose }: { onClose: (changed: boolean) => void 
               ))}
             </ul>
           )}
+          <div className="imaglr-rule-form">
+            <Form.Control className="text-input" value={ruleFrom} placeholder="Stash tag" aria-label="Stash tag"
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRuleFrom(e.target.value)} />
+            <Form.Control className="text-input" value={ruleTo} placeholder="send as… (imaglr tag)" maxLength={64}
+              aria-label="imaglr tag" onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRuleTo(e.target.value)} />
+            <Button variant="secondary" disabled={!ruleFrom.trim() || !ruleTo.trim()} onClick={() => addRule(false)}>Add rule</Button>
+            <Button variant="secondary" disabled={!ruleFrom.trim()} onClick={() => addRule(true)}>Never suggest</Button>
+          </div>
         </div>
 
         <Form onSubmit={add} className="imaglr-add-blog">
