@@ -13,7 +13,7 @@ import platform
 import traceback
 from typing import Any
 
-from . import blog_ops, log, queue_ops
+from . import blog_ops, log, queue_ops, send_ops
 from .context import Context, UserError, plugin_version
 
 __all__ = ["handle", "OPERATIONS", "UserError", "plugin_version"]
@@ -42,6 +42,8 @@ OPERATIONS = {
     "ping": op_ping,
     **blog_ops.OPERATIONS,
     **queue_ops.OPERATIONS,
+    **send_ops.OPERATIONS,
+    **send_ops.TASKS,
 }
 
 
