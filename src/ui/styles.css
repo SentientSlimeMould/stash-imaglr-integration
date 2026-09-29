@@ -1,0 +1,16 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+/* Plugin styles. Stash's Bootstrap classes do most of the work; keep this small. */
+
+.imaglr-page {
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+
+.imaglr-page-title {
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.imaglr-tab-content {
+  padding: 1rem 0;
+}

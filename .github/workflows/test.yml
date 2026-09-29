@@ -1,0 +1,57 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Oldest we support on bare-metal installs, and current.
+        python: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m unittest discover -s tests/python -t . -v
+
+  stash-images:
+    name: Python in stashapp/stash:${{ matrix.tag }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        tag: [v0.31.1, development]
+    steps:
+      - uses: actions/checkout@v6
+      - run: >
+          docker run --rm -v "$PWD":/w -w /w --entrypoint python3 stashapp/stash:${{ matrix.tag }}
+          -m unittest discover -s tests/python -t . -v
+
+  ui:
+    name: UI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Committed bundle matches the source
+        run: |
+          npm run build
+          git diff --exit-code -- plugins/imaglrIntegration/imaglrIntegration.js plugins/imaglrIntegration/imaglrIntegration.css \
+            || { echo "::error::Run 'npm run build' and commit the result."; exit 1; }

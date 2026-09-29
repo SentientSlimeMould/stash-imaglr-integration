@@ -1,0 +1,14 @@
+/* Imaglr Integration for Stash. SPDX-License-Identifier: AGPL-3.0-only
+ * Generated from src/ui by scripts/build.mjs. Do not edit. */
+/* src/ui/styles.css */
+.imaglr-page {
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+.imaglr-page-title {
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+}
+.imaglr-tab-content {
+  padding: 1rem 0;
+}

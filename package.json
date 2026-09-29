@@ -1,0 +1,22 @@
+{
+  "name": "stash-imaglr-integration",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"tests/js/**/*.test.ts\"",
+    "test:py": "python3 -m unittest discover -s tests/python -t ."
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "@types/react": "^17.0.83",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.9.0"
+  }
+}
