@@ -181,7 +181,10 @@ export function Editor({ itemId, onClose }: Props) {
   }
 
   async function remove() {
-    if (!window.confirm("Take this off the imaglr page? Its queue tag is removed in Stash; nothing is deleted.")) return;
+    if (!window.confirm(
+      "Take this off the Post to imaglr page? The imaglr tag is removed from it in Stash. " +
+        "Nothing on imaglr is changed and nothing is deleted.",
+    )) return;
     try {
       await runOperation("remove_from_queue", { item_id: item.id });
       onClose(true);
@@ -289,7 +292,7 @@ export function Editor({ itemId, onClose }: Props) {
         ) : (
           <>
             <Button variant="link" className="text-danger mr-auto" onClick={remove} disabled={locked}>
-              Remove from imaglr
+              Don't send
             </Button>
             {confirmPublish ? (
               <span className="imaglr-confirm">
