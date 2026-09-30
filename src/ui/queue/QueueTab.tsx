@@ -4,16 +4,28 @@
 import React from "react";
 import { runOperation } from "../api.ts";
 import { Editor } from "../editor/Editor.tsx";
-import { applyControls, cardWidth, loadControls, paginate, saveControls, type QueueControlsState } from "../lib/sort.ts";
+import { applyControls, loadControls, paginate, saveControls, type QueueControlsState } from "../lib/sort.ts";
+import { fmtDims } from "../lib/format.ts";
 import { MAX_POST_FILES } from "../lib/imageActions.ts";
 import { STATUS_LABELS, STATUS_VARIANTS, type Card, type QueueResponse } from "../model.ts";
 import { ROUTE } from "../routes.ts";
-import { CardImage, cardDetail, CardOverlays, FallbackCard } from "./ItemCard.tsx";
+import { CardGrid, type GridItem } from "./CardGrid.tsx";
 import { Pager } from "./Paging.tsx";
 import { SendAllDialog } from "./SendAllDialog.tsx";
 import { Toolbar, type SelectionAction } from "./Toolbar.tsx";
 
 const BUSY = ["exporting", "sending"];
+
+function cardDetail(card: Card): string {
+  const count = card.members?.length ?? 0;
+  if (count) return `${count} files in one post`;
+  if (card.kind === "clip") {
+    return [`${(card.duration ?? 0).toFixed(1)} s`, fmtDims(card.width, card.height)].filter(Boolean).join(" · ");
+  }
+  return [card.format?.toUpperCase(), fmtDims(card.width, card.height), card.animated ? "animated" : null]
+    .filter(Boolean)
+    .join(" · ");
+}
 
 const EMPTY = {
   clips: (tag: string) => (
@@ -36,18 +48,6 @@ const EMPTY = {
   ),
 };
 
-function useContainerWidth(ref: React.RefObject<HTMLDivElement>) {
-  const [width, setWidth] = React.useState(0);
-  React.useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const observer = new ResizeObserver(() => setWidth(el.clientWidth));
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [ref]);
-  return width;
-}
-
 export interface QueueProps {
   data: QueueResponse | null;
   error: string | null;
@@ -55,22 +55,16 @@ export interface QueueProps {
 }
 
 export function QueueTab({ tab, openId, data, error, load }: { tab: "clips" | "images"; openId: string | null } & QueueProps) {
-  const { Button, Table, Badge } = PluginApi.libraries.Bootstrap;
-  const { Link, useHistory } = PluginApi.libraries.ReactRouterDOM;
+  const { Button } = PluginApi.libraries.Bootstrap;
+  const { useHistory } = PluginApi.libraries.ReactRouterDOM;
   const { LoadingIndicator } = PluginApi.components;
   const Toast = PluginApi.hooks.useToast();
   const history = useHistory();
-  // Stash's GridCard and Pagination are loaded on demand; these modules bring them in.
-  const loading = PluginApi.hooks.useLoadComponents([PluginApi.loadableComponents.SceneCard, PluginApi.loadableComponents.Images]);
-  const GridCard = loading ? null : PluginApi.components.GridCard;
 
   const [controls, setControls] = React.useState<QueueControlsState>(() => loadControls(tab));
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [sendAll, setSendAll] = React.useState<string[] | null>(null);
   const [page, setPage] = React.useState(1);
-  const box = React.useRef<HTMLDivElement>(null);
-  const width = useContainerWidth(box);
-  const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 576px)").matches;
 
   function updateControls(next: QueueControlsState) {
     setControls(next);
@@ -156,57 +150,23 @@ export function QueueTab({ tab, openId, data, error, load }: { tab: "clips" | "i
     body = <div className="imaglr-empty text-muted">{EMPTY[tab](data.tags.queue.name)}</div>;
   } else if (matching.length === 0) {
     body = <p className="text-muted imaglr-empty">Nothing matches these filters.</p>;
-  } else if (controls.view === "list") {
-    body = (
-      <Table striped bordered size="sm" className="imaglr-table">
-        <tbody>
-          {items.map((c) => (
-            <tr key={c.id}>
-              <td className="select-col">
-                <input type="checkbox" className="mousetrap" checked={selected.has(c.id)} aria-label={`Select ${c.title}`}
-                  onChange={(e) => toggle(c.id, e.target.checked)} />
-              </td>
-              <td className="imaglr-table-thumb"><CardImage card={c} /></td>
-              <td>
-                <Link to={url(c)}>{c.title}</Link>
-                <div className="small text-muted">{cardDetail(c)}</div>
-              </td>
-              <td className="imaglr-table-status"><Badge variant={STATUS_VARIANTS[c.status]}>{STATUS_LABELS[c.status]}</Badge></td>
-            </tr>
-          ))}
-        </tbody>
-      </Table>
-    );
   } else {
-    const w = isMobile ? undefined : cardWidth(width, controls.zoom);
-    body = (
-      <div className="row justify-content-center imaglr-cards">
-        {items.map((c) =>
-          GridCard ? (
-            <GridCard
-              key={c.id}
-              className={`image-card zoom-${controls.zoom} imaglr-grid-card${c.id === openId ? " imaglr-card-highlight" : ""}`}
-              linkClassName="image-card-link"
-              width={w}
-              url={url(c)}
-              title={c.title}
-              image={<CardImage card={c} />}
-              overlays={<CardOverlays card={c} />}
-              details={<div className="image-card__details"><span>{cardDetail(c)}</span></div>}
-              selecting={selecting}
-              selected={selected.has(c.id)}
-              onSelectedChanged={(on: boolean) => toggle(c.id, on)}
-            />
-          ) : (
-            <FallbackCard key={c.id} card={c} url={url(c)} width={w} />
-          ),
-        )}
-      </div>
-    );
+    const gridItems: GridItem[] = items.map((c) => ({
+      id: c.id,
+      title: c.title,
+      url: url(c),
+      thumb: c.thumb,
+      preview: c.preview,
+      portrait: (c.height ?? 0) > (c.width ?? 0),
+      detail: cardDetail(c),
+      badge: { text: STATUS_LABELS[c.status], variant: STATUS_VARIANTS[c.status] },
+      count: c.members?.length,
+    }));
+    body = <CardGrid items={gridItems} view={controls.view} zoom={controls.zoom} highlightId={openId} selected={selected} onToggle={toggle} />;
   }
 
   return (
-    <div ref={box}>
+    <div>
       <Toolbar
         tab={tab}
         controls={controls}

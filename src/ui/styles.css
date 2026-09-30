@@ -211,37 +211,24 @@
   margin-bottom: 0.4rem;
 }
 
-.imaglr-sent {
-  list-style: none;
-  padding: 0;
-  margin-top: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+.imaglr-sent-facts {
+  margin-top: 0.75rem;
+  margin-bottom: 0;
 }
 
-.imaglr-sent-row {
-  display: flex;
-  flex-direction: row;
-  gap: 0.75rem;
-  padding: 0.5rem;
-  margin: 0;
+.imaglr-sent-facts dd {
+  margin-bottom: 0.5rem;
 }
 
-.imaglr-sent-thumb img {
-  width: 72px;
-  height: 72px;
-  object-fit: cover;
-  background: #000;
-}
-
-.imaglr-sent-body {
-  min-width: 0;
-  flex: 1;
+.imaglr-caption {
+  white-space: pre-wrap;
 }
 
 .imaglr-dropped {
-  margin-right: 0.6rem;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  margin-right: 0.75rem;
 }
 
 .imaglr-add-blog {

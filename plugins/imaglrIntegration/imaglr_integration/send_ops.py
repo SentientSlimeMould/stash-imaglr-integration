@@ -250,45 +250,74 @@ def _thumb(member: dict[str, Any]) -> str | None:
 
 
 def _sent_view(ctx: Context, item: dict[str, Any], blog_names: dict[int, str]) -> dict[str, Any]:
+    """A sent post as the Sent tab's card and detail dialog need it."""
     members = repo.set_members(ctx.db, item["id"]) if item["kind"] == "set" else [item]
-    thumbs = [t for t in (_thumb(m) for m in members) if t]
+    files = [{
+        "id": m["id"], "kind": m["kind"], "title": m["source_title"], "thumb": _thumb(m),
+        "stash_image_id": m["stash_image_id"], "stash_scene_id": m["stash_scene_id"],
+        "stash_marker_id": m["stash_marker_id"],
+    } for m in members]
     return {
         "id": item["id"],
         "kind": item["kind"],
-        "title": members[0]["source_title"] if members else item["source_title"],
-        "files": len(members),
-        "thumb": thumbs[0] if thumbs else None,
+        "title": files[0]["title"] if files else item["source_title"],
+        "files": files,
+        "thumb": next((f["thumb"] for f in files if f["thumb"]), None),
+        "blog_id": item["blog_id"],
         "blog": blog_names.get(item["blog_id"]) if item["blog_id"] else None,
         "sent_as": item["sent_as"],
         "sent_at": item["sent_at"],
         "draft_id": item["draft_id"],
         "post_url": item["post_url"],
         "tags": item["tags"],
+        "caption": item["caption"],
         "dropped_tags": item["dropped_tags"],
         "followup_failed": item["followup_failed"],
         "action": item["action"],
         "error_code": item["error_code"],
         "error_detail": item["error_detail"],
-        "stash_image_ids": [m["stash_image_id"] for m in members if m["stash_image_id"]],
     }
 
 
+SENT_SORTS = {"sent": "sent_at", "name": "source_title COLLATE NOCASE", "blog": "blog_id"}
+
+
 def op_sent_list(ctx: Context) -> dict[str, Any]:
-    """One page of sent posts, newest first (files inside a post are listed under the post)."""
-    per_page = min(max(int(ctx.args.get("per_page") or 40), 1), 1000)
-    page = max(int(ctx.args.get("page") or 1), 1)
+    """One page of sent posts, searched, filtered and sorted on the backend (history grows without limit)."""
+    a = ctx.args
+    per_page = min(max(int(a.get("per_page") or 40), 1), 1000)
+    page = max(int(a.get("page") or 1), 1)
+    where, params = ["status='sent'", "id NOT IN (SELECT item_id FROM set_members)"], []  # type: ignore[var-annotated]
+    q = " ".join(str(a.get("q") or "").split())
+    if q:
+        where.append("source_title LIKE ? ESCAPE '\\'")
+        params.append("%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%")
+    if a.get("blog_id"):
+        where.append("blog_id=?")
+        params.append(int(a["blog_id"]))
+    if a.get("sent_as") in blogs.ACTIONS:
+        where.append("sent_as=?")
+        params.append(a["sent_as"])
+    order = SENT_SORTS.get(str(a.get("sort") or "sent"), "sent_at")
+    direction = "ASC" if a.get("dir") == "asc" else "DESC"
     names = {b["id"]: b["name"] or f"Blog {b['id']}" for b in blogs.list_blogs(ctx.db)}
-    where = "status='sent' AND id NOT IN (SELECT item_id FROM set_members)"
-    total = ctx.db.fetchone(f"SELECT COUNT(*) AS n FROM items WHERE {where}")["n"]
-    rows = ctx.db.fetchall(f"SELECT * FROM items WHERE {where} ORDER BY sent_at DESC LIMIT ? OFFSET ?",
-                           (per_page, (page - 1) * per_page))
+    clause = " AND ".join(where)
+    total = ctx.db.fetchone(f"SELECT COUNT(*) AS n FROM items WHERE {clause}", tuple(params))["n"]
+    rows = ctx.db.fetchall(
+        f"SELECT * FROM items WHERE {clause} ORDER BY {order} {direction}, sent_at DESC LIMIT ? OFFSET ?",
+        tuple(params + [per_page, (page - 1) * per_page]),
+    )
     return {"items": [_sent_view(ctx, repo.decode(r), names) for r in rows], "total": total,
-            "page": page, "per_page": per_page}
+            "page": page, "per_page": per_page,
+            "blogs": [{"id": i, "name": n} for i, n in names.items()]}
 
 
-def _rules(ctx: Context) -> dict[str, Any]:
-    rows = ctx.db.fetchall("SELECT stash_tag, imaglr_tags FROM tag_rules ORDER BY stash_tag COLLATE NOCASE")
-    return {"rules": [{"stash_tag": r["stash_tag"], "imaglr_tags": json.loads(r["imaglr_tags"])} for r in rows]}
+def op_sent_detail(ctx: Context) -> dict[str, Any]:
+    item = _item(ctx)
+    if item["status"] != "sent":
+        raise UserError("That post hasn't been sent.")
+    names = {b["id"]: b["name"] or f"Blog {b['id']}" for b in blogs.list_blogs(ctx.db)}
+    return {"item": _sent_view(ctx, item, names)}
 
 
 def op_tag_rule_set(ctx: Context) -> dict[str, Any]:
@@ -352,6 +381,7 @@ OPERATIONS = {
     "recover": op_recover,
     "retry_follow_up": op_retry_follow_up,
     "sent_list": op_sent_list,
+    "sent_detail": op_sent_detail,
     "tag_rule_set": op_tag_rule_set,
     "tag_rule_list": op_tag_rule_list,
     "tag_rule_delete": op_tag_rule_delete,

@@ -115,22 +115,33 @@ export interface ItemDetail {
   queue_tag: string;
 }
 
+export interface SentFile {
+  id: string;
+  kind: Kind;
+  title: string;
+  thumb: string | null;
+  stash_image_id: string | null;
+  stash_scene_id: string | null;
+  stash_marker_id: string | null;
+}
+
 export interface SentItem {
   id: string;
   kind: Kind;
   title: string;
-  files: number;
+  files: SentFile[];
   thumb: string | null;
+  blog_id: number | null;
   blog: string | null;
   sent_as: SendAction;
   sent_at: string;
   draft_id: string | null;
   post_url: string | null;
   tags: string[];
+  caption: string;
   dropped_tags: string[];
   followup_failed: boolean;
   action: SendAction | null;
   error_code: string | null;
   error_detail: string | null;
-  stash_image_ids: string[];
 }

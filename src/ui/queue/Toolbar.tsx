@@ -3,7 +3,8 @@
 // (ui/v2.5/src/components/List/FilteredListToolbar.tsx, ListFilter.tsx, ListViewOptions.tsx,
 // FilterTags.tsx) so Stash's stylesheet makes it look and behave the same.
 import React from "react";
-import { filterCount, formatsIn, SORTS, ZOOM_WIDTHS, type Orientation, type QueueControlsState, type StatusFilter } from "../lib/sort.ts";
+import { filterCount, formatsIn, SORTS, ZOOM_WIDTHS, type Orientation, type QueueControlsState, type StatusFilter, type Tab } from "../lib/sort.ts";
+import { SENT_AS_LABELS } from "../lib/send.ts";
 import type { Candidate } from "../lib/types.ts";
 import { STATUS_LABELS } from "../model.ts";
 import { PageSizeSelect } from "./Paging.tsx";
@@ -17,14 +18,15 @@ export interface SelectionAction {
 }
 
 interface Props {
-  tab: "clips" | "images";
+  tab: Tab;
   controls: QueueControlsState;
   items: Candidate[];
+  blogs?: { id: number; name: string }[]; // Sent tab filter
   selected: number;
   selectionActions: SelectionAction[];
   onChange: (next: QueueControlsState) => void;
-  onSelectAll: () => void;
-  onSelectNone: () => void;
+  onSelectAll?: () => void; // absent on tabs without selection (Sent)
+  onSelectNone?: () => void;
   onRefresh: () => void;
   onSendAll?: () => void;
 }
@@ -117,9 +119,13 @@ function ViewButtons({ controls, onChange }: Pick<Props, "controls" | "onChange"
 }
 
 /** Active filters as removable chips under the toolbar, like Stash's FilterTags. */
-export function FilterTags({ controls, onChange }: Pick<Props, "controls" | "onChange">) {
+export function FilterTags({ controls, onChange, blogs }: Pick<Props, "controls" | "onChange" | "blogs">) {
   const { Badge, Button } = PluginApi.libraries.Bootstrap;
   const tags: { label: string; clear: Partial<QueueControlsState> }[] = [];
+  if (controls.blog != null) {
+    tags.push({ label: `Blog: ${blogs?.find((b) => b.id === controls.blog)?.name ?? controls.blog}`, clear: { blog: null } });
+  }
+  if (controls.sentAs !== "all") tags.push({ label: `Sent as: ${SENT_AS_LABELS[controls.sentAs]}`, clear: { sentAs: "all" } });
   if (controls.status !== "all") {
     tags.push({ label: `Status: ${STATUS_LABELS[controls.status as keyof typeof STATUS_LABELS] ?? controls.status}`, clear: { status: "all" } });
   }
@@ -138,7 +144,7 @@ export function FilterTags({ controls, onChange }: Pick<Props, "controls" | "onC
       ))}
       {tags.length > 1 ? (
         <Button variant="link" className="clear-all-button"
-          onClick={() => onChange({ ...controls, status: "all", types: [], orientation: "any" })}>
+          onClick={() => onChange({ ...controls, status: "all", types: [], orientation: "any", blog: null, sentAs: "all" })}>
           Clear all
         </Button>
       ) : null}
@@ -146,7 +152,7 @@ export function FilterTags({ controls, onChange }: Pick<Props, "controls" | "onC
   );
 }
 
-function FilterDialog({ tab, controls, items, onChange, onClose }: Pick<Props, "tab" | "controls" | "items" | "onChange"> & { onClose: () => void }) {
+function FilterDialog({ tab, controls, items, blogs, onChange, onClose }: Pick<Props, "tab" | "controls" | "items" | "blogs" | "onChange"> & { onClose: () => void }) {
   const { Modal, Button, Form } = PluginApi.libraries.Bootstrap;
   const [draft, setDraft] = React.useState(controls);
   const formats = formatsIn(items);
@@ -156,6 +162,27 @@ function FilterDialog({ tab, controls, items, onChange, onClose }: Pick<Props, "
         <Modal.Title>Filter {tab}</Modal.Title>
       </Modal.Header>
       <Modal.Body>
+        {tab === "sent" ? (
+          <>
+            <Form.Group>
+              <Form.Label>Blog</Form.Label>
+              <Form.Control as="select" className="text-input" value={draft.blog ?? ""}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setDraft({ ...draft, blog: e.target.value ? Number(e.target.value) : null })}>
+                <option value="">Any</option>
+                {(blogs ?? []).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </Form.Control>
+            </Form.Group>
+            <Form.Group>
+              <Form.Label>Sent as</Form.Label>
+              <Form.Control as="select" className="text-input" value={draft.sentAs}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setDraft({ ...draft, sentAs: e.target.value as QueueControlsState["sentAs"] })}>
+                <option value="all">Any</option>
+                {(["draft", "queue", "publish"] as const).map((a) => <option key={a} value={a}>{SENT_AS_LABELS[a]}</option>)}
+              </Form.Control>
+            </Form.Group>
+          </>
+        ) : (
+        <>
         <Form.Group>
           <Form.Label>Status</Form.Label>
           <Form.Control as="select" className="text-input" value={draft.status}
@@ -183,6 +210,8 @@ function FilterDialog({ tab, controls, items, onChange, onClose }: Pick<Props, "
             {ORIENTATIONS.map((o) => <option key={o} value={o}>{o[0].toUpperCase() + o.slice(1)}</option>)}
           </Form.Control>
         </Form.Group>
+        </>
+        )}
       </Modal.Body>
       <Modal.Footer>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
@@ -196,7 +225,7 @@ export function Toolbar(props: Props) {
   const { ButtonToolbar, ButtonGroup, Button, Badge, Dropdown } = PluginApi.libraries.Bootstrap;
   const { controls, onChange, selected, selectionActions } = props;
   const [showFilter, setShowFilter] = React.useState(false);
-  const count = filterCount(controls);
+  const count = filterCount(controls, props.tab);
   // Like Stash, actions on the selection only appear once something is selected.
   const buttons = selected ? selectionActions.filter((a) => a.primary) : [];
   const menu = selected ? selectionActions.filter((a) => !a.primary) : [];
@@ -233,7 +262,7 @@ export function Toolbar(props: Props) {
           <Dropdown as={ButtonGroup}>
             <Dropdown.Toggle variant="secondary" id="imaglr-more" aria-label="More">{icon("faEllipsisH")}</Dropdown.Toggle>
             <Dropdown.Menu className="bg-secondary text-white">
-              <Dropdown.Item className="bg-secondary text-white" onClick={props.onSelectAll}>Select all</Dropdown.Item>
+              {props.onSelectAll ? <Dropdown.Item className="bg-secondary text-white" onClick={props.onSelectAll}>Select all</Dropdown.Item> : null}
               {selected ? <Dropdown.Item className="bg-secondary text-white" onClick={props.onSelectNone}>Select none</Dropdown.Item> : null}
               {menu.map((a) => (
                 <Dropdown.Item key={a.text} className="bg-secondary text-white" disabled={a.disabled} onClick={a.onClick}>{a.text}</Dropdown.Item>
@@ -244,9 +273,9 @@ export function Toolbar(props: Props) {
         </ButtonGroup>
         <ViewButtons controls={controls} onChange={onChange} />
       </ButtonToolbar>
-      <FilterTags controls={controls} onChange={onChange} />
+      <FilterTags controls={controls} onChange={onChange} blogs={props.blogs} />
       {showFilter ? (
-        <FilterDialog tab={props.tab} controls={controls} items={props.items} onChange={onChange} onClose={() => setShowFilter(false)} />
+        <FilterDialog tab={props.tab} controls={controls} items={props.items} blogs={props.blogs} onChange={onChange} onClose={() => setShowFilter(false)} />
       ) : null}
     </>
   );

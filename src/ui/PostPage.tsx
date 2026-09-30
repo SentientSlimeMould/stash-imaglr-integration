@@ -139,7 +139,7 @@ export function PostPage() {
         <Tab.Content className="imaglr-tab-content" key={reloadKey}>
           <Tab.Pane eventKey="clips">{tab === "clips" ? <QueueTab tab="clips" openId={openId} {...queue} /> : null}</Tab.Pane>
           <Tab.Pane eventKey="images">{tab === "images" ? <QueueTab tab="images" openId={openId} {...queue} /> : null}</Tab.Pane>
-          <Tab.Pane eventKey="sent">{tab === "sent" ? <SentTab /> : null}</Tab.Pane>
+          <Tab.Pane eventKey="sent">{tab === "sent" ? <SentTab openId={openId} /> : null}</Tab.Pane>
         </Tab.Content>
       </Tab.Container>
       <BackendStatus />

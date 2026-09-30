@@ -3,7 +3,8 @@
 
 import type { Candidate, Status } from "./types.ts";
 
-export type SortKey = "added" | "name" | "size" | "length" | "type" | "created" | "date" | "dims";
+export type SortKey = "added" | "name" | "size" | "length" | "type" | "created" | "date" | "dims" | "sent" | "blog";
+export type Tab = "clips" | "images" | "sent";
 export type Dir = "asc" | "desc";
 export type Orientation = "any" | "portrait" | "landscape" | "square";
 export type StatusFilter = "all" | "untouched" | Status;
@@ -23,12 +24,19 @@ export interface QueueControlsState {
   view: ViewMode;
   zoom: number; // index into ZOOM_WIDTHS, like Stash's zoom slider
   perPage: number;
+  blog: number | null; // Sent tab: only this blog
+  sentAs: "all" | "draft" | "queue" | "publish"; // Sent tab
 }
 
 export const DEFAULTS: QueueControlsState = {
   sort: "added", dir: "desc", search: "", status: "all", types: [], orientation: "any",
-  view: "grid", zoom: 1, perPage: 40,
+  view: "grid", zoom: 1, perPage: 40, blog: null, sentAs: "all",
 };
+
+/** Per-tab defaults: the Sent tab sorts by when things were sent. */
+export function defaultsFor(tab: Tab): QueueControlsState {
+  return tab === "sent" ? { ...DEFAULTS, sort: "sent" } : { ...DEFAULTS };
+}
 
 /** Stash's page-size choices (ui/v2.5/src/components/List/ListFilter.tsx). */
 export const PAGE_SIZES = [20, 40, 60, 120, 250, 500, 1000];
@@ -41,7 +49,8 @@ export function paginate<T>(list: T[], page: number, perPage: number): { items: 
   return { items: list.slice((current - 1) * size, current * size), page: current, pages };
 }
 
-export const SORTS: Record<"clips" | "images", { key: SortKey; label: string }[]> = {
+export const SORTS: Record<Tab, { key: SortKey; label: string }[]> = {
+  sent: [{ key: "sent", label: "Sent" }, { key: "name", label: "Name" }, { key: "blog", label: "Blog" }],
   clips: [
     { key: "added", label: "Added" }, { key: "name", label: "Name" }, { key: "length", label: "Length" },
     { key: "size", label: "File size" }, { key: "created", label: "Created in Stash" },
@@ -69,6 +78,9 @@ function keyOf(c: Candidate, key: SortKey): number | string {
     case "created": return ts(c.created_at);
     case "date": return ts(c.date);
     case "dims": return pixels(c);
+    case "sent": // Sent-tab sorts are applied on the backend; treated like "added" if ever used here
+    case "blog":
+      return ts(c.created_at);
   }
 }
 
@@ -116,16 +128,17 @@ const storageKey = (tab: string) => `imaglr.controls.${tab}`;
 
 /** Saved controls for a tab; defaults when nothing is saved or storage is unavailable. */
 export function loadControls(tab: string, storage?: ControlsStorage): QueueControlsState {
+  const base = defaultsFor(tab as Tab);
   try {
     const raw = (storage ?? localStorage).getItem(storageKey(tab));
     if (raw) {
-      const saved = { ...DEFAULTS, ...JSON.parse(raw) } as QueueControlsState;
+      const saved = { ...base, ...JSON.parse(raw) } as QueueControlsState;
       saved.zoom = Math.min(Math.max(Number(saved.zoom) || 0, 0), ZOOM_WIDTHS.length - 1);
       saved.perPage = Math.max(1, Math.floor(Number(saved.perPage))) || DEFAULTS.perPage;
       return saved;
     }
   } catch { /* ignore */ }
-  return { ...DEFAULTS };
+  return base;
 }
 
 export function saveControls(tab: string, s: QueueControlsState, storage?: ControlsStorage): void {
@@ -133,7 +146,8 @@ export function saveControls(tab: string, s: QueueControlsState, storage?: Contr
 }
 
 /** Number of active filters, shown on the Filter button like Stash does. */
-export function filterCount(s: QueueControlsState): number {
+export function filterCount(s: QueueControlsState, tab: Tab = "images"): number {
+  if (tab === "sent") return (s.blog != null ? 1 : 0) + (s.sentAs !== "all" ? 1 : 0);
   return (s.status !== "all" ? 1 : 0) + (s.types.length ? 1 : 0) + (s.orientation !== "any" ? 1 : 0);
 }
 

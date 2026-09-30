@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.3 — 2026-09-30
+
+- Sent tab now works like Clips and Images: the same toolbar (search, filter by blog or by draft/queued/published,
+  sort by sent date, name or blog, page size), the same cards (grid or list, zoom) and paging. Searching,
+  filtering and sorting run on the plugin side, so a long history stays quick.
+- Tapping a sent card opens its details: the files it contained (each linking to its Stash page), blog, date,
+  link on imaglr, tags kept and dropped (with "Always drop"), caption, and the retry when queueing or
+  publishing failed.
+
 ## 0.1.2 — 2026-09-30
 
 - Item counts on the Clips, Images and Sent tabs.

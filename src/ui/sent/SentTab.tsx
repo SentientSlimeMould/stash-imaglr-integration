@@ -1,116 +1,115 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The Sent tab: what went where, tags imaglr dropped, and a retry when queueing/publishing failed.
-// Paged on the backend (history grows without limit), with Stash's paging controls.
+// The Sent tab: what went where, shown exactly like the Clips and Images tabs (Stash's list toolbar,
+// cards, paging). History grows without limit, so searching, filtering, sorting and paging happen on
+// the backend. A card opens its details (?open=<id>).
 import React from "react";
-import { baseUrl, runOperation } from "../api.ts";
+import { runOperation } from "../api.ts";
 import { fmtDate } from "../lib/format.ts";
-import { imaglrLink, SENT_AS_LABELS } from "../lib/send.ts";
-import { loadControls, saveControls } from "../lib/sort.ts";
+import { SENT_AS_LABELS } from "../lib/send.ts";
+import { loadControls, saveControls, type QueueControlsState } from "../lib/sort.ts";
 import type { SentItem } from "../model.ts";
-import { Pager, PageSizeSelect } from "../queue/Paging.tsx";
+import { CardGrid, type GridItem } from "../queue/CardGrid.tsx";
+import { Pager } from "../queue/Paging.tsx";
+import { ROUTE } from "../routes.ts";
+import { Toolbar } from "../queue/Toolbar.tsx";
+import { SentDialog } from "./SentDialog.tsx";
 
 interface SentPage {
   items: SentItem[];
   total: number;
   page: number;
   per_page: number;
+  blogs: { id: number; name: string }[];
 }
 
-export function SentTab() {
-  const { Button, Badge, ButtonToolbar } = PluginApi.libraries.Bootstrap;
+function cardDetail(item: SentItem): string {
+  const when = fmtDate(item.sent_at);
+  return item.blog ? `${item.blog} · ${when}` : when;
+}
+
+export function SentTab({ openId }: { openId: string | null }) {
+  const { Button } = PluginApi.libraries.Bootstrap;
+  const { useHistory } = PluginApi.libraries.ReactRouterDOM;
   const { LoadingIndicator } = PluginApi.components;
-  const Toast = PluginApi.hooks.useToast();
-  PluginApi.hooks.useLoadComponents([PluginApi.loadableComponents.Images]); // Stash's Pagination
-  const [perPage, setPerPage] = React.useState(() => loadControls("sent").perPage);
+  const history = useHistory();
+  const [controls, setControls] = React.useState<QueueControlsState>(() => loadControls("sent"));
   const [page, setPage] = React.useState(1);
   const [data, setData] = React.useState<SentPage | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
 
   const load = React.useCallback(() => {
-    runOperation<SentPage>("sent_list", { page, per_page: perPage }).then((r) => {
+    return runOperation<SentPage>("sent_list", {
+      page, per_page: controls.perPage, q: controls.search, sort: controls.sort, dir: controls.dir,
+      blog_id: controls.blog, sent_as: controls.sentAs === "all" ? null : controls.sentAs,
+    }).then((r) => {
       setData(r);
-      if (r.page !== page) setPage(r.page);
-    }, (e: Error) => Toast.error(e));
-  }, [page, perPage]);
-  React.useEffect(load, [load]);
+      setError(null);
+      if (r.page !== page) setPage(r.page); // the list shrank under us
+    }, (e: Error) => setError(e.message));
+  }, [page, controls.perPage, controls.search, controls.sort, controls.dir, controls.blog, controls.sentAs]);
+  React.useEffect(() => { void load(); }, [load]);
 
-  function changePerPage(size: number) {
-    setPerPage(size);
-    saveControls("sent", { ...loadControls("sent"), perPage: size });
+  function updateControls(next: QueueControlsState) {
+    setControls(next);
+    saveControls("sent", next);
     setPage(1);
   }
 
-  async function retry(item: SentItem) {
-    try {
-      await runOperation("retry_follow_up", { item_id: item.id });
-      Toast.success("Done.");
-      load();
-    } catch (e) {
-      Toast.error(e);
-    }
-  }
+  const filtered = !!controls.search || controls.blog != null || controls.sentAs !== "all";
 
-  async function alwaysDrop(tag: string) {
-    try {
-      await runOperation("tag_rule_set", { stash_tag: tag, imaglr_tags: [] });
-      Toast.success(`"${tag}" won't be suggested again.`);
-    } catch (e) {
-      Toast.error(e);
-    }
+  let body: React.ReactNode;
+  if (error) {
+    body = (
+      <div className="alert alert-danger">
+        Couldn't load the sent posts: {error}{" "}
+        <Button variant="link" className="p-0" onClick={() => void load()}>Try again</Button>
+      </div>
+    );
+  } else if (!data) {
+    body = LoadingIndicator ? <LoadingIndicator /> : <p className="text-muted">Loading…</p>;
+  } else if (data.total === 0) {
+    body = <p className="text-muted imaglr-empty">{filtered ? "Nothing matches these filters." : "Nothing sent yet."}</p>;
+  } else {
+    const gridItems: GridItem[] = data.items.map((item) => ({
+      id: item.id,
+      title: item.title,
+      url: `${ROUTE}?tab=sent&open=${item.id}`,
+      thumb: item.thumb,
+      detail: cardDetail(item),
+      badge: item.followup_failed
+        ? { text: item.action === "publish" ? "Publish failed" : "Queue failed", variant: "danger" }
+        : { text: SENT_AS_LABELS[item.sent_as], variant: item.sent_as === "publish" ? "success" : "primary" },
+      count: item.files.length > 1 ? item.files.length : undefined,
+    }));
+    body = <CardGrid items={gridItems} view={controls.view} zoom={controls.zoom} highlightId={openId} />;
   }
-
-  if (!data) return LoadingIndicator ? <LoadingIndicator /> : <p className="text-muted">Loading…</p>;
 
   return (
-    <>
-      <ButtonToolbar className="filtered-list-toolbar">
-        <PageSizeSelect value={perPage} onChange={changePerPage} />
-        <Button variant="secondary" onClick={load}>Refresh</Button>
-      </ButtonToolbar>
-      {data.total === 0 ? <p className="text-muted imaglr-empty">Nothing sent yet.</p> : null}
-      <ul className="imaglr-sent">
-        {data.items.map((item) => (
-          <li key={item.id} className="imaglr-sent-row card">
-            <div className="imaglr-sent-thumb">
-              {item.thumb ? <img src={baseUrl() + item.thumb} alt="" loading="lazy" /> : null}
-            </div>
-            <div className="imaglr-sent-body">
-              <div className="imaglr-card-title">
-                {item.title}
-                {item.files > 1 ? <span className="text-muted"> + {item.files - 1} more</span> : null}
-              </div>
-              <div className="small">
-                <Badge variant={item.sent_as === "publish" ? "success" : "primary"}>{SENT_AS_LABELS[item.sent_as]}</Badge>{" "}
-                {item.blog ? `on ${item.blog}` : null} · {fmtDate(item.sent_at)} ·{" "}
-                <a href={imaglrLink(item.sent_as, item.post_url)} target="_blank" rel="noreferrer">
-                  {item.sent_as === "draft" ? "Open imaglr drafts" : "Open on imaglr"}
-                </a>
-              </div>
-              {item.followup_failed ? (
-                <div className="small text-warning">
-                  {item.error_detail}{" "}
-                  <Button variant="link" size="sm" className="p-0" onClick={() => retry(item)}>
-                    {item.action === "publish" ? "Retry publishing" : "Retry adding to queue"}
-                  </Button>
-                </div>
-              ) : item.error_detail ? (
-                <div className="small text-warning">{item.error_detail}</div>
-              ) : null}
-              {item.dropped_tags.length ? (
-                <div className="small">
-                  <span className="text-muted">imaglr dropped:</span>{" "}
-                  {item.dropped_tags.map((tag) => (
-                    <span key={tag} className="imaglr-dropped">
-                      {tag}{" "}
-                      <Button variant="link" size="sm" className="p-0" onClick={() => alwaysDrop(tag)}>Always drop</Button>
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          </li>
-        ))}
-      </ul>
-      <Pager page={data.page} perPage={perPage} total={data.total} onChange={(p) => { setPage(p); window.scrollTo({ top: 0 }); }} />
-    </>
+    <div>
+      <Toolbar
+        tab="sent"
+        controls={controls}
+        items={[]}
+        blogs={data?.blogs}
+        selected={0}
+        selectionActions={[]}
+        onChange={updateControls}
+        onRefresh={() => void load()}
+      />
+      {body}
+      {data && data.total > 0 ? (
+        <Pager page={data.page} perPage={controls.perPage} total={data.total}
+          onChange={(p) => { setPage(p); window.scrollTo({ top: 0 }); }} />
+      ) : null}
+      {openId ? (
+        <SentDialog
+          itemId={openId}
+          onClose={(changed) => {
+            history.replace({ search: "?tab=sent" });
+            if (changed) void load();
+          }}
+        />
+      ) : null}
+    </div>
   );
 }
