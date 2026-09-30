@@ -1,0 +1,19 @@
+# Changelog
+
+## 0.1.0 — 2026-09-29
+
+First test release.
+
+- **Post to imaglr** page (main menu → **imaglr**) with Clips, Images and Sent tabs, using Stash's own list
+  toolbar, cards and selection.
+- Queue images and scene markers with the `imaglr` tag, or with **⋯ → Add to imaglr** / **Add to imaglr as one
+  post** in any Stash image list (including a gallery's Images tab).
+- Editor: crop; for clips, trim (written back to the Stash marker), remove sound and save stills; Stash-style
+  tag field; caption; blog and action (draft, queue or publish now).
+- Posts with up to 10 files, mixing clips and images.
+- Send, Send all / Send selected (never publishes straight away), with progress on each card and Stash's Tasks page.
+- Several blogs (one API key each), each with its own default action; keys are stored only by the plugin.
+- Tag rules: send a Stash tag as one or more other imaglr tags, or never suggest it.
+- Metadata stripped from every file (EXIF, GPS, XMP, IPTC, comments, video metadata and chapters) using Stash's
+  own ffmpeg; no extra Python packages.
+- Works with and without a Stash login; Stash v0.31.1 or later.
