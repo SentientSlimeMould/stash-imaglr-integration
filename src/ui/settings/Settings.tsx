@@ -2,6 +2,7 @@
 // Settings dialog: blogs (one imaglr API key each, kept in the plugin's database and never shown again
 // after saving), then tag rules. Stash-level options live in Stash's Settings → Plugins.
 import React from "react";
+import { ConfirmDialog } from "../ConfirmDialog.tsx";
 import { runOperation } from "../api.ts";
 import { fmtDate } from "../lib/format.ts";
 import { ACTION_LABELS, blogProblem } from "../lib/send.ts";
@@ -60,14 +61,16 @@ export function Settings({ onClose }: { onClose: (changed: boolean) => void }) {
     }
   }
 
+  const [removing, setRemoving] = React.useState<Blog | null>(null);
+
   async function remove(blog: Blog) {
-    if (!window.confirm(`Remove ${blog.label}? Its key is deleted from the plugin. Nothing changes on imaglr.`)) return;
     try {
       setBlogs((await runOperation<{ blogs: Blog[] }>("blog_remove", { blog_id: blog.id })).blogs);
       setChanged(true);
     } catch (err) {
       Toast.error(err);
     }
+    setRemoving(null);
   }
 
   return (
@@ -96,14 +99,14 @@ export function Settings({ onClose }: { onClose: (changed: boolean) => void }) {
                   </small>
                   {problem ? <div className="small text-warning">{problem}</div> : null}
                   <div className="imaglr-blog-controls">
-                    <Form.Label className="mb-0" htmlFor={`imaglr-action-${blog.id}`}>When sent</Form.Label>
+                    <Form.Label className="mb-0" htmlFor={`imaglr-action-${blog.id}`}>Send as</Form.Label>
                     <Form.Control id={`imaglr-action-${blog.id}`} as="select" size="sm" className="text-input" value={blog.default_action}
                       onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAction(blog, e.target.value as SendAction)}>
                       {(Object.keys(ACTION_LABELS) as SendAction[]).map((a) => (
                         <option key={a} value={a}>{ACTION_LABELS[a]}</option>
                       ))}
                     </Form.Control>
-                    <Button variant="link" className="text-danger" onClick={() => remove(blog)}>Remove</Button>
+                    <Button variant="link" className="text-danger" onClick={() => setRemoving(blog)}>Remove</Button>
                   </div>
                 </li>
               );
@@ -135,7 +138,7 @@ export function Settings({ onClose }: { onClose: (changed: boolean) => void }) {
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setKey(e.target.value)} />
           </Form.Group>
           <Form.Group>
-            <Form.Label>When sent, by default</Form.Label>
+            <Form.Label>Send as, by default</Form.Label>
             <Form.Control className="text-input" as="select" value={defaultAction}
               onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setDefaultAction(e.target.value as SendAction)}>
               {(Object.keys(ACTION_LABELS) as SendAction[]).map((a) => (
@@ -155,6 +158,12 @@ export function Settings({ onClose }: { onClose: (changed: boolean) => void }) {
       <Modal.Footer>
         <Button variant="primary" onClick={() => onClose(changed)}>Close</Button>
       </Modal.Footer>
+      {removing ? (
+        <ConfirmDialog title={`Remove ${removing.label}`} accept="Remove" variant="danger"
+          onAccept={() => remove(removing)} onCancel={() => setRemoving(null)}>
+          Its key is deleted from the plugin. Nothing changes on imaglr.
+        </ConfirmDialog>
+      ) : null}
     </Modal>
   );
 }

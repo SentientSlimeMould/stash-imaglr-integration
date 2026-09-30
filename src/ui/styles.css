@@ -211,6 +211,15 @@
   margin-bottom: 0.4rem;
 }
 
+.imaglr-item-facts {
+  margin-bottom: 0.5rem;
+}
+
+.imaglr-item-facts dd {
+  margin-bottom: 0;
+  overflow-wrap: anywhere;
+}
+
 .imaglr-sent-facts {
   margin-top: 0.75rem;
   margin-bottom: 0;

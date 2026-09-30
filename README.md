@@ -42,8 +42,8 @@ a day; saving a draft doesn't use one, publishing does (including when imaglr pu
 ## Set up
 
 1. Open **imaglr** in the menu, then **Settings**.
-2. Under **Add a blog**, paste an API key and choose what should happen by default when you send to that blog:
-   **Save as draft**, **Add to queue** or **Publish now**. The plugin checks the key with imaglr before saving it.
+2. Under **Add a blog**, paste an API key and choose what a post becomes on that blog by default (**Send as**):
+   **Draft**, **Queued** or **Published**. The plugin checks the key with imaglr before saving it.
    Repeat for each blog.
 3. Optional: under **Tag rules**, choose Stash tags that should always be sent as different imaglr tags (one Stash
    tag can become several), or never suggested.

@@ -2,10 +2,11 @@
 // Which blog and action a send will use, and how to say so on the button.
 import type { Blog, SendAction } from "../model.ts";
 
+/** What a post becomes on imaglr ("Send as …"); the Sent tab's badges use the same words. */
 export const ACTION_LABELS: Record<SendAction, string> = {
-  draft: "Save as draft",
-  queue: "Add to queue",
-  publish: "Publish now",
+  draft: "Draft",
+  queue: "Queued",
+  publish: "Published",
 };
 
 export const SENT_AS_LABELS: Record<SendAction, string> = {

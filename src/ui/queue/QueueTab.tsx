@@ -13,6 +13,7 @@ import { CardGrid, type GridItem } from "./CardGrid.tsx";
 import { Pager } from "./Paging.tsx";
 import { SendAllDialog } from "./SendAllDialog.tsx";
 import { Toolbar, type SelectionAction } from "./Toolbar.tsx";
+import { ConfirmDialog } from "../ConfirmDialog.tsx";
 
 const BUSY = ["exporting", "sending"];
 
@@ -64,6 +65,7 @@ export function QueueTab({ tab, openId, data, error, load }: { tab: "clips" | "i
   const [controls, setControls] = React.useState<QueueControlsState>(() => loadControls(tab));
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [sendAll, setSendAll] = React.useState<string[] | null>(null);
+  const [confirmRemove, setConfirmRemove] = React.useState(false);
   const [page, setPage] = React.useState(1);
 
   function updateControls(next: QueueControlsState) {
@@ -123,13 +125,7 @@ export function QueueTab({ tab, openId, data, error, load }: { tab: "clips" | "i
     {
       text: `Remove "${data?.tags.queue.name ?? "imaglr"}" tag`,
       disabled: busyPicked,
-      onClick: () => {
-        const tag = data?.tags.queue.name ?? "imaglr";
-        if (!window.confirm(`Remove the "${tag}" tag in Stash from ${picked.length} item(s)? They leave this page. ` +
-          "Nothing on imaglr is changed and nothing is deleted.")) return;
-        void run(() => Promise.all(picked.map((c) => runOperation("remove_from_queue", { item_id: c.id }))),
-          "Removed from this page.");
-      },
+      onClick: () => setConfirmRemove(true),
     },
   ];
 
@@ -192,6 +188,18 @@ export function QueueTab({ tab, openId, data, error, load }: { tab: "clips" | "i
             load();
           }
         }} />
+      ) : null}
+      {confirmRemove ? (
+        <ConfirmDialog title={`Remove "${data?.tags.queue.name ?? "imaglr"}" tag`} accept="Remove tag" variant="danger"
+          onAccept={() => {
+            setConfirmRemove(false);
+            void run(() => Promise.all(picked.map((c) => runOperation("remove_from_queue", { item_id: c.id }))),
+              "Removed from this page.");
+          }}
+          onCancel={() => setConfirmRemove(false)}>
+          Remove the "{data?.tags.queue.name ?? "imaglr"}" tag in Stash from {picked.length === 1 ? "this item" : `${picked.length} items`}?
+          {picked.length === 1 ? " It leaves" : " They leave"} this page. Nothing on imaglr is changed and nothing is deleted.
+        </ConfirmDialog>
       ) : null}
       {openId ? (
         <Editor

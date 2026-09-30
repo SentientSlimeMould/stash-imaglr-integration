@@ -200,6 +200,15 @@ def op_remove_from_queue(ctx: Context) -> dict[str, Any]:
     if image_ids:
         api.images_remove_tags(ctx.stash, image_ids, [queue_tag.id])
     for m in members:
+        if not m["stash_marker_id"]:
+            continue
+        marker = api.find_marker(ctx.stash, m["stash_marker_id"])
+        if marker and not api.marker_remove_tag(ctx.stash, marker, queue_tag):
+            raise UserError(
+                f'"{queue_tag.name}" is the only tag on the marker for {m["source_title"]}, and Stash markers must '
+                "keep one tag. Give the marker another primary tag on the scene's Markers tab (or delete the marker there)."
+            )
+    for m in members:
         repo.delete_item(ctx.db, m["id"])
     if item["kind"] == "set":
         repo.delete_item(ctx.db, item["id"])

@@ -174,9 +174,9 @@
 
   // src/ui/lib/send.ts
   var ACTION_LABELS = {
-    draft: "Save as draft",
-    queue: "Add to queue",
-    publish: "Publish now"
+    draft: "Draft",
+    queue: "Queued",
+    publish: "Published"
   };
   var SENT_AS_LABELS = {
     draft: "Draft",
@@ -227,6 +227,12 @@
     sent: "primary",
     failed: "danger"
   };
+
+  // src/ui/ConfirmDialog.tsx
+  function ConfirmDialog({ title, accept, variant = "primary", busy, disabled, onAccept, onCancel, children }) {
+    const { Modal, Button } = PluginApi.libraries.Bootstrap;
+    return /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: () => void 0, keyboard: false }, /* @__PURE__ */ react_default.createElement(Modal.Header, null, /* @__PURE__ */ react_default.createElement(Modal.Title, null, title)), /* @__PURE__ */ react_default.createElement(Modal.Body, null, children), /* @__PURE__ */ react_default.createElement(Modal.Footer, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: onCancel, disabled: busy }, "Cancel"), /* @__PURE__ */ react_default.createElement(Button, { variant, onClick: onAccept, disabled: busy || disabled }, accept)));
+  }
 
   // src/ui/lib/clip.ts
   var DIRECT_CODECS = { h264: "avc1.42E01E", vp8: "vp8", vp9: "vp9", av1: "av01.0.05M.08", hevc: "hvc1" };
@@ -543,7 +549,7 @@
   function TagField({ tags, suggestions, lowercase, disabled, onChange }) {
     const [message, setMessage] = react_default.useState(null);
     const spare = spareSuggestions(suggestions, tags);
-    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags-header" }, /* @__PURE__ */ react_default.createElement("label", { htmlFor: "imaglr-tag-field" }, /* @__PURE__ */ react_default.createElement("strong", null, "Tags")), /* @__PURE__ */ react_default.createElement("span", { className: tags.length >= MAX_TAGS ? "text-warning" : "text-muted" }, tags.length, " / ", MAX_TAGS)), /* @__PURE__ */ react_default.createElement(
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags-header" }, /* @__PURE__ */ react_default.createElement("label", { htmlFor: "imaglr-tag-field" }, /* @__PURE__ */ react_default.createElement("strong", null, "imaglr tags")), /* @__PURE__ */ react_default.createElement("span", { className: tags.length >= MAX_TAGS ? "text-warning" : "text-muted" }, tags.length, " / ", MAX_TAGS)), /* @__PURE__ */ react_default.createElement(
       TagInput,
       {
         inputId: "imaglr-tag-field",
@@ -602,6 +608,7 @@
     const [blogId, setBlogId] = react_default.useState(null);
     const [action, setAction] = react_default.useState(null);
     const [confirmPublish, setConfirmPublish] = react_default.useState(false);
+    const [confirmRemove, setConfirmRemove] = react_default.useState(false);
     const [busy, setBusy] = react_default.useState(false);
     const [changed, setChanged] = react_default.useState(false);
     const [dirty, setDirty] = react_default.useState(false);
@@ -696,20 +703,22 @@
       onClose(true);
     }
     const removeLabel = item.kind === "still" ? "Delete still" : `Remove "${queueTag}" tag${item.kind === "set" ? "s" : ""}`;
+    const removeQuestion = item.kind === "still" ? "Delete this still? It only exists in the plugin." : `Remove the "${queueTag}" tag in Stash${item.kind === "set" ? " from every file in this post" : ""}? It leaves this page. Nothing on imaglr is changed and nothing is deleted.`;
     async function remove() {
-      const question = item.kind === "still" ? "Delete this still? It only exists in the plugin." : `Remove the "${queueTag}" tag in Stash${item.kind === "set" ? " from every file in this post" : ""}? It leaves this page. Nothing on imaglr is changed and nothing is deleted.`;
-      if (!window.confirm(question)) return;
       try {
         await runOperation("remove_from_queue", { item_id: item.id });
         onClose(true);
       } catch (e) {
+        setConfirmRemove(false);
         Toast.error(e);
       }
     }
+    const kindLabel = item.kind === "set" ? "Files" : item.kind === "clip" ? "Clip" : item.kind === "still" ? "Still" : "Image";
+    const itemName = item.kind === "set" ? `${files.length} files in one post` : item.source_title;
     return (
       // Like Stash's own dialogs (ModalComponent): clicking outside or pressing Escape does nothing;
       // leave with Cancel or the send button.
-      /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: () => void 0, keyboard: false, size: "lg", dialogClassName: "imaglr-editor", scrollable: true }, /* @__PURE__ */ react_default.createElement(Modal.Header, null, /* @__PURE__ */ react_default.createElement(Modal.Title, null, item.kind === "set" ? `Post of ${files.length}` : item.source_title, " ", /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, STATUS_LABELS[item.status]))), /* @__PURE__ */ react_default.createElement(Modal.Body, null, item.error_detail && !BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, item.error_detail) : null, BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement("div", { className: "mb-3" }, /* @__PURE__ */ react_default.createElement(ProgressBar, { now: Math.round(item.progress * 100), label: STATUS_LABELS[item.status] })) : null, item.hdr_warning ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info" }, "This video is HDR. Colours may look flatter on imaglr (HDR isn't converted).") : null, isClip ? /* @__PURE__ */ react_default.createElement(
+      /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: () => void 0, keyboard: false, size: "lg", dialogClassName: "imaglr-editor", scrollable: true }, /* @__PURE__ */ react_default.createElement(Modal.Header, null, /* @__PURE__ */ react_default.createElement(Modal.Title, null, "Post to imaglr ", /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, STATUS_LABELS[item.status]))), /* @__PURE__ */ react_default.createElement(Modal.Body, null, /* @__PURE__ */ react_default.createElement("dl", { className: "row imaglr-item-facts" }, /* @__PURE__ */ react_default.createElement("dt", { className: "col-3 col-sm-2" }, kindLabel), /* @__PURE__ */ react_default.createElement("dd", { className: "col-9 col-sm-10" }, itemName)), item.error_detail && !BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, item.error_detail) : null, BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement("div", { className: "mb-3" }, /* @__PURE__ */ react_default.createElement(ProgressBar, { now: Math.round(item.progress * 100), label: STATUS_LABELS[item.status] })) : null, item.hdr_warning ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info" }, "This video is HDR. Colours may look flatter on imaglr (HDR isn't converted).") : null, isClip ? /* @__PURE__ */ react_default.createElement(
         ClipPanel,
         {
           sceneId: files[0].stash_scene_id,
@@ -774,7 +783,7 @@
         },
         /* @__PURE__ */ react_default.createElement("option", { value: "" }, "Choose a blog\u2026"),
         blogs.map((b) => /* @__PURE__ */ react_default.createElement("option", { key: b.id, value: b.id }, b.label))
-      )) : null, /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "When sent", " ", blog ? /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, "(default for ", blog.label, ": ", ACTION_LABELS[blog.default_action].toLowerCase(), ")") : null), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(ACTION_LABELS).map((a) => /* @__PURE__ */ react_default.createElement(
+      )) : null, /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Send as", " ", blog ? /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, "(default for ", blog.label, ": ", ACTION_LABELS[blog.default_action].toLowerCase(), ")") : null), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(ACTION_LABELS).map((a) => /* @__PURE__ */ react_default.createElement(
         Button,
         {
           key: a,
@@ -786,7 +795,17 @@
           }
         },
         ACTION_LABELS[a]
-      ))))), blogs.length === 0 ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info" }, "Add your imaglr blog first: use the Settings button on the page.") : null, problem ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, problem) : null), /* @__PURE__ */ react_default.createElement(Modal.Footer, { className: "imaglr-editor-footer" }, BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: cancelSend }, "Stop sending") : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger mr-auto", onClick: remove, disabled: locked }, removeLabel), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: cancel }, "Cancel"), confirmPublish ? /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-confirm" }, "Posts publicly on ", blog?.label, " right away.", /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setConfirmPublish(false) }, "Cancel"), /* @__PURE__ */ react_default.createElement(Button, { variant: "danger", onClick: send, disabled: busy }, "Publish now")) : /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: send, disabled: locked || !blog || !!problem }, busy ? "Starting\u2026" : sendButtonLabel(sendAction, blog)))))
+      ))))), blogs.length === 0 ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info" }, "Add your imaglr blog first: use the Settings button on the page.") : null, problem ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, problem) : null), /* @__PURE__ */ react_default.createElement(Modal.Footer, { className: "imaglr-editor-footer" }, BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: cancelSend }, "Stop sending") : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger mr-auto", onClick: () => setConfirmRemove(true), disabled: locked }, removeLabel), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: cancel }, "Cancel"), confirmPublish ? /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-confirm" }, "Posts publicly on ", blog?.label, " right away.", /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setConfirmPublish(false) }, "Cancel"), /* @__PURE__ */ react_default.createElement(Button, { variant: "danger", onClick: send, disabled: busy }, "Publish now")) : /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: send, disabled: locked || !blog || !!problem }, busy ? "Starting\u2026" : sendButtonLabel(sendAction, blog)))), confirmRemove ? /* @__PURE__ */ react_default.createElement(
+        ConfirmDialog,
+        {
+          title: removeLabel,
+          accept: item.kind === "still" ? "Delete" : "Remove tag",
+          variant: "danger",
+          onAccept: remove,
+          onCancel: () => setConfirmRemove(false)
+        },
+        removeQuestion
+      ) : null)
     );
   }
 
@@ -1014,7 +1033,9 @@
   // src/ui/queue/Paging.tsx
   function PageSizeSelect({ value, onChange }) {
     const { Form } = PluginApi.libraries.Bootstrap;
+    const [custom, setCustom] = react_default.useState(null);
     const options = PAGE_SIZES.includes(value) ? PAGE_SIZES : [...PAGE_SIZES, value].sort((a, b) => a - b);
+    const typed = Math.floor(Number(custom));
     return /* @__PURE__ */ react_default.createElement("div", { className: "page-count-container" }, /* @__PURE__ */ react_default.createElement(
       Form.Control,
       {
@@ -1023,17 +1044,43 @@
         value: String(value),
         "aria-label": "Items per page",
         onChange: (e) => {
-          if (e.target.value === "custom") {
-            const typed = Number(window.prompt("Items per page", String(value)));
-            if (typed > 0) onChange(Math.floor(typed));
-            return;
-          }
-          onChange(Number(e.target.value));
+          if (e.target.value === "custom") setCustom(String(value));
+          else onChange(Number(e.target.value));
         }
       },
       options.map((n) => /* @__PURE__ */ react_default.createElement("option", { key: n, value: n }, n)),
       /* @__PURE__ */ react_default.createElement("option", { value: "custom" }, "Custom\u2026")
-    ));
+    ), custom !== null ? /* @__PURE__ */ react_default.createElement(
+      ConfirmDialog,
+      {
+        title: "Items per page",
+        accept: "Apply",
+        disabled: !(typed > 0),
+        onAccept: () => {
+          onChange(typed);
+          setCustom(null);
+        },
+        onCancel: () => setCustom(null)
+      },
+      /* @__PURE__ */ react_default.createElement(
+        Form.Control,
+        {
+          type: "number",
+          min: 1,
+          className: "text-input",
+          value: custom,
+          autoFocus: true,
+          "aria-label": "Items per page",
+          onChange: (e) => setCustom(e.target.value),
+          onKeyDown: (e) => {
+            if (e.key === "Enter" && typed > 0) {
+              onChange(typed);
+              setCustom(null);
+            }
+          }
+        }
+      )
+    ) : null);
   }
   function Pager({ page, perPage, total, onChange }) {
     const { Pagination, PaginationIndex } = PluginApi.components;
@@ -1325,6 +1372,7 @@
     const [controls, setControls] = react_default.useState(() => loadControls(tab));
     const [selected, setSelected] = react_default.useState(/* @__PURE__ */ new Set());
     const [sendAll, setSendAll] = react_default.useState(null);
+    const [confirmRemove, setConfirmRemove] = react_default.useState(false);
     const [page, setPage] = react_default.useState(1);
     function updateControls(next) {
       setControls(next);
@@ -1377,14 +1425,7 @@
       {
         text: `Remove "${data?.tags.queue.name ?? "imaglr"}" tag`,
         disabled: busyPicked,
-        onClick: () => {
-          const tag = data?.tags.queue.name ?? "imaglr";
-          if (!window.confirm(`Remove the "${tag}" tag in Stash from ${picked.length} item(s)? They leave this page. Nothing on imaglr is changed and nothing is deleted.`)) return;
-          void run(
-            () => Promise.all(picked.map((c) => runOperation("remove_from_queue", { item_id: c.id }))),
-            "Removed from this page."
-          );
-        }
+        onClick: () => setConfirmRemove(true)
       }
     ];
     const url = (c) => `${ROUTE}?tab=${tab}&open=${c.id}`;
@@ -1443,7 +1484,29 @@
         setSelected(/* @__PURE__ */ new Set());
         load();
       }
-    } }) : null, openId ? /* @__PURE__ */ react_default.createElement(
+    } }) : null, confirmRemove ? /* @__PURE__ */ react_default.createElement(
+      ConfirmDialog,
+      {
+        title: `Remove "${data?.tags.queue.name ?? "imaglr"}" tag`,
+        accept: "Remove tag",
+        variant: "danger",
+        onAccept: () => {
+          setConfirmRemove(false);
+          void run(
+            () => Promise.all(picked.map((c) => runOperation("remove_from_queue", { item_id: c.id }))),
+            "Removed from this page."
+          );
+        },
+        onCancel: () => setConfirmRemove(false)
+      },
+      'Remove the "',
+      data?.tags.queue.name ?? "imaglr",
+      '" tag in Stash from ',
+      picked.length === 1 ? "this item" : `${picked.length} items`,
+      "?",
+      picked.length === 1 ? " It leaves" : " They leave",
+      " this page. Nothing on imaglr is changed and nothing is deleted."
+    ) : null, openId ? /* @__PURE__ */ react_default.createElement(
       Editor,
       {
         itemId: openId,
@@ -1506,11 +1569,11 @@
         const to = stashLink(f);
         const img = f.thumb ? /* @__PURE__ */ react_default.createElement("img", { src: baseUrl() + f.thumb, alt: "" }) : null;
         return /* @__PURE__ */ react_default.createElement("li", { key: f.id, className: "imaglr-strip-item", title: f.title }, to ? /* @__PURE__ */ react_default.createElement(Link, { to, title: `${f.title} in Stash` }, img) : img);
-      })), /* @__PURE__ */ react_default.createElement("dl", { className: "row imaglr-sent-facts" }, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Sent as"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, /* @__PURE__ */ react_default.createElement(Badge, { variant: item.sent_as === "publish" ? "success" : "primary" }, SENT_AS_LABELS[item.sent_as]), " ", item.blog ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, "on ", /* @__PURE__ */ react_default.createElement("strong", null, item.blog)) : null), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "When"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, fmtDate(item.sent_at)), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "On imaglr"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, /* @__PURE__ */ react_default.createElement("a", { href: imaglrLink(item.sent_as, item.post_url), target: "_blank", rel: "noreferrer" }, item.sent_as === "draft" ? "Open imaglr drafts" : "Open the post")), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Tags"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, item.tags.length ? item.tags.map((t) => /* @__PURE__ */ react_default.createElement(Badge, { key: t, variant: "secondary", className: "tag-item" }, t)) : /* @__PURE__ */ react_default.createElement("span", { className: "text-muted" }, "None")), item.dropped_tags.length ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Dropped by imaglr"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, item.dropped_tags.map((tag) => /* @__PURE__ */ react_default.createElement("span", { key: tag, className: "imaglr-dropped" }, /* @__PURE__ */ react_default.createElement(Badge, { variant: "secondary", className: "tag-item" }, tag), /* @__PURE__ */ react_default.createElement(Button, { variant: "link", size: "sm", className: "p-0 align-baseline", onClick: () => alwaysDrop(tag) }, "Always drop"))))) : null, item.caption ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Caption"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9 imaglr-caption" }, item.caption)) : null));
+      })), /* @__PURE__ */ react_default.createElement("dl", { className: "row imaglr-sent-facts" }, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, item.kind === "set" ? "Files" : item.kind === "clip" ? "Clip" : item.kind === "still" ? "Still" : "Image"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, item.kind === "set" ? `${item.files.length} files in one post` : item.title), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Sent as"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, /* @__PURE__ */ react_default.createElement(Badge, { variant: item.sent_as === "publish" ? "success" : "primary" }, SENT_AS_LABELS[item.sent_as]), " ", item.blog ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, "on ", /* @__PURE__ */ react_default.createElement("strong", null, item.blog)) : null), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "When"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, fmtDate(item.sent_at)), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "On imaglr"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, /* @__PURE__ */ react_default.createElement("a", { href: imaglrLink(item.sent_as, item.post_url), target: "_blank", rel: "noreferrer" }, item.sent_as === "draft" ? "Open imaglr drafts" : "Open the post")), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Tags"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, item.tags.length ? item.tags.map((t) => /* @__PURE__ */ react_default.createElement(Badge, { key: t, variant: "secondary", className: "tag-item" }, t)) : /* @__PURE__ */ react_default.createElement("span", { className: "text-muted" }, "None")), item.dropped_tags.length ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Dropped by imaglr"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, item.dropped_tags.map((tag) => /* @__PURE__ */ react_default.createElement("span", { key: tag, className: "imaglr-dropped" }, /* @__PURE__ */ react_default.createElement(Badge, { variant: "secondary", className: "tag-item" }, tag), /* @__PURE__ */ react_default.createElement(Button, { variant: "link", size: "sm", className: "p-0 align-baseline", onClick: () => alwaysDrop(tag) }, "Always drop"))))) : null, item.caption ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Caption"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9 imaglr-caption" }, item.caption)) : null));
     }
     return (
       // Like Stash's own dialogs (ModalComponent): clicking outside or pressing Escape does nothing.
-      /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: () => void 0, keyboard: false, size: "lg", scrollable: true }, /* @__PURE__ */ react_default.createElement(Modal.Header, null, /* @__PURE__ */ react_default.createElement(Modal.Title, null, item ? item.kind === "set" ? `Post of ${item.files.length}` : item.title : "Sent post", " ", item ? /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, SENT_AS_LABELS[item.sent_as]) : null)), /* @__PURE__ */ react_default.createElement(Modal.Body, null, body), /* @__PURE__ */ react_default.createElement(Modal.Footer, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => onClose(changed.current) }, "Close")))
+      /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: () => void 0, keyboard: false, size: "lg", scrollable: true }, /* @__PURE__ */ react_default.createElement(Modal.Header, null, /* @__PURE__ */ react_default.createElement(Modal.Title, null, "Sent to imaglr ", item ? /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, SENT_AS_LABELS[item.sent_as]) : null)), /* @__PURE__ */ react_default.createElement(Modal.Body, null, body), /* @__PURE__ */ react_default.createElement(Modal.Footer, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => onClose(changed.current) }, "Close")))
     );
   }
 
@@ -1733,19 +1796,20 @@
         Toast.error(err);
       }
     }
+    const [removing, setRemoving] = react_default.useState(null);
     async function remove(blog) {
-      if (!window.confirm(`Remove ${blog.label}? Its key is deleted from the plugin. Nothing changes on imaglr.`)) return;
       try {
         setBlogs((await runOperation("blog_remove", { blog_id: blog.id })).blogs);
         setChanged(true);
       } catch (err) {
         Toast.error(err);
       }
+      setRemoving(null);
     }
     return /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: () => void 0, keyboard: false, size: "lg", dialogClassName: "imaglr-editor", scrollable: true }, /* @__PURE__ */ react_default.createElement(Modal.Header, null, /* @__PURE__ */ react_default.createElement(Modal.Title, null, "imaglr settings")), /* @__PURE__ */ react_default.createElement(Modal.Body, null, /* @__PURE__ */ react_default.createElement("h5", null, "Blogs"), blogs === null ? /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Loading\u2026") : null, blogs && blogs.length ? /* @__PURE__ */ react_default.createElement("ul", { className: "imaglr-blog-list" }, blogs.map((blog) => {
       const problem = blogProblem(blog);
       const postsLeft = blog.limits?.posts_per_day?.remaining;
-      return /* @__PURE__ */ react_default.createElement("li", { key: blog.id, className: "imaglr-blog" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-blog-name" }, blog.url ? /* @__PURE__ */ react_default.createElement("a", { href: blog.url, target: "_blank", rel: "noreferrer" }, blog.label) : blog.label, " ", problem ? /* @__PURE__ */ react_default.createElement(Badge, { variant: "warning" }, "Needs attention") : blog.ok ? /* @__PURE__ */ react_default.createElement(Badge, { variant: "success" }, "OK") : null), /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, "Key ", blog.key_hint, postsLeft != null ? ` \xB7 ${postsLeft} posts left today` : "", blog.checked_at ? ` \xB7 checked ${fmtDate(blog.checked_at)}` : ""), problem ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning" }, problem) : null, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-blog-controls" }, /* @__PURE__ */ react_default.createElement(Form.Label, { className: "mb-0", htmlFor: `imaglr-action-${blog.id}` }, "When sent"), /* @__PURE__ */ react_default.createElement(
+      return /* @__PURE__ */ react_default.createElement("li", { key: blog.id, className: "imaglr-blog" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-blog-name" }, blog.url ? /* @__PURE__ */ react_default.createElement("a", { href: blog.url, target: "_blank", rel: "noreferrer" }, blog.label) : blog.label, " ", problem ? /* @__PURE__ */ react_default.createElement(Badge, { variant: "warning" }, "Needs attention") : blog.ok ? /* @__PURE__ */ react_default.createElement(Badge, { variant: "success" }, "OK") : null), /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, "Key ", blog.key_hint, postsLeft != null ? ` \xB7 ${postsLeft} posts left today` : "", blog.checked_at ? ` \xB7 checked ${fmtDate(blog.checked_at)}` : ""), problem ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning" }, problem) : null, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-blog-controls" }, /* @__PURE__ */ react_default.createElement(Form.Label, { className: "mb-0", htmlFor: `imaglr-action-${blog.id}` }, "Send as"), /* @__PURE__ */ react_default.createElement(
         Form.Control,
         {
           id: `imaglr-action-${blog.id}`,
@@ -1756,7 +1820,7 @@
           onChange: (e) => setAction(blog, e.target.value)
         },
         Object.keys(ACTION_LABELS).map((a) => /* @__PURE__ */ react_default.createElement("option", { key: a, value: a }, ACTION_LABELS[a]))
-      ), /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger", onClick: () => remove(blog) }, "Remove")));
+      ), /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger", onClick: () => setRemoving(blog) }, "Remove")));
     })) : null, blogs && blogs.length ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-refresh" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", size: "sm", onClick: refresh, disabled: checking }, checking ? "Refreshing\u2026" : "Refresh status"), /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, "Asks imaglr for each blog's name, account status and posts left today. Nothing is changed on imaglr.")) : null, /* @__PURE__ */ react_default.createElement(Form, { onSubmit: add, className: "imaglr-add-blog" }, /* @__PURE__ */ react_default.createElement("h6", null, blogs && blogs.length ? "Add a blog" : "Add your imaglr blog"), /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted" }, "On imaglr, open ", /* @__PURE__ */ react_default.createElement("a", { href: "https://imaglr.com/settings", target: "_blank", rel: "noreferrer" }, "Settings \u2192 API"), " and create a key with the ", /* @__PURE__ */ react_default.createElement("strong", null, "read"), " and ", /* @__PURE__ */ react_default.createElement("strong", null, "manage"), " permissions (leave ", /* @__PURE__ */ react_default.createElement("strong", null, "write"), " off: the plugin never needs it). Each key belongs to one blog. The key is stored only in this plugin and never shown again."), /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "API key"), /* @__PURE__ */ react_default.createElement(
       Form.Control,
       {
@@ -1767,7 +1831,7 @@
         placeholder: "pbk_\u2026",
         onChange: (e) => setKey(e.target.value)
       }
-    )), /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "When sent, by default"), /* @__PURE__ */ react_default.createElement(
+    )), /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Send as, by default"), /* @__PURE__ */ react_default.createElement(
       Form.Control,
       {
         className: "text-input",
@@ -1776,7 +1840,17 @@
         onChange: (e) => setDefaultAction(e.target.value)
       },
       Object.keys(ACTION_LABELS).map((a) => /* @__PURE__ */ react_default.createElement("option", { key: a, value: a }, ACTION_LABELS[a]))
-    ), /* @__PURE__ */ react_default.createElement(Form.Text, { muted: true }, "You can still choose differently each time you send.")), error ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "danger" }, error) : null, /* @__PURE__ */ react_default.createElement(Button, { type: "submit", variant: "primary", disabled: adding || !key.trim() }, adding ? "Checking the key\u2026" : "Add blog")), /* @__PURE__ */ react_default.createElement(TagRules, null)), /* @__PURE__ */ react_default.createElement(Modal.Footer, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => onClose(changed) }, "Close")));
+    ), /* @__PURE__ */ react_default.createElement(Form.Text, { muted: true }, "You can still choose differently each time you send.")), error ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "danger" }, error) : null, /* @__PURE__ */ react_default.createElement(Button, { type: "submit", variant: "primary", disabled: adding || !key.trim() }, adding ? "Checking the key\u2026" : "Add blog")), /* @__PURE__ */ react_default.createElement(TagRules, null)), /* @__PURE__ */ react_default.createElement(Modal.Footer, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => onClose(changed) }, "Close")), removing ? /* @__PURE__ */ react_default.createElement(
+      ConfirmDialog,
+      {
+        title: `Remove ${removing.label}`,
+        accept: "Remove",
+        variant: "danger",
+        onAccept: () => remove(removing),
+        onCancel: () => setRemoving(null)
+      },
+      "Its key is deleted from the plugin. Nothing changes on imaglr."
+    ) : null);
   }
 
   // src/ui/PostPage.tsx

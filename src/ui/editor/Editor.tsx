@@ -7,6 +7,7 @@ import { ASPECTS, overlayRect } from "../lib/crop.ts";
 import type { Aspect } from "../lib/types.ts";
 import { ACTION_LABELS, blogProblem, effectiveAction, pickBlog, sendButtonLabel } from "../lib/send.ts";
 import { STATUS_LABELS, type FileCard, type ItemDetail, type SendAction } from "../model.ts";
+import { ConfirmDialog } from "../ConfirmDialog.tsx";
 import { ClipPanel, type ClipState } from "./ClipPanel.tsx";
 import { TagField } from "./TagField.tsx";
 
@@ -92,6 +93,7 @@ export function Editor({ itemId, onClose }: Props) {
   const [blogId, setBlogId] = React.useState<number | null>(null);
   const [action, setAction] = React.useState<SendAction | null>(null);
   const [confirmPublish, setConfirmPublish] = React.useState(false);
+  const [confirmRemove, setConfirmRemove] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [changed, setChanged] = React.useState(false);
   const [dirty, setDirty] = React.useState(false);
@@ -196,19 +198,23 @@ export function Editor({ itemId, onClose }: Props) {
     ? "Delete still"
     : `Remove "${queueTag}" tag${item.kind === "set" ? "s" : ""}`;
 
+  const removeQuestion = item.kind === "still"
+    ? "Delete this still? It only exists in the plugin."
+    : `Remove the "${queueTag}" tag in Stash${item.kind === "set" ? " from every file in this post" : ""}? ` +
+      "It leaves this page. Nothing on imaglr is changed and nothing is deleted.";
+
   async function remove() {
-    const question = item.kind === "still"
-      ? "Delete this still? It only exists in the plugin."
-      : `Remove the "${queueTag}" tag in Stash${item.kind === "set" ? " from every file in this post" : ""}? ` +
-        "It leaves this page. Nothing on imaglr is changed and nothing is deleted.";
-    if (!window.confirm(question)) return;
     try {
       await runOperation("remove_from_queue", { item_id: item.id });
       onClose(true);
     } catch (e) {
+      setConfirmRemove(false);
       Toast.error(e);
     }
   }
+
+  const kindLabel = item.kind === "set" ? "Files" : item.kind === "clip" ? "Clip" : item.kind === "still" ? "Still" : "Image";
+  const itemName = item.kind === "set" ? `${files.length} files in one post` : item.source_title;
 
 
   return (
@@ -217,11 +223,14 @@ export function Editor({ itemId, onClose }: Props) {
     <Modal show onHide={() => undefined} keyboard={false} size="lg" dialogClassName="imaglr-editor" scrollable>
       <Modal.Header>
         <Modal.Title>
-          {item.kind === "set" ? `Post of ${files.length}` : item.source_title}{" "}
-          <small className="text-muted">{STATUS_LABELS[item.status]}</small>
+          Post to imaglr <small className="text-muted">{STATUS_LABELS[item.status]}</small>
         </Modal.Title>
       </Modal.Header>
       <Modal.Body>
+        <dl className="row imaglr-item-facts">
+          <dt className="col-3 col-sm-2">{kindLabel}</dt>
+          <dd className="col-9 col-sm-10">{itemName}</dd>
+        </dl>
         {item.error_detail && !BUSY.includes(item.status) ? <Alert variant="warning">{item.error_detail}</Alert> : null}
         {BUSY.includes(item.status) ? (
           <div className="mb-3">
@@ -302,7 +311,7 @@ export function Editor({ itemId, onClose }: Props) {
 
         <Form.Group>
           <Form.Label>
-            When sent{" "}
+            Send as{" "}
             {blog ? <small className="text-muted">(default for {blog.label}: {ACTION_LABELS[blog.default_action].toLowerCase()})</small> : null}
           </Form.Label>
           <div>
@@ -327,7 +336,7 @@ export function Editor({ itemId, onClose }: Props) {
           <Button variant="secondary" onClick={cancelSend}>Stop sending</Button>
         ) : (
           <>
-            <Button variant="link" className="text-danger mr-auto" onClick={remove} disabled={locked}>
+            <Button variant="link" className="text-danger mr-auto" onClick={() => setConfirmRemove(true)} disabled={locked}>
               {removeLabel}
             </Button>
             <Button variant="secondary" onClick={cancel}>Cancel</Button>
@@ -345,6 +354,12 @@ export function Editor({ itemId, onClose }: Props) {
           </>
         )}
       </Modal.Footer>
+      {confirmRemove ? (
+        <ConfirmDialog title={removeLabel} accept={item.kind === "still" ? "Delete" : "Remove tag"} variant="danger"
+          onAccept={remove} onCancel={() => setConfirmRemove(false)}>
+          {removeQuestion}
+        </ConfirmDialog>
+      ) : null}
     </Modal>
   );
 }

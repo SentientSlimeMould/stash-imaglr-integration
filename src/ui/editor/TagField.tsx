@@ -119,7 +119,7 @@ export function TagField({ tags, suggestions, lowercase, disabled, onChange }: P
   return (
     <div className="imaglr-tags">
       <div className="imaglr-tags-header">
-        <label htmlFor="imaglr-tag-field"><strong>Tags</strong></label>
+        <label htmlFor="imaglr-tag-field"><strong>imaglr tags</strong></label>
         <span className={tags.length >= MAX_TAGS ? "text-warning" : "text-muted"}>{tags.length} / {MAX_TAGS}</span>
       </div>
       <TagInput inputId="imaglr-tag-field" tags={tags} extra={spare.addable} lowercase={lowercase} disabled={disabled}

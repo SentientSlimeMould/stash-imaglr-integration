@@ -87,6 +87,8 @@ export function SentDialog({ itemId, onClose }: Props) {
           })}
         </ol>
         <dl className="row imaglr-sent-facts">
+          <dt className="col-4 col-sm-3">{item.kind === "set" ? "Files" : item.kind === "clip" ? "Clip" : item.kind === "still" ? "Still" : "Image"}</dt>
+          <dd className="col-8 col-sm-9">{item.kind === "set" ? `${item.files.length} files in one post` : item.title}</dd>
           <dt className="col-4 col-sm-3">Sent as</dt>
           <dd className="col-8 col-sm-9">
             <Badge variant={item.sent_as === "publish" ? "success" : "primary"}>{SENT_AS_LABELS[item.sent_as]}</Badge>{" "}
@@ -133,8 +135,7 @@ export function SentDialog({ itemId, onClose }: Props) {
     <Modal show onHide={() => undefined} keyboard={false} size="lg" scrollable>
       <Modal.Header>
         <Modal.Title>
-          {item ? (item.kind === "set" ? `Post of ${item.files.length}` : item.title) : "Sent post"}{" "}
-          {item ? <small className="text-muted">{SENT_AS_LABELS[item.sent_as]}</small> : null}
+          Sent to imaglr {item ? <small className="text-muted">{SENT_AS_LABELS[item.sent_as]}</small> : null}
         </Modal.Title>
       </Modal.Header>
       <Modal.Body>{body}</Modal.Body>

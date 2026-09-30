@@ -131,6 +131,21 @@ def swapped_marker_tags(marker: Marker, queue_tag: Tag, done_tag: Tag) -> tuple[
     return primary, secondary
 
 
+def marker_remove_tag(client: StashClient, marker: Marker, tag: Tag) -> bool:
+    """Take a tag off a marker. A marker must keep a primary tag, so if the tag is primary the first
+    secondary tag takes its place; returns False (and changes nothing) when it is the marker's only tag."""
+    secondary = [t.id for t in marker.tags if t.id != tag.id]
+    if marker.primary_tag and marker.primary_tag.id == tag.id:
+        if not secondary:
+            return False
+        marker_update(client, marker, primary_tag_id=secondary[0], tag_ids=secondary[1:])
+        return True
+    if tag.id not in {t.id for t in marker.tags}:
+        return True
+    marker_update(client, marker, tag_ids=secondary)
+    return True
+
+
 def marker_swap_tags(client: StashClient, marker: Marker, queue_tag: Tag, done_tag: Tag) -> None:
     primary, secondary = swapped_marker_tags(marker, queue_tag, done_tag)
     marker_update(client, marker, primary_tag_id=primary, tag_ids=secondary)

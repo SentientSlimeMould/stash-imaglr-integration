@@ -4,24 +4,31 @@
 // ("1-40 of 120") and Pagination buttons, which Stash exposes to plugins.
 import React from "react";
 import { PAGE_SIZES } from "../lib/sort.ts";
+import { ConfirmDialog } from "../ConfirmDialog.tsx";
 
 export function PageSizeSelect({ value, onChange }: { value: number; onChange: (size: number) => void }) {
   const { Form } = PluginApi.libraries.Bootstrap;
+  const [custom, setCustom] = React.useState<string | null>(null);
   const options = PAGE_SIZES.includes(value) ? PAGE_SIZES : [...PAGE_SIZES, value].sort((a, b) => a - b);
+  const typed = Math.floor(Number(custom));
   return (
     <div className="page-count-container">
       <Form.Control as="select" className="btn-secondary" value={String(value)} aria-label="Items per page"
         onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-          if (e.target.value === "custom") {
-            const typed = Number(window.prompt("Items per page", String(value)));
-            if (typed > 0) onChange(Math.floor(typed));
-            return;
-          }
-          onChange(Number(e.target.value));
+          if (e.target.value === "custom") setCustom(String(value));
+          else onChange(Number(e.target.value));
         }}>
         {options.map((n) => <option key={n} value={n}>{n}</option>)}
         <option value="custom">Custom…</option>
       </Form.Control>
+      {custom !== null ? (
+        <ConfirmDialog title="Items per page" accept="Apply" disabled={!(typed > 0)}
+          onAccept={() => { onChange(typed); setCustom(null); }} onCancel={() => setCustom(null)}>
+          <Form.Control type="number" min={1} className="text-input" value={custom} autoFocus aria-label="Items per page"
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustom(e.target.value)}
+            onKeyDown={(e: React.KeyboardEvent) => { if (e.key === "Enter" && typed > 0) { onChange(typed); setCustom(null); } }} />
+        </ConfirmDialog>
+      ) : null}
     </div>
   );
 }

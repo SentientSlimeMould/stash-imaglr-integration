@@ -147,6 +147,24 @@ class MarkerTest(unittest.TestCase):
             [("MarkerUpdate", {"id": "501", "seconds": 10.0, "end_seconds": 22.5, "primary_tag_id": "11", "tag_ids": ["20", "21"]})],
         )
 
+    def test_remove_secondary_queue_tag(self):
+        fake = FakeStash(MarkerUpdate={"sceneMarkerUpdate": {"id": "501"}})
+        m = Marker.parse(sample_marker(primary_tag={"id": "20", "name": "Slow Motion"}, tags=[{"id": "10", "name": "imaglr"}, {"id": "21", "name": "x"}]))
+        self.assertTrue(api.marker_remove_tag(client_with(fake), m, QUEUE))
+        self.assertEqual(fake.calls[0][1]["primary_tag_id"], "20")
+        self.assertEqual(fake.calls[0][1]["tag_ids"], ["21"])
+
+    def test_remove_primary_queue_tag_promotes_next_tag(self):
+        fake = FakeStash(MarkerUpdate={"sceneMarkerUpdate": {"id": "501"}})
+        self.assertTrue(api.marker_remove_tag(client_with(fake), Marker.parse(sample_marker()), QUEUE))
+        self.assertEqual(fake.calls[0][1]["primary_tag_id"], "20")
+        self.assertEqual(fake.calls[0][1]["tag_ids"], ["21"])
+
+    def test_remove_only_tag_refuses(self):
+        fake = FakeStash(MarkerUpdate={"sceneMarkerUpdate": {"id": "501"}})
+        self.assertFalse(api.marker_remove_tag(client_with(fake), Marker.parse(sample_marker(tags=[])), QUEUE))
+        self.assertEqual(fake.calls, [])
+
     def test_in_out_write_back_keeps_tags(self):
         fake = FakeStash(MarkerUpdate={"sceneMarkerUpdate": {"id": "501"}})
         api.marker_update(client_with(fake), Marker.parse(sample_marker()), seconds=12.0, end_seconds=18.0)

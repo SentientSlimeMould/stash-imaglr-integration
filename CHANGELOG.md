@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.4 — 2026-09-30
+
+- Fixed: **Remove "imaglr" tag** did nothing for clips; the marker kept its tag and the clip came back. It now
+  removes the tag from the marker. When `imaglr` is the marker's primary tag, the next tag becomes primary;
+  when it is the marker's only tag the plugin says so (Stash markers must keep a primary tag) instead of
+  silently failing.
+- Confirmations are Stash-style dialogs instead of the browser's popup (remove tag, delete still, remove blog,
+  custom page size).
+- Editor dialog is titled "Post to imaglr"; the clip / image name is shown inside it. Same for "Sent to imaglr".
+- "When sent" is now "Send as": Draft, Queued or Published (in the editor and blog settings).
+- The tag field is labelled "imaglr tags".
+
 ## 0.1.3 — 2026-09-30
 
 - Sent tab now works like Clips and Images: the same toolbar (search, filter by blog or by draft/queued/published,
