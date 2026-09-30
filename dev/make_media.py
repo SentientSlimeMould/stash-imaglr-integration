@@ -1,4 +1,5 @@
 """Generate synthetic test media for the local test Stash.
+# SPDX-License-Identifier: AGPL-3.0-only
 
 Runs inside the stashapp/stash image (Python 3.12 + ffmpeg), writing to the directory given
 as the only argument. Everything is generated test patterns: no real content.

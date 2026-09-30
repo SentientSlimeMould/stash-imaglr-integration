@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-only
 # Copy the built plugin to a folder on this computer's own disk, which the local test Stash instances
 # mount (dev/docker-compose.yml). The repo may live on a network share, and Docker's view of files that
 # are rewritten on a share can go stale, so the test Stash never reads the plugin from the repo directly.

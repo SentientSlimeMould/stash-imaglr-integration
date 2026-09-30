@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Editor for one queued item or post: files, crop, tags, caption, blog and action, then Send.
-// Full screen on phones (see styles.css). Edits are saved when sending or closing.
+// Full screen on phones (see styles.css). Like Stash's edit dialogs: Save keeps the edits (for Send all
+// later), the send button saves and sends, Cancel discards them.
 import React from "react";
 import { baseUrl, runOperation } from "../api.ts";
 import { ASPECTS, overlayRect } from "../lib/crop.ts";
@@ -156,6 +157,17 @@ export function Editor({ itemId, onClose }: Props) {
 
   function cancel() {
     onClose(changed);
+  }
+
+  async function saveAndClose() {
+    setBusy(true);
+    try {
+      await save();
+      onClose(true);
+    } catch (e) {
+      Toast.error(e);
+      setBusy(false);
+    }
   }
 
   async function send() {
@@ -353,21 +365,20 @@ export function Editor({ itemId, onClose }: Props) {
             <Button variant="link" className="text-danger mr-auto" onClick={() => setConfirmRemove(true)} disabled={locked}>
               {removeLabel}
             </Button>
-            <Button variant="secondary" onClick={cancel}>Cancel</Button>
-            {confirmPublish ? (
-              <span className="imaglr-confirm">
-                Posts publicly on {blog?.label} right away.
-                <Button variant="secondary" onClick={() => setConfirmPublish(false)}>Cancel</Button>
-                <Button variant="danger" onClick={send} disabled={busy}>Publish now</Button>
-              </span>
-            ) : (
-              <Button variant="primary" onClick={send} disabled={locked || !blog || !!problem}>
-                {busy ? "Starting…" : sendButtonLabel(sendAction, blog)}
-              </Button>
-            )}
+            <Button variant="secondary" onClick={cancel} disabled={busy}>Cancel</Button>
+            <Button variant="secondary" onClick={saveAndClose} disabled={locked || !dirty || busy}>Save</Button>
+            <Button variant="primary" onClick={send} disabled={locked || !blog || !!problem || busy}>
+              {busy ? "Starting…" : sendButtonLabel(sendAction, blog)}
+            </Button>
           </>
         )}
       </Modal.Footer>
+      {confirmPublish ? (
+        <ConfirmDialog title={`Publish now on ${blog?.label}`} accept="Publish now" variant="danger" busy={busy}
+          onAccept={send} onCancel={() => setConfirmPublish(false)}>
+          This posts publicly on {blog?.label} right away, not as a draft.
+        </ConfirmDialog>
+      ) : null}
       {confirmRemove ? (
         <ConfirmDialog title={removeLabel} accept={item.kind === "still" ? "Delete" : "Remove tag"} variant="danger"
           onAccept={remove} onCancel={() => setConfirmRemove(false)}>

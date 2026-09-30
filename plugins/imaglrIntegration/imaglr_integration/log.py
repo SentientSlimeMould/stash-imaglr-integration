@@ -11,10 +11,20 @@ import sys
 
 MAX_LINE = 4000
 _KEY = re.compile(r"pbk_[^\s\"',;]+")
+_SECRETS = []  # exact strings that must never appear in a log line or an error message (Stash's API key, session cookie)
+
+
+def register_secret(value):
+    """Mask this value wherever text leaves the plugin (logs, error details, operation replies)."""
+    if value and len(str(value)) >= 8 and str(value) not in _SECRETS:
+        _SECRETS.append(str(value))
 
 
 def redact(text):
-    return _KEY.sub("pbk_***", text)
+    text = _KEY.sub("pbk_***", str(text))
+    for secret in _SECRETS:
+        text = text.replace(secret, "***")
+    return text
 
 
 def _emit(level, message):

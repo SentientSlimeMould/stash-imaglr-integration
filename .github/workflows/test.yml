@@ -10,6 +10,13 @@ permissions:
   contents: read
 
 jobs:
+  privacy:
+    name: No private content
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: scripts/check-generic.sh --all
+
   python:
     name: Python ${{ matrix.python }}
     runs-on: ubuntu-latest
@@ -55,3 +62,41 @@ jobs:
           npm run build
           git diff --exit-code -- plugins/imaglrIntegration/imaglrIntegration.js plugins/imaglrIntegration/imaglrIntegration.css \
             || { echo "::error::Run 'npm run build' and commit the result."; exit 1; }
+
+  e2e:
+    # The real thing: the built plugin inside stashapp/stash:v0.31.1 sending an image and a clip to the
+    # fake imaglr (dev/e2e.py), including ffmpeg inside the container and the Stash tag swaps.
+    name: End to end in stashapp/stash:v0.31.1
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Stage the plugin as Stash will see it
+        run: |
+          mkdir -p "$RUNNER_TEMP/plugin"
+          cp -R plugins/imaglrIntegration/. "$RUNNER_TEMP/plugin/"
+          rm -rf "$RUNNER_TEMP/plugin/data"
+          echo "IMAGLR_DEV_PLUGIN=$RUNNER_TEMP/plugin" >> "$GITHUB_ENV"
+      - name: Start Stash and the fake imaglr
+        working-directory: dev
+        run: |
+          docker compose run --rm make-media
+          docker compose up -d stash-v0311 fake-imaglr
+      - name: Seed and run
+        working-directory: dev
+        run: |
+          python3 seed.py 9931 setup
+          python3 e2e.py 9931
+      - name: Stash log
+        if: failure()
+        working-directory: dev
+        run: docker compose logs --no-color stash-v0311 fake-imaglr | tail -200
+      - name: Stop
+        if: always()
+        working-directory: dev
+        run: docker compose down -v

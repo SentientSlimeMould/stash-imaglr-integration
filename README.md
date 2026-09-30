@@ -11,8 +11,9 @@ your [imaglr](https://imaglr.com) blogs.
   default for each blog and change it when you send.
 - **Privacy:** location, camera and other metadata are stripped from every file before upload.
 
-> **Status: first test release (0.1.0).** It works end to end, but it hasn't been used widely yet. Please report
-> problems on the [issue tracker](https://github.com/SentientSlimeMould/stash-imaglr-integration/issues).
+> **Status: early release (0.1.x).** It works end to end and is tested on Stash v0.31.1 and the development
+> build, but it hasn't been used widely yet. Please report problems on the
+> [issue tracker](https://github.com/SentientSlimeMould/stash-imaglr-integration/issues).
 
 ## Requirements
 
@@ -82,14 +83,24 @@ Sending runs as a Stash task, so it also shows on Stash's **Settings → Tasks**
 - swaps the queue tag for the sent tag on markers and images you've sent;
 - writes trimmed start and end times back to markers, and asks Stash to regenerate those markers' previews.
 
-It never modifies, moves or deletes your media files, and it never creates markers. Its own data (including the
-imaglr API keys) is kept in its `data` folder inside Stash's plugins directory.
+It never modifies, moves or deletes your media files, and it never creates markers.
+
+**Its own data** — the imaglr API keys, the sent history, tag rules and prepared files — is kept in its `data`
+folder inside Stash's plugins directory, in plain text (a SQLite database), just as Stash keeps its own settings
+in `config.yml`; protect that folder the same way. The plugin doesn't add its own login: anyone who can use your
+Stash can use it, including sending to your blogs.
 
 **On imaglr** it can only make these five calls, enforced by a test: read your profile, read your limits, create a
 draft, and publish or queue a draft it has just created. It never edits or deletes posts, changes your queue
 settings or reads your feed.
 
-**Nothing else:** no telemetry and no other network connections.
+**What is sent to imaglr** for each post: the prepared files (metadata stripped), each with a file name made from
+the Stash title or original file name (letters, digits and dashes only — rename in Stash first if a name says
+too much); the tags and caption you chose; and the plugin's name and version as the `User-Agent`. Nothing about
+your Stash library, other files or your machine.
+
+**Nothing else:** no telemetry and no other network connections. (Developers can point the plugin at a test
+server with the `IMAGLR_API_BASE` environment variable; leave it unset.)
 
 ## Limitations
 
@@ -116,12 +127,13 @@ everything, which is what you usually want.
 ## Development
 
 See [dev/README.md](dev/README.md) for the local test environment (Stash in Docker with synthetic test media and a
-fake imaglr).
+fake imaglr) and how to run the tests.
 
 ## AI assistance
 
 This plugin is being written with the help of an AI coding assistant (Claude, by Anthropic). All code is reviewed
-and tested by a human maintainer before release, in line with the
+and tested by a human maintainer before release, who takes full responsibility for it, including licence
+compliance, in line with the
 [CommunityScripts contribution guidelines](https://github.com/stashapp/CommunityScripts#readme).
 
 ## Licence

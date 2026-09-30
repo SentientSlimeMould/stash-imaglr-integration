@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
 """A fake imaglr API v2 for local testing. Development only; never shipped with the plugin.
 
-Implements the five routes the plugin may call, with imaglr's response envelope:
+Implements the five routes the plugin may call, with the same response envelope shape (error texts are
+this fake's own words; the plugin only ever branches on error codes):
 GET /user/info, GET /user/limits, POST /drafts, POST /drafts/{id}/publish, POST /drafts/{id}/queue.
 Anything else returns 404 and is logged loudly, so a stray call is easy to spot.
 
@@ -85,14 +87,14 @@ class Handler(BaseHTTPRequestHandler):
             return None
         header = self.headers.get("Authorization", "")
         if not header.startswith("Bearer "):
-            self.reply(401, errors=[("not_authenticated", "No key was sent.")])
+            self.reply(401, errors=[("not_authenticated", "Missing bearer token.")])
             return None
         name = scenario(header[7:])
         if name is None or name == "invalid":
-            self.reply(401, errors=[("invalid_key", "The key is unknown, revoked or expired.")])
+            self.reply(401, errors=[("invalid_key", "Unknown or expired key.")])
             return None
         if name == "suspended":
-            self.reply(403, errors=[("account_suspended", "The account is suspended.")])
+            self.reply(403, errors=[("account_suspended", "Suspended account.")])
             return None
         return name
 
@@ -137,17 +139,17 @@ class Handler(BaseHTTPRequestHandler):
         first = name not in SEEN_FIRST_POST
         SEEN_FIRST_POST.add(name)
         if name == "noscope":
-            return self.reply(403, errors=[("insufficient_scope", "The key lacks the scope this endpoint needs.")])
+            return self.reply(403, errors=[("insufficient_scope", "Key not permitted to use this route.")])
         if name == "premium":
-            return self.reply(403, errors=[("premium_required", "The account is not currently premium.")])
+            return self.reply(403, errors=[("premium_required", "Supporter status required.")])
         if name == "rejected":
-            return self.reply(422, errors=[("content_rejected", "The content was refused by the site's rules.")])
+            return self.reply(422, errors=[("content_rejected", "Refused by moderation.")])
         if name == "ratelimit" and first:
-            return self.reply(429, errors=[("rate_limited", "Hourly quota exhausted.")], headers={"Retry-After": "2"})
+            return self.reply(429, errors=[("rate_limited", "Too many requests this hour.")], headers={"Retry-After": "2"})
         if name == "toolarge" and first:
-            return self.reply(422, errors=[("file_too_large", "An upload exceeds 40 MB (image) or 500 MB (video).")])
+            return self.reply(422, errors=[("file_too_large", "Upload over the size limit.")])
         if name == "flaky" and first:
-            return self.reply(500, errors=[("server_error", "Something broke on our side.")])
+            return self.reply(500, errors=[("server_error", "Fake server error.")])
 
         message = email.parser.BytesParser(policy=email.policy.HTTP).parsebytes(
             b"Content-Type: " + self.headers["Content-Type"].encode() + b"\r\n\r\n" + raw
@@ -162,9 +164,9 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 fields[field] = part.get_content()
         if not files and not fields.get("body"):
-            return self.reply(422, errors=[("post_empty", "A post needs a body, media, or a link.")])
+            return self.reply(422, errors=[("post_empty", "Empty post.")])
         if len(files) > 10:
-            return self.reply(422, errors=[("invalid_media", "Up to 10 files per post.")])
+            return self.reply(422, errors=[("invalid_media", "Too many files.")])
 
         with LOCK:
             draft_id = str(96000000 + len(DRAFTS) + 1)
@@ -187,9 +189,9 @@ class Handler(BaseHTTPRequestHandler):
     def follow_up(self, name, draft_id, action):
         record = DRAFTS.get(draft_id)
         if record is None or record["blog"] != profile_for(name)["name"]:
-            return self.reply(404, errors=[("draft_not_found", "No such draft, or it is not yours.")])
+            return self.reply(404, errors=[("draft_not_found", "Unknown draft.")])
         if name == "nopublish":
-            return self.reply(500, errors=[("server_error", "Something broke on our side.")])
+            return self.reply(500, errors=[("server_error", "Fake server error.")])
         record["state"] = {"publish": "published", "queue": "queued"}[action]
         self.reply(200, {"post": self.post_object(record)})
 

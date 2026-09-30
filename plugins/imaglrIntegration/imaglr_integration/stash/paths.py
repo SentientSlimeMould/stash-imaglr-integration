@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import shutil
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 
@@ -32,6 +33,16 @@ def _readable(path: str) -> bool:
     return os.path.isfile(path) and os.access(path, os.R_OK)
 
 
+def without_apikey(url: str) -> str:
+    """Stash puts `?apikey=<its API key>` on stream URLs. Requests to Stash are authenticated with a header
+    instead, so the key is dropped from the URL: ffmpeg prints the URL in its errors and in `ps`."""
+    parts = urllib.parse.urlsplit(url)
+    if "apikey" not in parts.query.lower():
+        return url
+    query = [(k, v) for k, v in urllib.parse.parse_qsl(parts.query, keep_blank_values=True) if k.lower() != "apikey"]
+    return urllib.parse.urlunsplit(parts._replace(query=urllib.parse.urlencode(query)))
+
+
 def resolve_source(
     file_path: str | None,
     url: str | None,
@@ -41,7 +52,7 @@ def resolve_source(
     if file_path and not in_zip and readable(file_path):
         return LocalFile(file_path)
     if url:
-        return HttpStream(url)
+        return HttpStream(without_apikey(url))
     return None
 
 

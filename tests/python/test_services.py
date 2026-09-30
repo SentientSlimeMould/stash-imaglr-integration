@@ -77,3 +77,22 @@ class RelativeUrlTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PostCardTest(unittest.TestCase):
+    """A post's card is built from its members' cards, whatever their kinds (clips and stills carry no size)."""
+
+    def test_mixed_members(self):
+        from imaglr_integration import services
+
+        base = {"thumb": None, "preview": None, "status": "pending", "title": "t", "width": 1, "height": 1, "first_seen": None}
+        image = {**base, "id": "a", "kind": "image", "tab": "images", "bytes": 10}
+        clip = {**base, "id": "b", "kind": "clip", "tab": "clips", "duration": 2.0}
+        still = {**base, "id": "c", "kind": "still", "tab": "images"}
+        post = {"id": "s", "kind": "set", "status": "pending", "source_title": "t", "tags": [], "blog_id": None,
+                "action": None, "error_code": None, "error_detail": None, "progress": 0, "created_at": "x", "caption": ""}
+        for members in ([image, clip], [clip, clip], [image, still], [still]):
+            card = services.post_card(post, members)
+            self.assertEqual(len(card["members"]), len(members))
+        self.assertEqual(services.post_card(post, [image, clip])["bytes"], 10)
+        self.assertIsNone(services.post_card(post, [clip, clip])["bytes"])

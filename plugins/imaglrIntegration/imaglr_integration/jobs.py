@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import shutil
 import time
+import traceback
 from typing import Any
 
 from . import blogs, log, services
@@ -30,7 +31,7 @@ from .media.video_export import UnsupportedMedia, VideoSettings, export_clip, gi
 from .stash import HttpStream, LocalFile, StashError, api
 from .stash.paths import image_source, scene_source
 from .tags.caption import caption_to_html
-from .tags.pipeline import dropped_tags
+from .tags.pipeline import MAX_TAGS, dropped_tags
 
 IMAGE_LIMIT = 40 * 1024 * 1024  # imaglr: 40 MB per image
 VIDEO_LIMIT = 500 * 1024 * 1024  # imaglr: 500 MB per video
@@ -42,7 +43,11 @@ FOLLOW_UP_LABELS = {"queue": "adding it to your imaglr queue", "publish": "publi
 
 
 class JobFailed(Exception):
+    """What went wrong, in words for the user. The detail is shown on the card, stored, and logged, so it
+    is redacted here once (ffmpeg errors quote the input URL, for example)."""
+
     def __init__(self, code: str, detail: str, status: str = "failed"):
+        detail = log.redact(detail)
         super().__init__(detail)
         self.code, self.detail, self.status = code, detail, status
 
@@ -252,7 +257,8 @@ def _upload_error(ctx: Context, blog: dict[str, Any], e: ImaglrError) -> JobFail
         return JobFailed(e.code, f"imaglr rejected the {e.field}: {detail}")
     if klass is ErrorClass.RATE_LIMITED:
         wait = f" Try again after {int(e.retry_after // 60) + 1} minutes." if e.retry_after else ""
-        return JobFailed(e.code, f"imaglr's hourly limit is used up.{wait}")
+        which = "daily posting" if "daily" in e.code else "hourly"
+        return JobFailed(e.code, f"imaglr's {which} limit is used up.{wait}")
     return JobFailed(e.code, detail)
 
 
@@ -290,6 +296,10 @@ def run_send(ctx: Context, item_id: str) -> None:
         except plugin_settings.SettingsError as e:
             raise JobFailed("settings", str(e), status="ready") from None
         queue_tag, done_tag = api.workflow_tags(ctx.stash, config.queue_tag, config.done_tag)
+        # Automatic tags follow Stash and the tag rules until edited: bring them up to date now, before the
+        # item is marked busy (refresh_tags leaves busy items alone).
+        item = services.refresh_item_tags(ctx.stash, ctx.db, config, item)
+        tags = list(item["tags"])[:MAX_TAGS]
 
         # 1. prepare (0-40 %)
         repo.update_item(ctx.db, item_id, status="exporting", progress=0, error_code=None, error_detail=None)
@@ -322,8 +332,6 @@ def run_send(ctx: Context, item_id: str) -> None:
         # 2. upload (40-95 %)
         repo.update_item(ctx.db, item_id, status="sending")
         client = ctx.imaglr(blog)
-        item = services.refresh_item_tags(ctx.stash, ctx.db, config, repo.get_item(ctx.db, item_id) or item)
-        tags = list(item["tags"])[:30]
 
         def progress(fraction: float) -> None:
             log.progress(0.4 + 0.55 * fraction)
@@ -348,44 +356,56 @@ def run_send(ctx: Context, item_id: str) -> None:
         repo.update_item(ctx.db, item_id, status=e.status, progress=0, error_code=e.code, error_detail=e.detail)
         return
     except StashError as e:
-        repo.update_item(ctx.db, item_id, status="failed", progress=0, error_code="stash_error", error_detail=str(e))
+        repo.update_item(ctx.db, item_id, status="failed", progress=0, error_code="stash_error",
+                         error_detail=log.redact(str(e)))
+        return
+    except Exception as e:  # a bug or a broken environment: say so on the card instead of staying "busy" forever
+        log.error(f"send {item_id}: unexpected {type(e).__name__}: {e}\n{traceback.format_exc()}")
+        repo.update_item(ctx.db, item_id, status="failed", progress=0, error_code="unexpected",
+                         error_detail=log.redact(f"Something went wrong: {type(e).__name__}: {e}")[:500])
         return
 
     # 3. the draft exists: from here on nothing may re-upload it
     record = dict(status="sent", progress=1.0, draft_id=draft.id, post_url=draft.url, sent_as="draft",
                   sent_at=now_iso(), blog_id=blog["id"], dropped_tags=dropped_tags(tags, draft.tags) if draft.tags else [],
                   followup_failed=False, error_code=None, error_detail=None, cancel_requested=False)
-    if action != "draft":
-        try:
-            _follow_up(client, action, draft.id)
-            record["sent_as"] = action
-        except ImaglrError as e:
-            record.update(followup_failed=True, error_code=e.code,
-                          error_detail=f"Saved as a draft, but {FOLLOW_UP_LABELS[action]} failed: {e.detail or e.code}")
-    repo.update_item(ctx.db, item_id, **record)
-    for m in members if item["kind"] == "set" else []:
-        repo.update_item(ctx.db, m["id"], status="sent", draft_id=draft.id, post_url=draft.url,
-                         sent_as=record["sent_as"], sent_at=record["sent_at"], blog_id=blog["id"])
-    repo.bump_used_tags(ctx.db, tags)
-    log.progress(0.97)
+    try:
+        if action != "draft":
+            try:
+                _follow_up(client, action, draft.id)
+                record["sent_as"] = action
+            except ImaglrError as e:
+                record.update(followup_failed=True, error_code=e.code,
+                              error_detail=f"Saved as a draft, but {FOLLOW_UP_LABELS[action]} failed: {e.detail or e.code}")
+        repo.update_item(ctx.db, item_id, **record)
+        for m in members if item["kind"] == "set" else []:
+            repo.update_item(ctx.db, m["id"], status="sent", draft_id=draft.id, post_url=draft.url,
+                             sent_as=record["sent_as"], sent_at=record["sent_at"], blog_id=blog["id"])
+        repo.bump_used_tags(ctx.db, tags)
+        log.progress(0.97)
 
-    # 4. Stash: swap the queue tag for the sent tag on every source
-    failed = []
-    for m in members:
-        try:
-            if m["stash_marker_id"]:
-                marker = api.find_marker(ctx.stash, m["stash_marker_id"])
-                if marker:
-                    api.marker_swap_tags(ctx.stash, marker, queue_tag, done_tag)
-            elif m["stash_image_id"]:
-                api.image_swap_tags(ctx.stash, m["stash_image_id"], queue_tag, done_tag)
-        except StashError as e:
-            failed.append(f"{m['source_title']} ({e})")
-    if failed and not record["followup_failed"]:
-        repo.update_item(ctx.db, item_id, error_code="tag_swap_failed",
-                         error_detail="Sent, but Stash's tags couldn't be updated for: " + ", ".join(failed)[:500])
-    log.info(f"sent {item_id} to {blog['name']} as {record['sent_as']} (draft {draft.id})")
-    cleanup_prepared(ctx.db, os.path.join(ctx.data_dir, "prepared"), config.prepared_retention_days)
+        # 4. Stash: swap the queue tag for the sent tag on every source
+        failed = []
+        for m in members:
+            try:
+                if m["stash_marker_id"]:
+                    marker = api.find_marker(ctx.stash, m["stash_marker_id"])
+                    if marker:
+                        api.marker_swap_tags(ctx.stash, marker, queue_tag, done_tag)
+                elif m["stash_image_id"]:
+                    api.image_swap_tags(ctx.stash, m["stash_image_id"], queue_tag, done_tag)
+            except StashError as e:
+                failed.append(f"{m['source_title']} ({e})")
+        if failed and not record["followup_failed"]:
+            repo.update_item(ctx.db, item_id, error_code="tag_swap_failed",
+                             error_detail=log.redact("Sent, but Stash's tags couldn't be updated for: " + ", ".join(failed))[:500])
+        log.info(f"sent {item_id} to {blog['name']} as {record['sent_as']} (draft {draft.id})")
+        cleanup_prepared(ctx.db, os.path.join(ctx.data_dir, "prepared"), config.prepared_retention_days)
+    except Exception as e:  # the draft is on imaglr: the item is sent, whatever else broke
+        log.error(f"send {item_id}: after the draft was saved: {type(e).__name__}: {e}\n{traceback.format_exc()}")
+        record.update(error_code="unexpected",
+                      error_detail=log.redact(f"Saved as a draft, but then: {type(e).__name__}: {e}")[:500])
+        repo.update_item(ctx.db, item_id, **record)
     log.progress(1.0)
 
 

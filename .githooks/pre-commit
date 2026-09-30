@@ -1,0 +1,3 @@
+#!/bin/sh
+# Privacy gate: see scripts/check-private.sh. Enable once per clone with: git config core.hooksPath .githooks
+exec "$(git rev-parse --show-toplevel)/scripts/check-private.sh"

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
 """Configure a local test Stash (see dev/README.md). Standard library only.
 
     python3 dev/seed.py 9931 setup     first-run setup, scan, generate, sample metadata

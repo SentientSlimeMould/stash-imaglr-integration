@@ -108,6 +108,17 @@ export function QueueTab({ tab, openId, data, error, load }: { tab: "clips" | "i
     }
   }
 
+  // Stills only exist in the plugin, so removing them deletes them; everything else just loses the tag in Stash.
+  const stills = picked.filter((c) => c.kind === "still" || c.members?.every((m) => m.kind === "still"));
+  const others = picked.length - stills.length;
+  const queueTagName = data?.tags.queue.name ?? "imaglr";
+  const removeTitle = stills.length && !others ? `Delete ${stills.length === 1 ? "still" : "stills"}` : `Remove "${queueTagName}" tag`;
+  const removeQuestion = [
+    others ? `Remove the "${queueTagName}" tag in Stash from ${others === 1 ? "this item" : `${others} items`}? ${others === 1 ? "It leaves" : "They leave"} this page; nothing in Stash is deleted.` : null,
+    stills.length ? `${stills.length === 1 ? "1 still" : `${stills.length} stills`} will be deleted (stills only exist in the plugin).` : null,
+    "Nothing on imaglr is changed.",
+  ].filter(Boolean).join(" ");
+
   const selectionActions: SelectionAction[] = [
     {
       text: "Make one post",
@@ -123,7 +134,7 @@ export function QueueTab({ tab, openId, data, error, load }: { tab: "clips" | "i
         .map((c) => runOperation("post_split", { post_id: c.id }))), "Split into separate posts."),
     },
     {
-      text: `Remove "${data?.tags.queue.name ?? "imaglr"}" tag`,
+      text: removeTitle,
       disabled: busyPicked,
       onClick: () => setConfirmRemove(true),
     },
@@ -190,15 +201,14 @@ export function QueueTab({ tab, openId, data, error, load }: { tab: "clips" | "i
         }} />
       ) : null}
       {confirmRemove ? (
-        <ConfirmDialog title={`Remove "${data?.tags.queue.name ?? "imaglr"}" tag`} accept="Remove tag" variant="danger"
+        <ConfirmDialog title={removeTitle} accept={stills.length && stills.length === picked.length ? "Delete" : "Remove"} variant="danger"
           onAccept={() => {
             setConfirmRemove(false);
             void run(() => Promise.all(picked.map((c) => runOperation("remove_from_queue", { item_id: c.id }))),
               "Removed from this page.");
           }}
           onCancel={() => setConfirmRemove(false)}>
-          Remove the "{data?.tags.queue.name ?? "imaglr"}" tag in Stash from {picked.length === 1 ? "this item" : `${picked.length} items`}?
-          {picked.length === 1 ? " It leaves" : " They leave"} this page. Nothing on imaglr is changed and nothing is deleted.
+          {removeQuestion}
         </ConfirmDialog>
       ) : null}
       {openId ? (

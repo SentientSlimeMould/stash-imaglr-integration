@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-only
 # Run the Python test suite inside the official Stash image (the real runtime: its Python and ffmpeg).
 # Works from a copy on this computer's own disk, never by mounting the repo (which may be on a network
 # share) into Docker.   Usage: scripts/test-in-stash.sh [image tag, default v0.31.1]

@@ -1,0 +1,3 @@
+#!/bin/sh
+# Privacy gate for the commit message: see scripts/check-private.sh
+exec "$(git rev-parse --show-toplevel)/scripts/check-private.sh" "$1"

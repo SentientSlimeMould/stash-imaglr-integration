@@ -12,6 +12,8 @@ import ssl
 import urllib.error
 import urllib.request
 
+from .. import log
+
 _WILDCARD_HOSTS = {"", "0.0.0.0", "::", "[::]"}
 
 
@@ -47,6 +49,7 @@ class StashClient:
         cookie = connection.get("SessionCookie") or {}
         self._cookie_name = cookie.get("Name") or "session"
         self._cookie_value = cookie.get("Value")
+        log.register_secret(self._cookie_value)
         self._api_key = None
         self._api_key_checked = False
         # Stash's own certificate on loopback is typically self-signed; elsewhere verify normally.
@@ -75,6 +78,7 @@ class StashClient:
             self._api_key_checked = True
             key = self._request("{ configuration { general { apiKey } } }", None)
             self._api_key = key["configuration"]["general"]["apiKey"] or None
+            log.register_secret(self._api_key)
 
     def _request(self, query, variables):
         body = json.dumps({"query": query, "variables": variables or {}}).encode()
@@ -100,3 +104,4 @@ class StashClient:
             name, _, rest = header.partition("=")
             if name.strip() == self._cookie_name:
                 self._cookie_value = rest.split(";", 1)[0]
+                log.register_secret(self._cookie_value)

@@ -282,7 +282,7 @@ def post_card(post: dict[str, Any], member_cards: list[dict[str, Any]]) -> dict[
         tag_count=len(post["tags"]),
         members=member_cards,
         thumb=member_cards[0]["thumb"] if member_cards else None,
-        bytes=sum(m["bytes"] or 0 for m in member_cards) or None,
+        bytes=sum(m.get("bytes") or 0 for m in member_cards) or None,  # clips and stills carry no size
         first_seen=min((m["first_seen"] or "" for m in member_cards), default=None) or None,
         created_at=post["created_at"],
     )

@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.1.11 — 2026-09-30
+
+Fixes from a full code review (security, correctness, UI, release process).
+
+- Fixed: grouping a clip or a still into a post broke the whole Post to imaglr page ("queue failed: 'bytes'").
+- Fixed: Stash's own API key could appear in an error message, the sent history and Stash's log when a clip had
+  to be read over HTTP and ffmpeg failed. Stream URLs no longer carry the key, and Stash's key and session
+  cookie are masked wherever text leaves the plugin.
+- Fixed: the tag refresh at send time (0.1.10) didn't actually run; Send all now uses current rules and Stash tags.
+- Fixed: an unexpected error during a send left the item "Preparing" for ever with a misleading message; it is
+  now marked failed with the reason, and anything that goes wrong after the draft exists still records the item
+  as sent.
+- Editor: a **Save** button keeps your edits (tags, caption, crop, trim, blog, send-as) without sending, so Send
+  all can use each item's settings. Cancel still discards. The "Publish now" confirmation is a dialog.
+- Removing several items at once says when stills will be deleted (they only exist in the plugin).
+- Rate-limit messages name the right limit (daily posts vs hourly requests).
+- README: what exactly is sent to imaglr, how keys are stored, that anyone who can use your Stash can use the
+  plugin; status banner and AI-assistance statement updated.
+- Project: releases now publish only after the tests pass and only when the version changed; an end-to-end test
+  runs the built plugin inside Stash against the fake imaglr on every push; privacy checks run as git hooks and
+  in CI; tests for the send pipeline.
+
 ## 0.1.10 — 2026-09-30
 
 - Tag rules (and tag changes made in Stash) now apply to items already waiting, not just newly queued ones. An
@@ -11,6 +33,10 @@
 
 - Removed the **imaglr** section added to image pages in 0.1.8: images and clips are queued the same way again
   (the `imaglr` tag, or the image lists' ⋯ menu).
+
+## 0.1.8 — 2026-09-30
+
+- Added an **imaglr** section to image pages (withdrawn in 0.1.9).
 
 ## 0.1.7 — 2026-09-30
 

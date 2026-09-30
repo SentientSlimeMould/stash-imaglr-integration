@@ -675,6 +675,16 @@
     function cancel() {
       onClose(changed);
     }
+    async function saveAndClose() {
+      setBusy(true);
+      try {
+        await save();
+        onClose(true);
+      } catch (e) {
+        Toast.error(e);
+        setBusy(false);
+      }
+    }
     async function send() {
       if (sendAction === "publish" && !confirmPublish) {
         setConfirmPublish(true);
@@ -819,7 +829,20 @@
           }
         },
         ACTION_LABELS[a]
-      ))))), blogs.length === 0 ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info" }, "Add your imaglr blog first: use the Settings button on the page.") : null, problem ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, problem) : null), /* @__PURE__ */ react_default.createElement(Modal.Footer, { className: "imaglr-editor-footer" }, BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: cancelSend }, "Stop sending") : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger mr-auto", onClick: () => setConfirmRemove(true), disabled: locked }, removeLabel), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: cancel }, "Cancel"), confirmPublish ? /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-confirm" }, "Posts publicly on ", blog?.label, " right away.", /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setConfirmPublish(false) }, "Cancel"), /* @__PURE__ */ react_default.createElement(Button, { variant: "danger", onClick: send, disabled: busy }, "Publish now")) : /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: send, disabled: locked || !blog || !!problem }, busy ? "Starting\u2026" : sendButtonLabel(sendAction, blog)))), confirmRemove ? /* @__PURE__ */ react_default.createElement(
+      ))))), blogs.length === 0 ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info" }, "Add your imaglr blog first: use the Settings button on the page.") : null, problem ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, problem) : null), /* @__PURE__ */ react_default.createElement(Modal.Footer, { className: "imaglr-editor-footer" }, BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: cancelSend }, "Stop sending") : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger mr-auto", onClick: () => setConfirmRemove(true), disabled: locked }, removeLabel), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: cancel, disabled: busy }, "Cancel"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: saveAndClose, disabled: locked || !dirty || busy }, "Save"), /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: send, disabled: locked || !blog || !!problem || busy }, busy ? "Starting\u2026" : sendButtonLabel(sendAction, blog)))), confirmPublish ? /* @__PURE__ */ react_default.createElement(
+        ConfirmDialog,
+        {
+          title: `Publish now on ${blog?.label}`,
+          accept: "Publish now",
+          variant: "danger",
+          busy,
+          onAccept: send,
+          onCancel: () => setConfirmPublish(false)
+        },
+        "This posts publicly on ",
+        blog?.label,
+        " right away, not as a draft."
+      ) : null, confirmRemove ? /* @__PURE__ */ react_default.createElement(
         ConfirmDialog,
         {
           title: removeLabel,
@@ -1431,6 +1454,15 @@
         Toast.error(e);
       }
     }
+    const stills = picked.filter((c) => c.kind === "still" || c.members?.every((m) => m.kind === "still"));
+    const others = picked.length - stills.length;
+    const queueTagName = data?.tags.queue.name ?? "imaglr";
+    const removeTitle = stills.length && !others ? `Delete ${stills.length === 1 ? "still" : "stills"}` : `Remove "${queueTagName}" tag`;
+    const removeQuestion = [
+      others ? `Remove the "${queueTagName}" tag in Stash from ${others === 1 ? "this item" : `${others} items`}? ${others === 1 ? "It leaves" : "They leave"} this page; nothing in Stash is deleted.` : null,
+      stills.length ? `${stills.length === 1 ? "1 still" : `${stills.length} stills`} will be deleted (stills only exist in the plugin).` : null,
+      "Nothing on imaglr is changed."
+    ].filter(Boolean).join(" ");
     const selectionActions = [
       {
         text: "Make one post",
@@ -1447,7 +1479,7 @@
         onClick: () => run(() => Promise.all(picked.filter((c) => c.kind === "set").map((c) => runOperation("post_split", { post_id: c.id }))), "Split into separate posts.")
       },
       {
-        text: `Remove "${data?.tags.queue.name ?? "imaglr"}" tag`,
+        text: removeTitle,
         disabled: busyPicked,
         onClick: () => setConfirmRemove(true)
       }
@@ -1511,8 +1543,8 @@
     } }) : null, confirmRemove ? /* @__PURE__ */ react_default.createElement(
       ConfirmDialog,
       {
-        title: `Remove "${data?.tags.queue.name ?? "imaglr"}" tag`,
-        accept: "Remove tag",
+        title: removeTitle,
+        accept: stills.length && stills.length === picked.length ? "Delete" : "Remove",
         variant: "danger",
         onAccept: () => {
           setConfirmRemove(false);
@@ -1523,13 +1555,7 @@
         },
         onCancel: () => setConfirmRemove(false)
       },
-      'Remove the "',
-      data?.tags.queue.name ?? "imaglr",
-      '" tag in Stash from ',
-      picked.length === 1 ? "this item" : `${picked.length} items`,
-      "?",
-      picked.length === 1 ? " It leaves" : " They leave",
-      " this page. Nothing on imaglr is changed and nothing is deleted."
+      removeQuestion
     ) : null, openId ? /* @__PURE__ */ react_default.createElement(
       Editor,
       {

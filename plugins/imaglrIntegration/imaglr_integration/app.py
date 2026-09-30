@@ -59,9 +59,9 @@ def handle(request: dict[str, Any]) -> tuple[Any, str | None]:
     try:
         return handler(ctx), None
     except (UserError, SettingsError) as e:
-        return None, str(e)
+        return None, log.redact(str(e))
     except Exception as e:  # report, never crash without a reply
         log.error(f"{mode} failed: {e}\n{traceback.format_exc()}")
-        return None, f"{mode} failed: {e}"
+        return None, log.redact(f"{mode} failed: {e}")
     finally:
         ctx.close()

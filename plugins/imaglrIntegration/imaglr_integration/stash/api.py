@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""High-level Stash reads and the few writes reference spec §5 allows, on top of StashClient.gql.
+"""High-level Stash reads and the few writes the plugin allows itself, on top of StashClient.gql.
 
-Writes: sceneMarkerCreate / sceneMarkerUpdate (in/out write-back, queue -> done tag swap), bulkImageUpdate
-tag ADD/REMOVE, and tagCreate for the two workflow tags only.
+Writes: sceneMarkerUpdate (in/out write-back, tag changes), bulkImageUpdate tag ADD/REMOVE, tagCreate for the
+two workflow tags only, and metadataGenerate for marker previews. The plugin never creates or deletes markers.
 """
 
 from __future__ import annotations
