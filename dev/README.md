@@ -104,3 +104,19 @@ git config core.hooksPath .githooks
 `scripts/check-generic.sh` (private-network addresses, local paths, e-mail addresses, key shapes) and, for the
 owner, a private pattern file outside the repo (`docs/private/private-patterns.txt`; contributors without it should
 run `scripts/check-generic.sh` directly).
+
+## Demo instance for screenshots and recordings
+
+A third instance, `stash-demo` (http://127.0.0.1:9933), with public-domain, safe-for-work media and friendly
+metadata, talking to the **real** imaglr (add demo blogs to it in the plugin's Settings). Its state lives in
+its own Docker volumes; the media lives on this computer in `~/.imaglr-dev/demo-media` (credits in
+`CREDITS.txt` there — Prelinger Archives films from archive.org and NASA images, all public domain).
+
+```sh
+python3 demo_media.py                          # fetch ≈220 MB of films and images (once)
+docker compose up -d stash-demo
+python3 seed.py 9933 demo                      # first-run setup, scan, tags/studios/markers, no release-notes popup
+```
+
+Recording tips: use a clean browser profile at `http://localhost:9933` (never a LAN address), crop to the page,
+and keep blog names generic — every frame goes into the public repository.

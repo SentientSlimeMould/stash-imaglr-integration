@@ -6,6 +6,7 @@
     python3 dev/seed.py 9931 auth on   require login (user "dev", password "dev-password")
     python3 dev/seed.py 9931 auth off  remove the login again
     python3 dev/seed.py 9931 status    show version, setup state and whether login is on
+    python3 dev/seed.py 9933 demo      the screenshot instance: setup + scan + friendly metadata (dev/demo_media.py first)
 """
 
 import http.cookiejar
@@ -168,6 +169,86 @@ def seed_metadata(stash):
     return marker_ids
 
 
+def demo(stash):
+    """The stash-demo instance: first-run setup and scan like `setup`, then metadata that looks good in
+    screenshots instead of the test fixtures. Media comes from dev/demo_media.py (public domain, SFW)."""
+    status_ = stash.wait_until_up()["systemStatus"]["status"]
+    if status_ == "SETUP":
+        stash.gql(
+            """mutation($input: SetupInput!) { setup(input: $input) }""",
+            input={
+                "configLocation": "/root/.stash/config.yml",
+                "stashes": [{"path": "/data", "excludeVideo": False, "excludeImage": False}],
+                "databaseFile": "", "generatedLocation": "/generated", "cacheLocation": "/cache",
+                "storeBlobsInDatabase": False, "blobsLocation": "/blobs",
+            },
+        )
+        print("  first-run setup done")
+        stash.wait_until_up()
+    job = stash.gql(
+        """mutation { metadataScan(input: { scanGenerateCovers: true, scanGeneratePreviews: true,
+             scanGenerateSprites: true, scanGenerateThumbnails: true }) }"""
+    )["metadataScan"]
+    stash.wait_for_job(job, "scan")
+
+    tags = {name: find_or_create(stash, "Tag", name) for name in
+            ["Vintage", "Advertising", "Travel", "Americana", "Architecture", "Space", "Nebula", "Earth", "Mars", "Retro"]}
+    prelinger = find_or_create(stash, "Studio", "Prelinger Archives")
+    nasa = find_or_create(stash, "Studio", "NASA")
+
+    film_tags = {
+        "Norelco": ["Vintage", "Advertising", "Retro"],
+        "Westinghouse": ["Vintage", "Advertising", "Americana"],
+        "Midwest": ["Vintage", "Travel", "Americana"],
+        "Wheels": ["Vintage", "Travel"],
+        "Parade": ["Vintage", "Architecture", "Americana"],
+    }
+    scenes = stash.gql("{ findScenes(filter: {per_page: -1}) { scenes { id title files { basename duration } scene_markers { id } } } }")["findScenes"]["scenes"]
+    markers = 0
+    for scene in scenes:
+        name = scene["files"][0]["basename"] if scene["files"] else scene["title"] or ""
+        chosen = next((v for k, v in film_tags.items() if k.lower() in name.lower()), ["Vintage"])
+        # Stash titles the scene after its file; strip the extension so the demo reads nicely
+        title = name.rsplit(".", 1)[0]
+        stash.gql(
+            """mutation($id: ID!, $title: String, $tags: [ID!], $studio: ID) {
+                 sceneUpdate(input: {id: $id, title: $title, tag_ids: $tags, studio_id: $studio}) { id } }""",
+            id=scene["id"], title=title, tags=[tags[t] for t in chosen], studio=prelinger,
+        )
+        if scene["scene_markers"]:
+            continue
+        duration = (scene["files"][0].get("duration") or 60) if scene["files"] else 60
+        for start, label in ((min(12, duration / 4), "Opening"), (min(max(30, duration / 2), duration - 10), "Highlight")):
+            stash.gql(
+                """mutation($scene: ID!, $title: String!, $s: Float!, $e: Float, $primary: ID!) {
+                     sceneMarkerCreate(input: {title: $title, seconds: $s, end_seconds: $e, scene_id: $scene,
+                       primary_tag_id: $primary, tag_ids: []}) { id } }""",
+                scene=scene["id"], title=label, s=float(start), e=float(start + 8), primary=tags[chosen[0]],
+            )
+            markers += 1
+
+    images = stash.gql("{ findImages(filter: {per_page: -1}) { images { id title files { basename } } } }")["findImages"]["images"]
+    for image in images:
+        name = (image["files"][0]["basename"] if image["files"] else image["title"] or "").lower()
+        chosen = ["Space"] + [t for t in ("Nebula", "Earth", "Mars") if t.lower() in name]
+        stash.gql(
+            """mutation($id: ID!, $title: String, $tags: [ID!], $studio: ID) {
+                 imageUpdate(input: {id: $id, title: $title, tag_ids: $tags, studio_id: $studio}) { id } }""",
+            id=image["id"], title=(image["files"][0]["basename"] if image["files"] else "").rsplit(".", 1)[0] or None,
+            tags=[tags[t] for t in chosen], studio=nasa,
+        )
+    print(f"  metadata: {len(scenes)} films, {markers} new markers, {len(images)} images")
+    # no "Release Notes" popup in recordings
+    stash.gql("mutation { configureUI(input: {lastNoteSeen: 4102444800000}) { lastNoteSeen } }")
+    scene_ids = [s["id"] for s in scenes]
+    job = stash.gql(
+        """mutation($scenes: [ID!]) { metadataGenerate(input: {
+             markers: true, markerImagePreviews: true, markerScreenshots: true, sceneIDs: $scenes }) }""",
+        scenes=scene_ids,
+    )["metadataGenerate"]
+    stash.wait_for_job(job, "generate marker previews")
+
+
 def auth(stash, on):
     stash.wait_until_up()
     creds = {"username": USERNAME, "password": PASSWORD} if on else {"username": "", "password": ""}
@@ -196,6 +277,8 @@ if __name__ == "__main__":
     print(f"Stash on port {port}: {command}")
     if command == "setup":
         setup(stash)
+    elif command == "demo":
+        demo(stash)
     elif command == "auth" and len(sys.argv) == 4 and sys.argv[3] in ("on", "off"):
         auth(stash, sys.argv[3] == "on")
     elif command == "status":

@@ -49,6 +49,29 @@ services:
       - ${IMAGLR_DEV_PLUGIN:-${HOME}/.imaglr-dev/plugin}:/root/.stash/plugins/imaglrIntegration:ro
       - dev-plugin-data:/root/.stash/plugins/imaglrIntegration/data
 
+  # Demo instance for screenshots and recordings: public-domain, SFW media fetched by dev/demo_media.py into
+  # ~/.imaglr-dev/demo-media, friendly metadata from `seed.py 9933 demo`, and the REAL imaglr (no fake), so
+  # add real demo blogs to it. Start on its own: docker compose up -d stash-demo
+  stash-demo:
+    <<: *stash
+    image: stashapp/stash:v0.31.1
+    ports: ["127.0.0.1:9933:9999"]
+    environment:
+      STASH_STASH: /data/
+      STASH_GENERATED: /generated/
+      STASH_METADATA: /metadata/
+      STASH_CACHE: /cache/
+      STASH_PORT: "9999"
+    volumes:
+      - demo-config:/root/.stash
+      - demo-generated:/generated
+      - demo-metadata:/metadata
+      - demo-cache:/cache
+      - demo-blobs:/blobs
+      - ${IMAGLR_DEMO_MEDIA:-${HOME}/.imaglr-dev/demo-media}:/data:ro
+      - ${IMAGLR_DEV_PLUGIN:-${HOME}/.imaglr-dev/plugin}:/root/.stash/plugins/imaglrIntegration:ro
+      - demo-plugin-data:/root/.stash/plugins/imaglrIntegration/data
+
   # Fake imaglr API (dev/fake_imaglr.py). Received posts: http://127.0.0.1:8900/
   fake-imaglr:
     image: stashapp/stash:v0.31.1
@@ -83,3 +106,9 @@ volumes:
   dev-cache:
   dev-blobs:
   dev-plugin-data:
+  demo-config:
+  demo-generated:
+  demo-metadata:
+  demo-cache:
+  demo-blobs:
+  demo-plugin-data:
