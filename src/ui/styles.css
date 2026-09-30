@@ -245,6 +245,12 @@
   padding-top: 1rem;
 }
 
+.imaglr-danger-zone {
+  border-top: 1px solid #394b59;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+}
+
 @media (max-width: 575.98px) {
   .imaglr-preview {
     height: 38vh;

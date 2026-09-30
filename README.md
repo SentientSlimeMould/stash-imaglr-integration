@@ -103,9 +103,13 @@ settings or reads your feed.
 
 Updates appear under **Settings → Plugins → Installed Plugins → Check for updates**. After updating, do a hard
 refresh of the browser tab (Ctrl/Cmd+Shift+R): the browser keeps the old copy of the plugin's page otherwise. The
-footer of the **Post to imaglr** page shows which version is running. Uninstalling removes the
-plugin's files but leaves its `data` folder (your blogs, keys, history and prepared files) and your Stash tags;
-delete `<Stash plugins folder>/imaglr/imaglrIntegration/data` yourself if you don't need it.
+footer of the **Post to imaglr** page shows which version is running.
+
+Uninstalling removes the plugin's files but **leaves its `data` folder** — your blogs and their API keys, the sent
+history, tag rules and working files — and your Stash tags. Stash's plugin manager doesn't ask; it only removes
+what it installed. So if you're removing the plugin for good, first open **Settings → Delete all plugin data**
+(or delete `<Stash plugins folder>/imaglr/imaglrIntegration/data` yourself). Reinstalling or updating keeps
+everything, which is what you usually want.
 
 ## Development
 

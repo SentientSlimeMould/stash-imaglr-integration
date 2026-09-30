@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 import json
+import os
+import tempfile
 import unittest
 from unittest import mock
 
-from imaglr_integration import blog_ops, blogs
+from imaglr_integration import blog_ops, blogs, items
 from imaglr_integration.context import Context, UserError
 from imaglr_integration.db import Database
 from imaglr_integration.imaglr import ImaglrError
@@ -77,3 +79,25 @@ class BlogOpsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DataResetTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.ctx = Context({"args": {"mode": "data_reset"}, "server_connection": {"PluginDir": self.tmp.name}})
+        os.makedirs(os.path.join(self.ctx.data_dir, "prepared", "x"))
+        with open(os.path.join(self.ctx.data_dir, "prepared", "x", "a.jpg"), "wb") as f:
+            f.write(b"x")
+
+    def test_deletes_the_data_folder(self):
+        blogs.add_blog(self.ctx.db, "pbk_one|secret")
+        self.assertEqual(blog_ops.op_data_reset(self.ctx), {"reset": True})
+        self.assertEqual(os.listdir(self.ctx.data_dir), [])
+        self.assertEqual(blogs.list_blogs(self.ctx.db), [])  # a fresh, empty database afterwards
+
+    def test_refuses_while_sending(self):
+        items.create_item(self.ctx.db, kind="image", stash_image_id="1", status="sending")
+        with self.assertRaisesRegex(UserError, "being sent"):
+            blog_ops.op_data_reset(self.ctx)
+        self.assertTrue(os.path.exists(self.ctx.data_dir))

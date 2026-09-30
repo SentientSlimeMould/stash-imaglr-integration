@@ -1800,6 +1800,20 @@
       }
     }
     const [removing, setRemoving] = react_default.useState(null);
+    const [resetting, setResetting] = react_default.useState(false);
+    const [resetBusy, setResetBusy] = react_default.useState(false);
+    async function resetAll() {
+      setResetBusy(true);
+      try {
+        await runOperation("data_reset", {});
+        Toast.success("All plugin data deleted.");
+        onClose(true);
+      } catch (err) {
+        Toast.error(err);
+        setResetBusy(false);
+        setResetting(false);
+      }
+    }
     async function remove(blog) {
       try {
         setBlogs((await runOperation("blog_remove", { blog_id: blog.id })).blogs);
@@ -1843,7 +1857,18 @@
         onChange: (e) => setDefaultAction(e.target.value)
       },
       Object.keys(ACTION_LABELS).map((a) => /* @__PURE__ */ react_default.createElement("option", { key: a, value: a }, ACTION_LABELS[a]))
-    ), /* @__PURE__ */ react_default.createElement(Form.Text, { muted: true }, "You can still choose differently each time you send.")), error ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "danger" }, error) : null, /* @__PURE__ */ react_default.createElement(Button, { type: "submit", variant: "primary", disabled: adding || !key.trim() }, adding ? "Checking the key\u2026" : "Add blog")), /* @__PURE__ */ react_default.createElement(TagRules, null)), /* @__PURE__ */ react_default.createElement(Modal.Footer, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => onClose(changed) }, "Close")), removing ? /* @__PURE__ */ react_default.createElement(
+    ), /* @__PURE__ */ react_default.createElement(Form.Text, { muted: true }, "You can still choose differently each time you send.")), error ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "danger" }, error) : null, /* @__PURE__ */ react_default.createElement(Button, { type: "submit", variant: "primary", disabled: adding || !key.trim() }, adding ? "Checking the key\u2026" : "Add blog")), /* @__PURE__ */ react_default.createElement(TagRules, null), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-danger-zone" }, /* @__PURE__ */ react_default.createElement("h5", null, "Delete all plugin data"), /* @__PURE__ */ react_default.createElement("p", { className: "text-muted small mb-2" }, "Removes every blog and its key, the sent history, tag rules and working files. Do this before uninstalling if you don't want the keys left behind: Stash's plugin manager leaves the plugin's data folder in place. Nothing in Stash or on imaglr changes."), /* @__PURE__ */ react_default.createElement(Button, { variant: "danger", onClick: () => setResetting(true) }, "Delete all plugin data\u2026"))), /* @__PURE__ */ react_default.createElement(Modal.Footer, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => onClose(changed) }, "Close")), resetting ? /* @__PURE__ */ react_default.createElement(
+      ConfirmDialog,
+      {
+        title: "Delete all plugin data",
+        accept: "Delete everything",
+        variant: "danger",
+        busy: resetBusy,
+        onAccept: resetAll,
+        onCancel: () => setResetting(false)
+      },
+      "Every blog and API key, the sent history, tag rules and working files are deleted from this plugin. This can't be undone. Nothing in Stash or on imaglr changes."
+    ) : null, removing ? /* @__PURE__ */ react_default.createElement(
       ConfirmDialog,
       {
         title: `Remove ${removing.label}`,

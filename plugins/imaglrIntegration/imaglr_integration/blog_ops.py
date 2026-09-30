@@ -6,6 +6,8 @@ Only GET /user/info and GET /user/limits are used here; both are read-only on im
 
 from __future__ import annotations
 
+import os
+import shutil
 from typing import Any
 
 from . import blogs
@@ -76,8 +78,29 @@ def op_blog_set_action(ctx: Context) -> dict[str, Any]:
     return op_blogs_list(ctx)
 
 
+def op_data_reset(ctx: Context) -> dict[str, Any]:
+    """Delete everything the plugin keeps (blogs and keys, history, tag rules, working files): the whole data
+    folder. Stash's plugin manager leaves that folder on uninstall, so this is the clean slate. Nothing in
+    Stash or on imaglr changes."""
+    busy = ctx.db.fetchone("SELECT COUNT(*) AS n FROM items WHERE status IN ('exporting', 'sending')")
+    if busy and busy["n"]:
+        raise UserError("Something is being sent right now. Wait for it to finish (or stop it), then try again.")
+    ctx.db.close()
+    ctx._db = None
+    # Empty the folder rather than removing it: it may be a mount point (a Docker volume, as in dev/).
+    if os.path.isdir(ctx.data_dir):
+        for name in os.listdir(ctx.data_dir):
+            path = os.path.join(ctx.data_dir, name)
+            if os.path.isdir(path) and not os.path.islink(path):
+                shutil.rmtree(path)
+            else:
+                os.remove(path)
+    return {"reset": True}
+
+
 OPERATIONS = {
     "blogs_list": op_blogs_list,
+    "data_reset": op_data_reset,
     "blogs_check": op_blogs_check,
     "blog_add": op_blog_add,
     "blog_remove": op_blog_remove,

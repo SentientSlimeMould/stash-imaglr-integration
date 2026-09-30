@@ -62,6 +62,21 @@ export function Settings({ onClose }: { onClose: (changed: boolean) => void }) {
   }
 
   const [removing, setRemoving] = React.useState<Blog | null>(null);
+  const [resetting, setResetting] = React.useState(false);
+  const [resetBusy, setResetBusy] = React.useState(false);
+
+  async function resetAll() {
+    setResetBusy(true);
+    try {
+      await runOperation("data_reset", {});
+      Toast.success("All plugin data deleted.");
+      onClose(true);
+    } catch (err) {
+      Toast.error(err);
+      setResetBusy(false);
+      setResetting(false);
+    }
+  }
 
   async function remove(blog: Blog) {
     try {
@@ -154,10 +169,27 @@ export function Settings({ onClose }: { onClose: (changed: boolean) => void }) {
         </Form>
 
         <TagRules />
+
+        <div className="imaglr-danger-zone">
+          <h5>Delete all plugin data</h5>
+          <p className="text-muted small mb-2">
+            Removes every blog and its key, the sent history, tag rules and working files. Do this before uninstalling if
+            you don't want the keys left behind: Stash's plugin manager leaves the plugin's data folder in place.
+            Nothing in Stash or on imaglr changes.
+          </p>
+          <Button variant="danger" onClick={() => setResetting(true)}>Delete all plugin data…</Button>
+        </div>
       </Modal.Body>
       <Modal.Footer>
         <Button variant="primary" onClick={() => onClose(changed)}>Close</Button>
       </Modal.Footer>
+      {resetting ? (
+        <ConfirmDialog title="Delete all plugin data" accept="Delete everything" variant="danger" busy={resetBusy}
+          onAccept={resetAll} onCancel={() => setResetting(false)}>
+          Every blog and API key, the sent history, tag rules and working files are deleted from this plugin. This can't
+          be undone. Nothing in Stash or on imaglr changes.
+        </ConfirmDialog>
+      ) : null}
       {removing ? (
         <ConfirmDialog title={`Remove ${removing.label}`} accept="Remove" variant="danger"
           onAccept={() => remove(removing)} onCancel={() => setRemoving(null)}>

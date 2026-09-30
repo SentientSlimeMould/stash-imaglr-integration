@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.6 — 2026-09-30
+
+- **Settings → Delete all plugin data**: removes every blog and API key, the sent history, tag rules and working
+  files, for a clean slate before uninstalling. Stash's plugin manager leaves the plugin's `data` folder (and so
+  the keys) in place on uninstall; the README now says so.
+
 ## 0.1.5 — 2026-09-30
 
 - In the editor and the Sent details, the clip or image name links back to Stash: an image opens its image
