@@ -19,7 +19,9 @@ interface Props {
   suggestions: Suggestions;
   lowercase: boolean;
   disabled?: boolean;
+  auto?: boolean; // tags still follow Stash and the tag rules
   onChange: (tags: string[]) => void;
+  onReset?: () => void; // back to the suggested tags (automatic again)
 }
 
 // Same overrides as Stash's Select.tsx, so the field matches its tag fields exactly.
@@ -113,7 +115,8 @@ export function TagInput({ tags, extra = [], lowercase, disabled, inputId, place
   );
 }
 
-export function TagField({ tags, suggestions, lowercase, disabled, onChange }: Props) {
+export function TagField({ tags, suggestions, lowercase, disabled, auto, onChange, onReset }: Props) {
+  const { Button } = PluginApi.libraries.Bootstrap;
   const [message, setMessage] = React.useState<string | null>(null);
   const spare = spareSuggestions(suggestions, tags);
   return (
@@ -122,6 +125,14 @@ export function TagField({ tags, suggestions, lowercase, disabled, onChange }: P
         <label htmlFor="imaglr-tag-field"><strong>imaglr tags</strong></label>
         <span className={tags.length >= MAX_TAGS ? "text-warning" : "text-muted"}>{tags.length} / {MAX_TAGS}</span>
       </div>
+      {auto === undefined ? null : auto ? (
+        <div className="small text-muted mb-1">From the Stash tags and your tag rules; they keep up with changes until you edit them.</div>
+      ) : (
+        <div className="small text-muted mb-1">
+          Edited by you.{" "}
+          {onReset ? <Button variant="link" size="sm" className="p-0 align-baseline" disabled={disabled} onClick={onReset}>Use the suggested tags again</Button> : null}
+        </div>
+      )}
       <TagInput inputId="imaglr-tag-field" tags={tags} extra={spare.addable} lowercase={lowercase} disabled={disabled}
         onChange={onChange} onMessage={setMessage} />
       {message ? <div className="small text-warning mt-1">{message}</div> : null}

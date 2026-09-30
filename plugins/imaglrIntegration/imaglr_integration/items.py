@@ -12,7 +12,7 @@ from .db import Database, loads, now_iso
 ACTIVE_STATUSES = ("pending", "exporting", "ready", "sending", "failed")
 IN_FLIGHT_STATUSES = ("exporting", "sending")
 JSON_FIELDS = {"crop", "tags", "dropped_tags"}
-BOOL_FIELDS = ("mute", "hdr_warning", "cancel_requested", "followup_failed", "size_guard_retried")
+BOOL_FIELDS = ("mute", "hdr_warning", "cancel_requested", "followup_failed", "size_guard_retried", "tags_auto")
 DEFAULT_CROP = {"aspect": "original", "position": 0.5}
 MAX_SET_MEMBERS = 10
 

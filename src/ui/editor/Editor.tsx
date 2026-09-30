@@ -97,6 +97,8 @@ export function Editor({ itemId, onClose }: Props) {
   const [action, setAction] = React.useState<SendAction | null>(null);
   const [confirmPublish, setConfirmPublish] = React.useState(false);
   const [confirmRemove, setConfirmRemove] = React.useState(false);
+  const [tagsAuto, setTagsAuto] = React.useState(true);
+  const [resetTags, setResetTags] = React.useState(false); // "use the suggested tags again" pressed
   const [busy, setBusy] = React.useState(false);
   const [changed, setChanged] = React.useState(false);
   const [dirty, setDirty] = React.useState(false);
@@ -105,6 +107,8 @@ export function Editor({ itemId, onClose }: Props) {
     runOperation<ItemDetail>("item_detail", { item_id: itemId }).then((d) => {
       setDetail(d);
       setTags(d.item.tags);
+      setTagsAuto(d.item.tags_auto);
+      setResetTags(false);
       setCaption(d.item.caption);
       setCrop(d.item.crop);
       setTrim({ inS: d.item.in_s ?? 0, outS: d.item.out_s ?? 0, mute: d.item.mute });
@@ -142,6 +146,7 @@ export function Editor({ itemId, onClose }: Props) {
       item_id: item.id,
       changes: {
         tags, caption, crop, blog_id: blogId, action,
+        ...(resetTags ? { tags_auto: true } : {}),
         ...(isClip ? { in_s: trim.inS, out_s: trim.outS, mute: trim.mute } : {}),
       },
     });
@@ -296,7 +301,9 @@ export function Editor({ itemId, onClose }: Props) {
         )}
 
         <TagField tags={tags} suggestions={detail.suggestions} lowercase={detail.lowercase_tags} disabled={locked}
-          onChange={edit(setTags)} />
+          auto={tagsAuto}
+          onChange={(next) => { edit(setTags)(next); setTagsAuto(false); setResetTags(false); }}
+          onReset={() => { edit(setTags)(detail.suggestions.active.map((t) => t.tag)); setTagsAuto(true); setResetTags(true); }} />
 
         <Form.Group className="mt-3">
           <Form.Label>Caption <small className="text-muted">(optional)</small></Form.Label>

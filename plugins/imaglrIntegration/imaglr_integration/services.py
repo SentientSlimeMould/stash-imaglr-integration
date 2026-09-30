@@ -11,7 +11,7 @@ from . import items as repo
 from .db import Database, now_iso
 from .settings import Settings
 from .settings import PLUGIN_ID
-from .stash import Image, Marker, Tag
+from .stash import Image, Marker, Tag, api
 from .tags.pipeline import (
     TagConfig,
     collect_clip_sources,
@@ -71,11 +71,58 @@ def marker_title(marker: Marker) -> str:
     return f"{scene} — {title}" if scene and scene != title else title
 
 
+def refresh_tags(db: Database, item: dict[str, Any], suggested: list[str] | None) -> dict[str, Any]:
+    """While an item's tags are automatic (never edited), keep them equal to what its Stash tags and the
+    tag rules currently give, so rule changes and Stash tag changes flow through until the user takes over."""
+    if suggested is None or not item.get("tags_auto") or item["status"] in BUSY_STATUSES:
+        return item
+    if suggested != item["tags"]:
+        return repo.update_item(db, item["id"], tags=suggested) or item
+    return item
+
+
+def merged_tags(members: list[dict[str, Any]]) -> list[str]:
+    """A post's tags: its members' tags in member order, deduplicated case-insensitively."""
+    tags: list[str] = []
+    for m in members:
+        tags += [t for t in m["tags"] if t.lower() not in {x.lower() for x in tags}]
+    return tags[:30]
+
+
+def source_suggestions(stash: Any, db: Database, settings: Settings, member: dict[str, Any]):
+    """(Stash source object or None, tag suggestions or None) for one file, fetched from Stash."""
+    if member["kind"] == "clip" and member["stash_marker_id"]:
+        marker = api.find_marker(stash, member["stash_marker_id"])
+        return marker, marker_suggestions(db, settings, marker) if marker else None
+    if member["kind"] == "still":
+        source = repo.get_item(db, member["source_item_id"]) if member["source_item_id"] else None
+        if source and source["stash_marker_id"]:
+            marker = api.find_marker(stash, source["stash_marker_id"])
+            return None, marker_suggestions(db, settings, marker) if marker else None
+        return None, None
+    image = api.find_image(stash, member["stash_image_id"]) if member["stash_image_id"] else None
+    return image, image_suggestions(db, settings, image) if image else None
+
+
+def refresh_item_tags(stash: Any, db: Database, settings: Settings, item: dict[str, Any]) -> dict[str, Any]:
+    """Bring an automatic item's tags up to date from Stash (a post's from its members'). Used where the
+    editor isn't involved: sending."""
+    members = repo.set_members(db, item["id"]) if item["kind"] == "set" else [item]
+    fresh = []
+    for m in members:
+        _, sugg = source_suggestions(stash, db, settings, m)
+        fresh.append(refresh_tags(db, m, sugg.active_names() if sugg else None))
+    if item["kind"] == "set":
+        return refresh_tags(db, item, merged_tags(fresh))
+    return fresh[0]
+
+
+
 def item_from_marker(db: Database, settings: Settings, marker: Marker) -> dict[str, Any]:
     """The marker's current (unsent) clip item, creating it with the marker's in/out points if needed."""
     existing = repo.active_for_marker(db, marker.id)
     if existing:
-        return existing
+        return refresh_tags(db, existing, marker_suggestions(db, settings, marker).active_names())
     in_s, out_s = marker_bounds(marker, settings.default_clip_seconds)
     return repo.create_item(
         db, kind="clip", stash_marker_id=marker.id, stash_scene_id=marker.scene.id if marker.scene else None,
@@ -99,7 +146,7 @@ def item_from_image(db: Database, settings: Settings, image: Image) -> dict[str,
         repo.delete_item(db, existing["id"])  # the file changed type in Stash since it was queued
         existing = None
     if existing:
-        return existing
+        return refresh_tags(db, existing, image_suggestions(db, settings, image).active_names())
     tags = image_suggestions(db, settings, image).active_names()
     if kind == "clip":
         f = image.primary_file
@@ -138,12 +185,9 @@ def create_post(db: Database, item_ids: list[str]) -> dict[str, Any]:
     for old in old_sets:
         if repo.get_item(db, old)["status"] in BUSY_STATUSES:  # type: ignore[index]
             raise PostError("Some of those items belong to a post that is being sent.")
-    tags: list[str] = []
-    for m in members:
-        tags += [t for t in m["tags"] if t.lower() not in {x.lower() for x in tags}]
     blogs = {m["blog_id"] for m in members if m["blog_id"]}
     post = repo.create_item(
-        db, kind="set", source_title=members[0]["source_title"], tags=tags[:30],
+        db, kind="set", source_title=members[0]["source_title"], tags=merged_tags(members),
         blog_id=blogs.pop() if len(blogs) == 1 else None,
     )
     with db.transaction() as conn:

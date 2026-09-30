@@ -74,5 +74,48 @@ class OperationsAreWellFormedTest(unittest.TestCase):
                     )
 
 
+class AutomaticTagsTest(unittest.TestCase):
+    """An item's tags follow Stash and the rules until the user edits them (tags_auto)."""
+
+    def setUp(self):
+        self.db = Database(":memory:")
+        self.addCleanup(self.db.close)
+        self.stash = FakeStash()
+
+    def run_op(self, name, **args):
+        ctx = Context({"args": {"mode": name, **args}})
+        ctx._db = self.db
+        ctx._stash = self.stash
+        return send_ops.OPERATIONS[name](ctx)
+
+    def test_new_items_are_automatic_and_follow_suggestions(self):
+        from imaglr_integration import items, services
+
+        item = items.create_item(self.db, kind="image", stash_image_id="1", tags=["sunset"])
+        self.assertTrue(item["tags_auto"])
+        item = services.refresh_tags(self.db, item, ["sunset", "beach"])
+        self.assertEqual(item["tags"], ["sunset", "beach"])
+        self.assertEqual(items.get_item(self.db, item["id"])["tags"], ["sunset", "beach"])
+        # nothing known about the source: leave alone
+        self.assertEqual(services.refresh_tags(self.db, item, None)["tags"], ["sunset", "beach"])
+
+    def test_editing_takes_over_and_refresh_stops(self):
+        from imaglr_integration import items, services
+
+        item = items.create_item(self.db, kind="image", stash_image_id="1", tags=["sunset"])
+        # same tags sent back (e.g. the caption changed): still automatic
+        out = self.run_op("item_update", item_id=item["id"], changes={"tags": ["sunset"], "caption": "hi"})["item"]
+        self.assertTrue(out["tags_auto"])
+        out = self.run_op("item_update", item_id=item["id"], changes={"tags": ["sunset", "mine"]})["item"]
+        self.assertFalse(out["tags_auto"])
+        self.assertEqual(services.refresh_tags(self.db, out, ["sunset", "beach"])["tags"], ["sunset", "mine"])
+
+    def test_post_tags_merge_members(self):
+        from imaglr_integration import services
+
+        merged = services.merged_tags([{"tags": ["Sunset", "beach"]}, {"tags": ["sunset", "sea"]}])
+        self.assertEqual(merged, ["Sunset", "beach", "sea"])
+
+
 if __name__ == "__main__":
     unittest.main()

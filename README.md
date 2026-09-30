@@ -46,7 +46,9 @@ a day; saving a draft doesn't use one, publishing does (including when imaglr pu
    **Draft**, **Queued** or **Published**. The plugin checks the key with imaglr before saving it.
    Repeat for each blog.
 3. Optional: under **Tag rules**, choose Stash tags that should always be sent as different imaglr tags (one Stash
-   tag can become several), or never suggested.
+   tag can become several), or never suggested. Rules apply to everything waiting to be sent, not just new items:
+   an item's tags follow its Stash tags and the rules until you edit them in the editor (there's a link to go
+   back to the suggested tags).
 
 A few more options live in Stash under **Settings → Plugins → Imaglr Integration**: the queue tag (default
 `imaglr`), the tag applied after sending (default `imaglr-sent`), tags never suggested (default `^AI_`), keeping

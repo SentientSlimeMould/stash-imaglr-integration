@@ -551,10 +551,11 @@
       }
     );
   }
-  function TagField({ tags, suggestions, lowercase, disabled, onChange }) {
+  function TagField({ tags, suggestions, lowercase, disabled, auto, onChange, onReset }) {
+    const { Button } = PluginApi.libraries.Bootstrap;
     const [message, setMessage] = react_default.useState(null);
     const spare = spareSuggestions(suggestions, tags);
-    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags-header" }, /* @__PURE__ */ react_default.createElement("label", { htmlFor: "imaglr-tag-field" }, /* @__PURE__ */ react_default.createElement("strong", null, "imaglr tags")), /* @__PURE__ */ react_default.createElement("span", { className: tags.length >= MAX_TAGS ? "text-warning" : "text-muted" }, tags.length, " / ", MAX_TAGS)), /* @__PURE__ */ react_default.createElement(
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags-header" }, /* @__PURE__ */ react_default.createElement("label", { htmlFor: "imaglr-tag-field" }, /* @__PURE__ */ react_default.createElement("strong", null, "imaglr tags")), /* @__PURE__ */ react_default.createElement("span", { className: tags.length >= MAX_TAGS ? "text-warning" : "text-muted" }, tags.length, " / ", MAX_TAGS)), auto === void 0 ? null : auto ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mb-1" }, "From the Stash tags and your tag rules; they keep up with changes until you edit them.") : /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mb-1" }, "Edited by you.", " ", onReset ? /* @__PURE__ */ react_default.createElement(Button, { variant: "link", size: "sm", className: "p-0 align-baseline", disabled, onClick: onReset }, "Use the suggested tags again") : null), /* @__PURE__ */ react_default.createElement(
       TagInput,
       {
         inputId: "imaglr-tag-field",
@@ -616,6 +617,8 @@
     const [action, setAction] = react_default.useState(null);
     const [confirmPublish, setConfirmPublish] = react_default.useState(false);
     const [confirmRemove, setConfirmRemove] = react_default.useState(false);
+    const [tagsAuto, setTagsAuto] = react_default.useState(true);
+    const [resetTags, setResetTags] = react_default.useState(false);
     const [busy, setBusy] = react_default.useState(false);
     const [changed, setChanged] = react_default.useState(false);
     const [dirty, setDirty] = react_default.useState(false);
@@ -623,6 +626,8 @@
       runOperation("item_detail", { item_id: itemId }).then((d) => {
         setDetail(d);
         setTags(d.item.tags);
+        setTagsAuto(d.item.tags_auto);
+        setResetTags(false);
         setCaption(d.item.caption);
         setCrop(d.item.crop);
         setTrim({ inS: d.item.in_s ?? 0, outS: d.item.out_s ?? 0, mute: d.item.mute });
@@ -660,6 +665,7 @@
           crop,
           blog_id: blogId,
           action,
+          ...resetTags ? { tags_auto: true } : {},
           ...isClip ? { in_s: trim.inS, out_s: trim.outS, mute: trim.mute } : {}
         }
       });
@@ -768,7 +774,17 @@
           suggestions: detail.suggestions,
           lowercase: detail.lowercase_tags,
           disabled: locked,
-          onChange: edit(setTags)
+          auto: tagsAuto,
+          onChange: (next) => {
+            edit(setTags)(next);
+            setTagsAuto(false);
+            setResetTags(false);
+          },
+          onReset: () => {
+            edit(setTags)(detail.suggestions.active.map((t) => t.tag));
+            setTagsAuto(true);
+            setResetTags(true);
+          }
         }
       ), /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-3" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Caption ", /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, "(optional)")), /* @__PURE__ */ react_default.createElement(
         Form.Control,

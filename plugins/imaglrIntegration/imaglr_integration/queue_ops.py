@@ -131,23 +131,15 @@ def _item(ctx: Context) -> dict[str, Any]:
 
 def _file_view(ctx: Context, config, member: dict[str, Any]):
     """One file of an item for the editor, plus the tag suggestions its Stash source gives."""
+    source, sugg = services.source_suggestions(ctx.stash, ctx.db, config, member)
     if member["kind"] == "clip" and member["stash_marker_id"]:
-        marker = api.find_marker(ctx.stash, member["stash_marker_id"])
-        card = services.clip_card(member, marker, None)
-        sugg = services.marker_suggestions(ctx.db, config, marker) if marker else None
+        card = services.clip_card(member, source, None)
     elif member["kind"] == "still":
         card = services.still_card(member)
         card["image"] = card["thumb"]
-        source = repo.get_item(ctx.db, member["source_item_id"]) if member["source_item_id"] else None
-        sugg = None
-        if source and source["stash_marker_id"]:
-            marker = api.find_marker(ctx.stash, source["stash_marker_id"])
-            sugg = services.marker_suggestions(ctx.db, config, marker) if marker else None
     else:
-        image = api.find_image(ctx.stash, member["stash_image_id"]) if member["stash_image_id"] else None
-        card = services.image_card(member, image, None)
-        card["image"] = services.relative_url(image.image_url) if image else None
-        sugg = services.image_suggestions(ctx.db, config, image) if image else None
+        card = services.image_card(member, source, None)
+        card["image"] = services.relative_url(source.image_url) if source else None
     card.update({k: member[k] for k in ("crop", "in_s", "out_s", "mute", "stash_marker_id", "stash_scene_id",
                                         "stash_image_id")})
     card["prepared"] = services.prepared_url(member["id"], member["output_path"]) if member["output_path"] else None
@@ -161,10 +153,16 @@ def op_item_detail(ctx: Context) -> dict[str, Any]:
     members = repo.set_members(ctx.db, item["id"]) if item["kind"] == "set" else [item]
     views = [_file_view(ctx, config, m) for m in members]
     suggestions = merge_suggestions([s for _, s in views if s is not None])
+    # Automatic tags follow Stash and the rules: bring them up to date now that the sources are in hand.
+    if item["kind"] == "set":
+        fresh = [services.refresh_tags(ctx.db, m, s.active_names() if s else None) for m, (_, s) in zip(members, views)]
+        item = services.refresh_tags(ctx.db, item, services.merged_tags(fresh))
+    else:
+        item = services.refresh_tags(ctx.db, item, suggestions.active_names() if views[0][1] else None)
     return {
         "item": {k: item[k] for k in ("id", "kind", "status", "tags", "caption", "blog_id", "action", "crop",
                                       "error_code", "error_detail", "progress", "source_title", "in_s", "out_s",
-                                      "mute", "hdr_warning")},
+                                      "mute", "hdr_warning", "tags_auto")},
         "files": [card for card, _ in views],
         "suggestions": suggestions.to_dict(),
         "blogs": [blogs.public(b) for b in blogs.list_blogs(ctx.db)],

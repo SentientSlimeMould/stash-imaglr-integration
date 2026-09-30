@@ -107,6 +107,7 @@ export interface ItemDetail {
     out_s: number | null;
     mute: boolean;
     hdr_warning: boolean;
+    tags_auto: boolean; // tags still follow Stash and the tag rules (never edited)
   };
   files: FileCard[];
   suggestions: import("./lib/types.ts").Suggestions;

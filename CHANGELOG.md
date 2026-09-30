@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.10 — 2026-09-30
+
+- Tag rules (and tag changes made in Stash) now apply to items already waiting, not just newly queued ones. An
+  item's tags follow its Stash tags and the rules until you edit them in the editor; the editor says which is
+  the case and offers "Use the suggested tags again". Refreshed when the list loads, when the editor opens and
+  at send time, so Send all picks up rule changes too.
+
 ## 0.1.9 — 2026-09-30
 
 - Removed the **imaglr** section added to image pages in 0.1.8: images and clips are queued the same way again

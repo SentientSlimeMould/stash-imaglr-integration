@@ -122,6 +122,10 @@ MIGRATIONS = [
       FROM tag_map;
     DROP TABLE tag_map;
     """,
+    # v4: an item's tags follow its Stash tags and the tag rules until the user edits them
+    """
+    ALTER TABLE items ADD COLUMN tags_auto INTEGER NOT NULL DEFAULT 1;
+    """,
 ]
 
 

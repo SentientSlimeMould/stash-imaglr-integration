@@ -13,7 +13,7 @@ import shutil
 import time
 from typing import Any
 
-from . import blogs, log
+from . import blogs, log, services
 from .cleanup import cleanup_prepared
 from . import items as repo
 from . import settings as plugin_settings
@@ -322,6 +322,7 @@ def run_send(ctx: Context, item_id: str) -> None:
         # 2. upload (40-95 %)
         repo.update_item(ctx.db, item_id, status="sending")
         client = ctx.imaglr(blog)
+        item = services.refresh_item_tags(ctx.stash, ctx.db, config, repo.get_item(ctx.db, item_id) or item)
         tags = list(item["tags"])[:30]
 
         def progress(fraction: float) -> None:

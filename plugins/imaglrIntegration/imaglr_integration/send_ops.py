@@ -65,6 +65,15 @@ def op_item_update(ctx: Context) -> dict[str, Any]:
     changes = {k: v for k, v in (ctx.args.get("changes") or {}).items() if k in EDITABLE}
     if "tags" in changes:
         changes["tags"] = _clean_tags(changes["tags"], not plugin_settings.load(ctx.stash).keep_tag_case)
+        if changes["tags"] != item["tags"]:
+            changes["tags_auto"] = False  # the user has taken over; rules and Stash tags no longer flow through
+    if (ctx.args.get("changes") or {}).get("tags_auto") is True:
+        # Back to automatic: the current suggestions replace the edited list.
+        config = plugin_settings.load(ctx.stash)
+        fresh = services.refresh_item_tags(ctx.stash, ctx.db, config, repo.update_item(ctx.db, item["id"], tags_auto=True) or item)
+        changes.pop("tags", None)
+        changes.pop("tags_auto", None)
+        item = fresh
     if "caption" in changes:
         changes["caption"] = str(changes["caption"] or "")[:10000]
     if "blog_id" in changes and changes["blog_id"] is not None:
