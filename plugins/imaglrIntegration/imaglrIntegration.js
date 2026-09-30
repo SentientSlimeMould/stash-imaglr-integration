@@ -115,47 +115,6 @@
     PluginApi.patch.instead("FilteredImageList", (props, _context, Original) => /* @__PURE__ */ react_default.createElement(ImageListWithImaglr, { props, Original }));
   }
 
-  // src/ui/imagePageActions.tsx
-  function ImaglrSection({ image }) {
-    const { Button } = PluginApi.libraries.Bootstrap;
-    const { Link } = PluginApi.libraries.ReactRouterDOM;
-    const Toast = PluginApi.hooks.useToast();
-    const [status, setStatus] = react_default.useState(null);
-    const [busy, setBusy] = react_default.useState(false);
-    react_default.useEffect(() => {
-      let live = true;
-      runOperation("image_status", { image_id: image.id }).then((s) => live && setStatus(s), () => void 0);
-      return () => {
-        live = false;
-      };
-    }, [image.id]);
-    async function add() {
-      setBusy(true);
-      try {
-        const result = await runOperation("add_images", { image_ids: [image.id], as_one_post: false });
-        const s = await runOperation("image_status", { image_id: image.id });
-        setStatus(s);
-        Toast.success(result.added ? "Added to imaglr." : "Already on the Post to imaglr page.");
-      } catch (e) {
-        Toast.error(e);
-      } finally {
-        setBusy(false);
-      }
-    }
-    if (!status) return null;
-    const has = (name) => image.tags.some((t) => t.name.toLowerCase() === name.toLowerCase());
-    let body;
-    if (status.card_id) {
-      body = /* @__PURE__ */ react_default.createElement(Link, { to: `${ROUTE}?tab=images&open=${status.card_id}` }, "Waiting to be sent \u2014 open");
-    } else {
-      body = /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", size: "sm", disabled: busy, onClick: add }, "Add to imaglr"), has(status.sent_tag) ? /* @__PURE__ */ react_default.createElement("span", { className: "text-muted ml-2" }, "Sent before.") : null);
-    }
-    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-image-section" }, /* @__PURE__ */ react_default.createElement("h6", null, "imaglr"), body);
-  }
-  function patchImagePage() {
-    PluginApi.patch.instead("ImageDetailPanel", (props, _context, Original) => /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Original, { ...props }), /* @__PURE__ */ react_default.createElement(ImaglrSection, { image: props.image })));
-  }
-
   // src/ui/icon.ts
   var PATH = "M256 32A224 224 0 1 0 256 480A224 224 0 1 0 256 32ZM256 96A160 160 0 1 1 256 416A160 160 0 1 1 256 96ZM256 144A112 112 0 1 0 256 368A112 112 0 1 0 256 144ZM310 181A34 34 0 1 1 310 249A34 34 0 1 1 310 181Z";
   var imaglrIcon = {
@@ -2023,5 +1982,4 @@
     }
   ]);
   patchImageLists();
-  patchImagePage();
 })();

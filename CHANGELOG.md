@@ -1,10 +1,9 @@
 # Changelog
 
-## 0.1.8 — 2026-09-30
+## 0.1.9 — 2026-09-30
 
-- An image's own page gets an **imaglr** section under its details: **Add to imaglr**, or a link to the waiting
-  post once it's queued (the same action as the image lists' ⋯ menu; Stash doesn't let plugins add to the page's
-  ⋯ menu itself).
+- Removed the **imaglr** section added to image pages in 0.1.8: images and clips are queued the same way again
+  (the `imaglr` tag, or the image lists' ⋯ menu).
 
 ## 0.1.7 — 2026-09-30
 

@@ -353,11 +353,3 @@
 .imaglr-plan {
   padding-left: 1.2rem;
 }
-.imaglr-image-section {
-  margin-top: 1rem;
-}
-@media (max-width: 575.98px) {
-  .imaglr-image-section {
-    margin-bottom: 4rem;
-  }
-}

@@ -104,22 +104,6 @@ def op_add_gallery(ctx: Context) -> dict[str, Any]:
     return _add_images(ctx, ids, True)
 
 
-def op_image_status(ctx: Context) -> dict[str, Any]:
-    """For the "imaglr" section on an image's page: the card to open if the image is waiting (a member's
-    post if it is in one), and the workflow tag names so the page can tell from the image's own tags."""
-    config, (queue_tag, done_tag) = _workflow(ctx)
-    image_id = ctx.arg("image_id")
-    item = repo.active_for_image(ctx.db, image_id)
-    if item is None:
-        # Tagged but not picked up yet (the page does that on its next refresh): pick it up now, so the
-        # link can open the editor straight away.
-        image = api.find_image(ctx.stash, image_id)
-        if image and any(t.id == queue_tag.id for t in image.tags):
-            item = services.item_from_image(ctx.db, config, image)
-    card_id = (repo.set_of(ctx.db, item["id"]) or item["id"]) if item else None
-    return {"card_id": card_id, "queue_tag": queue_tag.name, "sent_tag": done_tag.name}
-
-
 def op_post_create(ctx: Context) -> dict[str, Any]:
     ids = ctx.args.get("item_ids")
     if not isinstance(ids, list):
@@ -233,7 +217,6 @@ def op_remove_from_queue(ctx: Context) -> dict[str, Any]:
 
 OPERATIONS = {
     "item_detail": op_item_detail,
-    "image_status": op_image_status,
     "post_arrange": op_post_arrange,
     "remove_from_queue": op_remove_from_queue,
     "queue": op_queue,
