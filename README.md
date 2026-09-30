@@ -18,7 +18,9 @@ your [imaglr](https://imaglr.com) blogs.
 ## Requirements
 
 - **Stash v0.31.1 or later.** The official Docker image has everything the plugin needs. Other installs need
-  **Python 3.9 or later** available to Stash (Settings → System → **Python executable path**); no extra Python packages are needed.
+  **Python 3.9 or later** available to Stash (Settings → System → **Python executable path**); no extra Python
+  packages are needed. On macOS with Python from python.org, run its **Install Certificates.command** once,
+  or HTTPS to imaglr fails with a certificate error.
 - **An imaglr API key** for each blog you want to post to. imaglr's API is currently only available to
   [paid supporters](https://imaglr.com/subscriptions) (see [imaglr's API page](https://imaglr.com/developers)).
   Create the key on imaglr under **Settings → API** with these permissions:
@@ -76,8 +78,8 @@ Sending runs as a Stash task, so it also shows on Stash's **Settings → Tasks**
 
 **In Stash** it only ever:
 
-- creates the queue tag and the sent tag (`imaglr`, `imaglr-sent`) if they don't exist, reusing existing tags
-  whatever their capitalisation;
+- creates the queue tag and the sent tag (`imaglr`, `imaglr-sent`) if they don't exist, reusing an existing tag
+  with that name (whatever its capitalisation) or with that name as an alias;
 - adds the queue tag to images you choose **Add to imaglr** for, and removes it when you choose **Remove "imaglr"
   tag**;
 - swaps the queue tag for the sent tag on markers and images you've sent;
