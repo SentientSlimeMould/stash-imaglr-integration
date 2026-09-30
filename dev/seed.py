@@ -239,7 +239,7 @@ def demo(stash):
         )
     print(f"  metadata: {len(scenes)} films, {markers} new markers, {len(images)} images")
     # no "Release Notes" popup in recordings
-    stash.gql("mutation { configureUI(input: {lastNoteSeen: 4102444800000}) { lastNoteSeen } }")
+    stash.gql("mutation { configureUI(input: {lastNoteSeen: 4102444800000}) }")
     scene_ids = [s["id"] for s in scenes]
     job = stash.gql(
         """mutation($scenes: [ID!]) { metadataGenerate(input: {
