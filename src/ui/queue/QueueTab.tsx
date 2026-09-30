@@ -4,11 +4,12 @@
 import React from "react";
 import { runOperation } from "../api.ts";
 import { Editor } from "../editor/Editor.tsx";
-import { applyControls, cardWidth, loadControls, saveControls, type QueueControlsState } from "../lib/sort.ts";
+import { applyControls, cardWidth, loadControls, paginate, saveControls, type QueueControlsState } from "../lib/sort.ts";
 import { MAX_POST_FILES } from "../lib/imageActions.ts";
 import { STATUS_LABELS, STATUS_VARIANTS, type Card, type QueueResponse } from "../model.ts";
 import { ROUTE } from "../routes.ts";
 import { CardImage, cardDetail, CardOverlays, FallbackCard } from "./ItemCard.tsx";
+import { Pager } from "./Paging.tsx";
 import { SendAllDialog } from "./SendAllDialog.tsx";
 import { Toolbar, type SelectionAction } from "./Toolbar.tsx";
 
@@ -59,13 +60,14 @@ export function QueueTab({ tab, openId, data, error, load }: { tab: "clips" | "i
   const { LoadingIndicator } = PluginApi.components;
   const Toast = PluginApi.hooks.useToast();
   const history = useHistory();
-  // Stash's GridCard is loaded on demand; SceneCard's module brings it in.
-  const loading = PluginApi.hooks.useLoadComponents([PluginApi.loadableComponents.SceneCard]);
+  // Stash's GridCard and Pagination are loaded on demand; these modules bring them in.
+  const loading = PluginApi.hooks.useLoadComponents([PluginApi.loadableComponents.SceneCard, PluginApi.loadableComponents.Images]);
   const GridCard = loading ? null : PluginApi.components.GridCard;
 
   const [controls, setControls] = React.useState<QueueControlsState>(() => loadControls(tab));
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [sendAll, setSendAll] = React.useState<string[] | null>(null);
+  const [page, setPage] = React.useState(1);
   const box = React.useRef<HTMLDivElement>(null);
   const width = useContainerWidth(box);
   const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 576px)").matches;
@@ -73,10 +75,13 @@ export function QueueTab({ tab, openId, data, error, load }: { tab: "clips" | "i
   function updateControls(next: QueueControlsState) {
     setControls(next);
     saveControls(tab, next);
+    setPage(1);
   }
 
   const all = data?.items.filter((c) => c.tab === tab) ?? [];
-  const items = applyControls(all, controls);
+  const matching = applyControls(all, controls);
+  const paged = paginate(matching, page, controls.perPage);
+  const items = paged.items;
 
   // Drop selections that no longer exist after a reload.
   React.useEffect(() => {
@@ -149,7 +154,7 @@ export function QueueTab({ tab, openId, data, error, load }: { tab: "clips" | "i
     body = LoadingIndicator ? <LoadingIndicator /> : <p className="text-muted">Loading…</p>;
   } else if (all.length === 0) {
     body = <div className="imaglr-empty text-muted">{EMPTY[tab](data.tags.queue.name)}</div>;
-  } else if (items.length === 0) {
+  } else if (matching.length === 0) {
     body = <p className="text-muted imaglr-empty">Nothing matches these filters.</p>;
   } else if (controls.view === "list") {
     body = (
@@ -209,17 +214,16 @@ export function QueueTab({ tab, openId, data, error, load }: { tab: "clips" | "i
         selected={selected.size}
         selectionActions={selectionActions}
         onChange={updateControls}
-        onSelectAll={() => setSelected(new Set(items.map((c) => c.id)))}
+        onSelectAll={() => setSelected(new Set(matching.map((c) => c.id)))}
         onSelectNone={() => setSelected(new Set())}
         onRefresh={load}
-        onSendAll={items.length ? () => setSendAll(selected.size ? [...selected] : items.map((c) => c.id)) : undefined}
+        onSendAll={matching.length ? () => setSendAll(selected.size ? [...selected] : matching.map((c) => c.id)) : undefined}
       />
-      {data && all.length ? (
-        <div className="imaglr-count text-center text-muted">
-          {items.length === all.length ? `${all.length} ${all.length === 1 ? "item" : "items"}` : `${items.length} of ${all.length}`}
-        </div>
-      ) : null}
       {body}
+      {matching.length ? (
+        <Pager page={paged.page} perPage={controls.perPage} total={matching.length}
+          onChange={(p) => { setPage(p); window.scrollTo({ top: 0 }); }} />
+      ) : null}
       {sendAll ? (
         <SendAllDialog itemIds={sendAll} selected={selected.size > 0} onClose={(sent) => {
           setSendAll(null);

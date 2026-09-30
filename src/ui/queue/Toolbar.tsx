@@ -6,6 +6,7 @@ import React from "react";
 import { filterCount, formatsIn, SORTS, ZOOM_WIDTHS, type Orientation, type QueueControlsState, type StatusFilter } from "../lib/sort.ts";
 import type { Candidate } from "../lib/types.ts";
 import { STATUS_LABELS } from "../model.ts";
+import { PageSizeSelect } from "./Paging.tsx";
 
 export interface SelectionAction {
   text: string;
@@ -219,6 +220,7 @@ export function Toolbar(props: Props) {
               </Button>
             </ButtonGroup>
             <SortBySelect tab={props.tab} controls={controls} onChange={onChange} />
+            <PageSizeSelect value={controls.perPage} onChange={(perPage) => onChange({ ...controls, perPage })} />
           </>
         )}
         <ButtonGroup className="list-operations">

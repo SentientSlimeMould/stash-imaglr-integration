@@ -12,7 +12,7 @@ import os
 
 from typing import Any
 
-from . import blogs, jobs
+from . import blogs, jobs, services
 from . import settings as plugin_settings
 from . import items as repo
 from .cleanup import cleanup_prepared
@@ -237,9 +237,21 @@ def op_retry_follow_up(ctx: Context) -> dict[str, Any]:
         raise UserError(e.detail) from None
 
 
+def _thumb(member: dict[str, Any]) -> str | None:
+    """A thumbnail URL (relative to Stash's base) that needs no lookup: Stash's URLs for images and
+    marker screenshots are predictable, and a still's grabbed frame is served by the plugin."""
+    if member["stash_image_id"]:
+        return f"image/{member['stash_image_id']}/thumbnail"
+    if member["stash_marker_id"] and member["stash_scene_id"]:
+        return f"scene/{member['stash_scene_id']}/scene_marker/{member['stash_marker_id']}/screenshot"
+    if member["kind"] == "still" and member["source_path"] and os.path.isfile(member["source_path"]):
+        return services.prepared_url(member["id"], member["source_path"])
+    return None
+
+
 def _sent_view(ctx: Context, item: dict[str, Any], blog_names: dict[int, str]) -> dict[str, Any]:
     members = repo.set_members(ctx.db, item["id"]) if item["kind"] == "set" else [item]
-    thumbs = [f"image/{m['stash_image_id']}/thumbnail" for m in members if m["stash_image_id"]]
+    thumbs = [t for t in (_thumb(m) for m in members) if t]
     return {
         "id": item["id"],
         "kind": item["kind"],
@@ -262,11 +274,16 @@ def _sent_view(ctx: Context, item: dict[str, Any], blog_names: dict[int, str]) -
 
 
 def op_sent_list(ctx: Context) -> dict[str, Any]:
-    members = repo.members_index(ctx.db)
+    """One page of sent posts, newest first (files inside a post are listed under the post)."""
+    per_page = min(max(int(ctx.args.get("per_page") or 40), 1), 1000)
+    page = max(int(ctx.args.get("page") or 1), 1)
     names = {b["id"]: b["name"] or f"Blog {b['id']}" for b in blogs.list_blogs(ctx.db)}
-    rows = ctx.db.fetchall("SELECT * FROM items WHERE status='sent' ORDER BY sent_at DESC LIMIT ?",
-                           (int(ctx.args.get("limit") or 200),))
-    return {"items": [_sent_view(ctx, repo.decode(r), names) for r in rows if r["id"] not in members]}
+    where = "status='sent' AND id NOT IN (SELECT item_id FROM set_members)"
+    total = ctx.db.fetchone(f"SELECT COUNT(*) AS n FROM items WHERE {where}")["n"]
+    rows = ctx.db.fetchall(f"SELECT * FROM items WHERE {where} ORDER BY sent_at DESC LIMIT ? OFFSET ?",
+                           (per_page, (page - 1) * per_page))
+    return {"items": [_sent_view(ctx, repo.decode(r), names) for r in rows], "total": total,
+            "page": page, "per_page": per_page}
 
 
 def _rules(ctx: Context) -> dict[str, Any]:

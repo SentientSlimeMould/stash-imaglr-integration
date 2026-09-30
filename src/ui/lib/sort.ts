@@ -22,12 +22,24 @@ export interface QueueControlsState {
   orientation: Orientation;
   view: ViewMode;
   zoom: number; // index into ZOOM_WIDTHS, like Stash's zoom slider
+  perPage: number;
 }
 
 export const DEFAULTS: QueueControlsState = {
   sort: "added", dir: "desc", search: "", status: "all", types: [], orientation: "any",
-  view: "grid", zoom: 1,
+  view: "grid", zoom: 1, perPage: 40,
 };
+
+/** Stash's page-size choices (ui/v2.5/src/components/List/ListFilter.tsx). */
+export const PAGE_SIZES = [20, 40, 60, 120, 250, 500, 1000];
+
+/** The items on one page, and the page actually shown (clamped when the list shrinks). */
+export function paginate<T>(list: T[], page: number, perPage: number): { items: T[]; page: number; pages: number } {
+  const size = Math.max(1, perPage);
+  const pages = Math.max(1, Math.ceil(list.length / size));
+  const current = Math.min(Math.max(1, page), pages);
+  return { items: list.slice((current - 1) * size, current * size), page: current, pages };
+}
 
 export const SORTS: Record<"clips" | "images", { key: SortKey; label: string }[]> = {
   clips: [
@@ -109,6 +121,7 @@ export function loadControls(tab: string, storage?: ControlsStorage): QueueContr
     if (raw) {
       const saved = { ...DEFAULTS, ...JSON.parse(raw) } as QueueControlsState;
       saved.zoom = Math.min(Math.max(Number(saved.zoom) || 0, 0), ZOOM_WIDTHS.length - 1);
+      saved.perPage = Math.max(1, Math.floor(Number(saved.perPage))) || DEFAULTS.perPage;
       return saved;
     }
   } catch { /* ignore */ }

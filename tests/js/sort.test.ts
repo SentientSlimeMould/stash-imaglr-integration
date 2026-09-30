@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  applyControls, cardWidth, DEFAULTS, filterCount, formatsIn, loadControls, orientationOf, saveControls,
+  applyControls, cardWidth, DEFAULTS, filterCount, formatsIn, loadControls, orientationOf, paginate, saveControls,
 } from "../../src/ui/lib/sort.ts";
 import type { Candidate } from "../../src/ui/lib/types.ts";
 
@@ -92,4 +92,12 @@ test("filter count and card width follow Stash", () => {
   assert.equal(filterCount({ ...DEFAULTS, status: "failed", orientation: "portrait" }), 2);
   assert.equal(cardWidth(0, 1), 340);
   assert.equal(Math.round(cardWidth(1230, 1)), 290); // 4 per row in a 1200px usable width
+});
+
+test("pagination slices and clamps the page when the list shrinks", () => {
+  const list = Array.from({ length: 45 }, (_, i) => i);
+  assert.deepEqual(paginate(list, 2, 20), { items: list.slice(20, 40), page: 2, pages: 3 });
+  assert.deepEqual(paginate(list, 9, 20).page, 3);
+  assert.deepEqual(paginate([], 3, 20), { items: [], page: 1, pages: 1 });
+  assert.equal(loadControls("x", { getItem: () => JSON.stringify({ perPage: "abc" }), setItem: () => undefined }).perPage, 40);
 });

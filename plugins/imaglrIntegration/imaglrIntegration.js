@@ -800,8 +800,16 @@
     types: [],
     orientation: "any",
     view: "grid",
-    zoom: 1
+    zoom: 1,
+    perPage: 40
   };
+  var PAGE_SIZES = [20, 40, 60, 120, 250, 500, 1e3];
+  function paginate(list, page, perPage) {
+    const size = Math.max(1, perPage);
+    const pages = Math.max(1, Math.ceil(list.length / size));
+    const current = Math.min(Math.max(1, page), pages);
+    return { items: list.slice((current - 1) * size, current * size), page: current, pages };
+  }
   var SORTS = {
     clips: [
       { key: "added", label: "Added" },
@@ -896,6 +904,7 @@
       if (raw) {
         const saved = { ...DEFAULTS, ...JSON.parse(raw) };
         saved.zoom = Math.min(Math.max(Number(saved.zoom) || 0, 0), ZOOM_WIDTHS.length - 1);
+        saved.perPage = Math.max(1, Math.floor(Number(saved.perPage))) || DEFAULTS.perPage;
         return saved;
       }
     } catch {
@@ -949,6 +958,42 @@
   function FallbackCard({ card, url, width }) {
     const { Link } = PluginApi.libraries.ReactRouterDOM;
     return /* @__PURE__ */ react_default.createElement("div", { className: "card grid-card image-card imaglr-grid-card", style: width ? { width } : void 0 }, /* @__PURE__ */ react_default.createElement("div", { className: "thumbnail-section" }, /* @__PURE__ */ react_default.createElement(Link, { to: url, className: "image-card-link" }, /* @__PURE__ */ react_default.createElement(CardImage, { card })), /* @__PURE__ */ react_default.createElement(CardOverlays, { card })), /* @__PURE__ */ react_default.createElement("div", { className: "card-section" }, /* @__PURE__ */ react_default.createElement(Link, { to: url }, /* @__PURE__ */ react_default.createElement("h5", { className: "card-section-title" }, card.title)), /* @__PURE__ */ react_default.createElement("div", { className: "image-card__details" }, /* @__PURE__ */ react_default.createElement("span", null, cardDetail(card)))));
+  }
+
+  // src/ui/queue/Paging.tsx
+  function PageSizeSelect({ value, onChange }) {
+    const { Form } = PluginApi.libraries.Bootstrap;
+    const options = PAGE_SIZES.includes(value) ? PAGE_SIZES : [...PAGE_SIZES, value].sort((a, b) => a - b);
+    return /* @__PURE__ */ react_default.createElement("div", { className: "page-count-container" }, /* @__PURE__ */ react_default.createElement(
+      Form.Control,
+      {
+        as: "select",
+        className: "btn-secondary",
+        value: String(value),
+        "aria-label": "Items per page",
+        onChange: (e) => {
+          if (e.target.value === "custom") {
+            const typed = Number(window.prompt("Items per page", String(value)));
+            if (typed > 0) onChange(Math.floor(typed));
+            return;
+          }
+          onChange(Number(e.target.value));
+        }
+      },
+      options.map((n) => /* @__PURE__ */ react_default.createElement("option", { key: n, value: n }, n)),
+      /* @__PURE__ */ react_default.createElement("option", { value: "custom" }, "Custom\u2026")
+    ));
+  }
+  function Pager({ page, perPage, total, onChange }) {
+    const { Pagination, PaginationIndex } = PluginApi.components;
+    const { Button, ButtonGroup } = PluginApi.libraries.Bootstrap;
+    const pages = Math.max(1, Math.ceil(total / perPage));
+    if (total === 0) return null;
+    if (Pagination && PaginationIndex) {
+      return /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(PaginationIndex, { itemsPerPage: perPage, currentPage: page, totalItems: total }), /* @__PURE__ */ react_default.createElement(Pagination, { itemsPerPage: perPage, currentPage: page, totalItems: total, onChangePage: onChange }));
+    }
+    const first = (page - 1) * perPage + 1;
+    return /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("div", { className: "text-center text-muted" }, first, "-", Math.min(page * perPage, total), " of ", total), pages > 1 ? /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "pagination" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled: page <= 1, onClick: () => onChange(page - 1) }, "\u2039"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled: true }, page, " / ", pages), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled: page >= pages, onClick: () => onChange(page + 1) }, "\u203A")) : null);
   }
 
   // src/ui/lib/sendAll.ts
@@ -1179,7 +1224,7 @@
     const count = filterCount(controls);
     const buttons = selected ? selectionActions.filter((a) => a.primary) : [];
     const menu = selected ? selectionActions.filter((a) => !a.primary) : [];
-    return /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(ButtonToolbar, { className: `filtered-list-toolbar${selected ? " has-selection" : ""}` }, selected ? /* @__PURE__ */ react_default.createElement("div", { className: "selected-items-info" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", className: "minimal", title: "Select none", onClick: props.onSelectNone }, icon("faTimes")), /* @__PURE__ */ react_default.createElement("span", { className: "selected-count" }, selected), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", className: "minimal", title: "Select all", onClick: props.onSelectAll }, icon("faSquareCheck"))) : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(SearchInput, { value: controls.search, onChange: (search) => onChange({ ...controls, search }) }), /* @__PURE__ */ react_default.createElement(ButtonGroup, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", className: "filter-button", title: "Filter", onClick: () => setShowFilter(true) }, icon("faFilter"), count ? /* @__PURE__ */ react_default.createElement(Badge, { pill: true, variant: "info" }, count) : null)), /* @__PURE__ */ react_default.createElement(SortBySelect, { tab: props.tab, controls, onChange })), /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "list-operations" }, props.onSendAll ? /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: props.onSendAll }, selected ? "Send selected" : "Send all") : null, buttons.map((a) => /* @__PURE__ */ react_default.createElement(Button, { key: a.text, variant: a.danger ? "danger" : "secondary", disabled: a.disabled, onClick: a.onClick }, a.text)), /* @__PURE__ */ react_default.createElement(Dropdown, { as: ButtonGroup }, /* @__PURE__ */ react_default.createElement(Dropdown.Toggle, { variant: "secondary", id: "imaglr-more", "aria-label": "More" }, icon("faEllipsisH")), /* @__PURE__ */ react_default.createElement(Dropdown.Menu, { className: "bg-secondary text-white" }, /* @__PURE__ */ react_default.createElement(Dropdown.Item, { className: "bg-secondary text-white", onClick: props.onSelectAll }, "Select all"), selected ? /* @__PURE__ */ react_default.createElement(Dropdown.Item, { className: "bg-secondary text-white", onClick: props.onSelectNone }, "Select none") : null, menu.map((a) => /* @__PURE__ */ react_default.createElement(Dropdown.Item, { key: a.text, className: "bg-secondary text-white", disabled: a.disabled, onClick: a.onClick }, a.text)), /* @__PURE__ */ react_default.createElement(Dropdown.Item, { className: "bg-secondary text-white", onClick: props.onRefresh }, "Refresh")))), /* @__PURE__ */ react_default.createElement(ViewButtons, { controls, onChange })), /* @__PURE__ */ react_default.createElement(FilterTags, { controls, onChange }), showFilter ? /* @__PURE__ */ react_default.createElement(FilterDialog, { tab: props.tab, controls, items: props.items, onChange, onClose: () => setShowFilter(false) }) : null);
+    return /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(ButtonToolbar, { className: `filtered-list-toolbar${selected ? " has-selection" : ""}` }, selected ? /* @__PURE__ */ react_default.createElement("div", { className: "selected-items-info" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", className: "minimal", title: "Select none", onClick: props.onSelectNone }, icon("faTimes")), /* @__PURE__ */ react_default.createElement("span", { className: "selected-count" }, selected), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", className: "minimal", title: "Select all", onClick: props.onSelectAll }, icon("faSquareCheck"))) : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(SearchInput, { value: controls.search, onChange: (search) => onChange({ ...controls, search }) }), /* @__PURE__ */ react_default.createElement(ButtonGroup, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", className: "filter-button", title: "Filter", onClick: () => setShowFilter(true) }, icon("faFilter"), count ? /* @__PURE__ */ react_default.createElement(Badge, { pill: true, variant: "info" }, count) : null)), /* @__PURE__ */ react_default.createElement(SortBySelect, { tab: props.tab, controls, onChange }), /* @__PURE__ */ react_default.createElement(PageSizeSelect, { value: controls.perPage, onChange: (perPage) => onChange({ ...controls, perPage }) })), /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "list-operations" }, props.onSendAll ? /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: props.onSendAll }, selected ? "Send selected" : "Send all") : null, buttons.map((a) => /* @__PURE__ */ react_default.createElement(Button, { key: a.text, variant: a.danger ? "danger" : "secondary", disabled: a.disabled, onClick: a.onClick }, a.text)), /* @__PURE__ */ react_default.createElement(Dropdown, { as: ButtonGroup }, /* @__PURE__ */ react_default.createElement(Dropdown.Toggle, { variant: "secondary", id: "imaglr-more", "aria-label": "More" }, icon("faEllipsisH")), /* @__PURE__ */ react_default.createElement(Dropdown.Menu, { className: "bg-secondary text-white" }, /* @__PURE__ */ react_default.createElement(Dropdown.Item, { className: "bg-secondary text-white", onClick: props.onSelectAll }, "Select all"), selected ? /* @__PURE__ */ react_default.createElement(Dropdown.Item, { className: "bg-secondary text-white", onClick: props.onSelectNone }, "Select none") : null, menu.map((a) => /* @__PURE__ */ react_default.createElement(Dropdown.Item, { key: a.text, className: "bg-secondary text-white", disabled: a.disabled, onClick: a.onClick }, a.text)), /* @__PURE__ */ react_default.createElement(Dropdown.Item, { className: "bg-secondary text-white", onClick: props.onRefresh }, "Refresh")))), /* @__PURE__ */ react_default.createElement(ViewButtons, { controls, onChange })), /* @__PURE__ */ react_default.createElement(FilterTags, { controls, onChange }), showFilter ? /* @__PURE__ */ react_default.createElement(FilterDialog, { tab: props.tab, controls, items: props.items, onChange, onClose: () => setShowFilter(false) }) : null);
   }
 
   // src/ui/queue/QueueTab.tsx
@@ -1205,20 +1250,24 @@
     const { LoadingIndicator } = PluginApi.components;
     const Toast = PluginApi.hooks.useToast();
     const history = useHistory();
-    const loading = PluginApi.hooks.useLoadComponents([PluginApi.loadableComponents.SceneCard]);
+    const loading = PluginApi.hooks.useLoadComponents([PluginApi.loadableComponents.SceneCard, PluginApi.loadableComponents.Images]);
     const GridCard = loading ? null : PluginApi.components.GridCard;
     const [controls, setControls] = react_default.useState(() => loadControls(tab));
     const [selected, setSelected] = react_default.useState(/* @__PURE__ */ new Set());
     const [sendAll, setSendAll] = react_default.useState(null);
+    const [page, setPage] = react_default.useState(1);
     const box = react_default.useRef(null);
     const width = useContainerWidth(box);
     const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 576px)").matches;
     function updateControls(next) {
       setControls(next);
       saveControls(tab, next);
+      setPage(1);
     }
     const all = data?.items.filter((c) => c.tab === tab) ?? [];
-    const items = applyControls(all, controls);
+    const matching = applyControls(all, controls);
+    const paged = paginate(matching, page, controls.perPage);
+    const items = paged.items;
     react_default.useEffect(() => {
       setSelected((s) => new Set([...s].filter((id) => all.some((c) => c.id === id))));
     }, [data]);
@@ -1280,7 +1329,7 @@
       body = LoadingIndicator ? /* @__PURE__ */ react_default.createElement(LoadingIndicator, null) : /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Loading\u2026");
     } else if (all.length === 0) {
       body = /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-empty text-muted" }, EMPTY[tab](data.tags.queue.name));
-    } else if (items.length === 0) {
+    } else if (matching.length === 0) {
       body = /* @__PURE__ */ react_default.createElement("p", { className: "text-muted imaglr-empty" }, "Nothing matches these filters.");
     } else if (controls.view === "list") {
       body = /* @__PURE__ */ react_default.createElement(Table, { striped: true, bordered: true, size: "sm", className: "imaglr-table" }, /* @__PURE__ */ react_default.createElement("tbody", null, items.map((c) => /* @__PURE__ */ react_default.createElement("tr", { key: c.id }, /* @__PURE__ */ react_default.createElement("td", { className: "select-col" }, /* @__PURE__ */ react_default.createElement(
@@ -1324,12 +1373,23 @@
         selected: selected.size,
         selectionActions,
         onChange: updateControls,
-        onSelectAll: () => setSelected(new Set(items.map((c) => c.id))),
+        onSelectAll: () => setSelected(new Set(matching.map((c) => c.id))),
         onSelectNone: () => setSelected(/* @__PURE__ */ new Set()),
         onRefresh: load,
-        onSendAll: items.length ? () => setSendAll(selected.size ? [...selected] : items.map((c) => c.id)) : void 0
+        onSendAll: matching.length ? () => setSendAll(selected.size ? [...selected] : matching.map((c) => c.id)) : void 0
       }
-    ), data && all.length ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-count text-center text-muted" }, items.length === all.length ? `${all.length} ${all.length === 1 ? "item" : "items"}` : `${items.length} of ${all.length}`) : null, body, sendAll ? /* @__PURE__ */ react_default.createElement(SendAllDialog, { itemIds: sendAll, selected: selected.size > 0, onClose: (sent) => {
+    ), body, matching.length ? /* @__PURE__ */ react_default.createElement(
+      Pager,
+      {
+        page: paged.page,
+        perPage: controls.perPage,
+        total: matching.length,
+        onChange: (p) => {
+          setPage(p);
+          window.scrollTo({ top: 0 });
+        }
+      }
+    ) : null, sendAll ? /* @__PURE__ */ react_default.createElement(SendAllDialog, { itemIds: sendAll, selected: selected.size > 0, onClose: (sent) => {
       setSendAll(null);
       if (sent) {
         setSelected(/* @__PURE__ */ new Set());
@@ -1349,14 +1409,25 @@
 
   // src/ui/sent/SentTab.tsx
   function SentTab() {
-    const { Button, Badge } = PluginApi.libraries.Bootstrap;
+    const { Button, Badge, ButtonToolbar } = PluginApi.libraries.Bootstrap;
     const { LoadingIndicator } = PluginApi.components;
     const Toast = PluginApi.hooks.useToast();
-    const [items, setItems] = react_default.useState(null);
+    PluginApi.hooks.useLoadComponents([PluginApi.loadableComponents.Images]);
+    const [perPage, setPerPage] = react_default.useState(() => loadControls("sent").perPage);
+    const [page, setPage] = react_default.useState(1);
+    const [data, setData] = react_default.useState(null);
     const load = react_default.useCallback(() => {
-      runOperation("sent_list").then((r) => setItems(r.items), (e) => Toast.error(e));
-    }, []);
+      runOperation("sent_list", { page, per_page: perPage }).then((r) => {
+        setData(r);
+        if (r.page !== page) setPage(r.page);
+      }, (e) => Toast.error(e));
+    }, [page, perPage]);
     react_default.useEffect(load, [load]);
+    function changePerPage(size) {
+      setPerPage(size);
+      saveControls("sent", { ...loadControls("sent"), perPage: size });
+      setPage(1);
+    }
     async function retry(item) {
       try {
         await runOperation("retry_follow_up", { item_id: item.id });
@@ -1374,9 +1445,11 @@
         Toast.error(e);
       }
     }
-    if (!items) return LoadingIndicator ? /* @__PURE__ */ react_default.createElement(LoadingIndicator, null) : /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Loading\u2026");
-    if (!items.length) return /* @__PURE__ */ react_default.createElement("p", { className: "text-muted imaglr-empty" }, "Nothing sent yet.");
-    return /* @__PURE__ */ react_default.createElement("ul", { className: "imaglr-sent" }, items.map((item) => /* @__PURE__ */ react_default.createElement("li", { key: item.id, className: "imaglr-sent-row card" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-sent-thumb" }, item.thumb ? /* @__PURE__ */ react_default.createElement("img", { src: baseUrl() + item.thumb, alt: "", loading: "lazy" }) : null), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-sent-body" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-card-title" }, item.title, item.files > 1 ? /* @__PURE__ */ react_default.createElement("span", { className: "text-muted" }, " + ", item.files - 1, " more") : null), /* @__PURE__ */ react_default.createElement("div", { className: "small" }, /* @__PURE__ */ react_default.createElement(Badge, { variant: item.sent_as === "publish" ? "success" : "primary" }, SENT_AS_LABELS[item.sent_as]), " ", item.blog ? `on ${item.blog}` : null, " \xB7 ", fmtDate(item.sent_at), " \xB7", " ", /* @__PURE__ */ react_default.createElement("a", { href: imaglrLink(item.sent_as, item.post_url), target: "_blank", rel: "noreferrer" }, item.sent_as === "draft" ? "Open imaglr drafts" : "Open on imaglr")), item.followup_failed ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning" }, item.error_detail, " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "link", size: "sm", className: "p-0", onClick: () => retry(item) }, item.action === "publish" ? "Retry publishing" : "Retry adding to queue")) : item.error_detail ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning" }, item.error_detail) : null, item.dropped_tags.length ? /* @__PURE__ */ react_default.createElement("div", { className: "small" }, /* @__PURE__ */ react_default.createElement("span", { className: "text-muted" }, "imaglr dropped:"), " ", item.dropped_tags.map((tag) => /* @__PURE__ */ react_default.createElement("span", { key: tag, className: "imaglr-dropped" }, tag, " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "link", size: "sm", className: "p-0", onClick: () => alwaysDrop(tag) }, "Always drop")))) : null))));
+    if (!data) return LoadingIndicator ? /* @__PURE__ */ react_default.createElement(LoadingIndicator, null) : /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Loading\u2026");
+    return /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(ButtonToolbar, { className: "filtered-list-toolbar" }, /* @__PURE__ */ react_default.createElement(PageSizeSelect, { value: perPage, onChange: changePerPage }), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: load }, "Refresh")), data.total === 0 ? /* @__PURE__ */ react_default.createElement("p", { className: "text-muted imaglr-empty" }, "Nothing sent yet.") : null, /* @__PURE__ */ react_default.createElement("ul", { className: "imaglr-sent" }, data.items.map((item) => /* @__PURE__ */ react_default.createElement("li", { key: item.id, className: "imaglr-sent-row card" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-sent-thumb" }, item.thumb ? /* @__PURE__ */ react_default.createElement("img", { src: baseUrl() + item.thumb, alt: "", loading: "lazy" }) : null), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-sent-body" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-card-title" }, item.title, item.files > 1 ? /* @__PURE__ */ react_default.createElement("span", { className: "text-muted" }, " + ", item.files - 1, " more") : null), /* @__PURE__ */ react_default.createElement("div", { className: "small" }, /* @__PURE__ */ react_default.createElement(Badge, { variant: item.sent_as === "publish" ? "success" : "primary" }, SENT_AS_LABELS[item.sent_as]), " ", item.blog ? `on ${item.blog}` : null, " \xB7 ", fmtDate(item.sent_at), " \xB7", " ", /* @__PURE__ */ react_default.createElement("a", { href: imaglrLink(item.sent_as, item.post_url), target: "_blank", rel: "noreferrer" }, item.sent_as === "draft" ? "Open imaglr drafts" : "Open on imaglr")), item.followup_failed ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning" }, item.error_detail, " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "link", size: "sm", className: "p-0", onClick: () => retry(item) }, item.action === "publish" ? "Retry publishing" : "Retry adding to queue")) : item.error_detail ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning" }, item.error_detail) : null, item.dropped_tags.length ? /* @__PURE__ */ react_default.createElement("div", { className: "small" }, /* @__PURE__ */ react_default.createElement("span", { className: "text-muted" }, "imaglr dropped:"), " ", item.dropped_tags.map((tag) => /* @__PURE__ */ react_default.createElement("span", { key: tag, className: "imaglr-dropped" }, tag, " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "link", size: "sm", className: "p-0", onClick: () => alwaysDrop(tag) }, "Always drop")))) : null)))), /* @__PURE__ */ react_default.createElement(Pager, { page: data.page, perPage, total: data.total, onChange: (p) => {
+      setPage(p);
+      window.scrollTo({ top: 0 });
+    } }));
   }
 
   // src/ui/settings/TagRules.tsx
