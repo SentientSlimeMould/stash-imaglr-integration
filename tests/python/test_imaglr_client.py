@@ -174,6 +174,7 @@ class CreateDraftTest(ServerTestCase):
             self.assertEqual(names, ['form-data; name="media[]"; filename="a.webp"'])
             self.assertEqual(parts[0][0]["Content-Type"], "image/webp")
 
+    @unittest.skipIf(os.name == "nt", "Windows can't create a file with a quote in its name")
     def test_filename_cannot_break_the_header(self):
         f = self.write('we"ird\\name.gif', b"GIF89a")
         self.server.reply(body=envelope({"post": {"id": "1"}}))

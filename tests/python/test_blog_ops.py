@@ -86,6 +86,7 @@ class DataResetTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.ctx = Context({"args": {"mode": "data_reset"}, "server_connection": {"PluginDir": self.tmp.name}})
+        self.addCleanup(self.ctx.close)  # before the folder goes: Windows won't delete an open database
         os.makedirs(os.path.join(self.ctx.data_dir, "prepared", "x"))
         with open(os.path.join(self.ctx.data_dir, "prepared", "x", "a.jpg"), "wb") as f:
             f.write(b"x")
