@@ -2,6 +2,7 @@
 // Main menu entry, mirroring Stash's own menu item markup (ui/v2.5/src/components/MainNavbar.tsx)
 // so it looks native and closes the phone menu when tapped (Nav.Link eventKey + collapseOnSelect).
 import React from "react";
+import { imaglrIcon } from "./icon.ts";
 import { ROUTE } from "./routes.ts";
 
 export function NavItem() {
@@ -21,7 +22,7 @@ export function NavItem() {
         onClick={() => history.push(ROUTE)}
       >
         <Icon
-          icon={PluginApi.libraries.FontAwesomeSolid.faPaperPlane}
+          icon={imaglrIcon}
           className="nav-menu-icon d-block d-xl-inline mb-2 mb-xl-0"
         />
         <span>imaglr</span>

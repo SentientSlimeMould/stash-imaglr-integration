@@ -125,7 +125,8 @@ export function Settings({ onClose }: { onClose: (changed: boolean) => void }) {
           <h6>{blogs && blogs.length ? "Add a blog" : "Add your imaglr blog"}</h6>
           <p className="small text-muted">
             On imaglr, open <a href="https://imaglr.com/settings" target="_blank" rel="noreferrer">Settings → API</a> and
-            create a key with the <strong>read</strong> and <strong>manage</strong> permissions. Each key belongs to one
+            create a key with the <strong>read</strong> and <strong>manage</strong> permissions (leave <strong>write</strong> off:
+            the plugin never needs it). Each key belongs to one
             blog. The key is stored only in this plugin and never shown again.
           </p>
           <Form.Group>

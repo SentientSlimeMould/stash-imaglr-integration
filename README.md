@@ -20,7 +20,14 @@ your [imaglr](https://imaglr.com) blogs.
   **Python 3.9 or later** available to Stash (Settings → System → **Python executable path**); no extra Python packages are needed.
 - **An imaglr API key** for each blog you want to post to. imaglr's API is currently only available to
   [paid supporters](https://imaglr.com/subscriptions) (see [imaglr's API page](https://imaglr.com/developers)).
-  Create the key on imaglr under **Settings → API** with the **read** and **manage** permissions.
+  Create the key on imaglr under **Settings → API** with these permissions:
+  - **read**: lets the plugin check the blog's name, supporter status and daily limit;
+  - **manage**: drafts, including publishing or queueing a draft, which is how everything is posted.
+
+  Leave **write** off: it allows creating, editing and deleting posts directly, which the plugin never does.
+
+The plugin's Settings show each blog's **posts left today**, as reported by imaglr. imaglr allows 1,000 new posts
+a day; saving a draft doesn't use one, publishing does (including when imaglr publishes from your queue).
 
 ## Install
 

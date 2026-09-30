@@ -115,6 +115,14 @@
     PluginApi.patch.instead("FilteredImageList", (props, _context, Original) => /* @__PURE__ */ react_default.createElement(ImageListWithImaglr, { props, Original }));
   }
 
+  // src/ui/icon.ts
+  var PATH = "M256 32A224 224 0 1 0 256 480A224 224 0 1 0 256 32ZM256 96A160 160 0 1 1 256 416A160 160 0 1 1 256 96ZM256 144A112 112 0 1 0 256 368A112 112 0 1 0 256 144ZM310 181A34 34 0 1 1 310 249A34 34 0 1 1 310 181Z";
+  var imaglrIcon = {
+    prefix: "imaglr",
+    iconName: "imaglr",
+    icon: [512, 512, [], "e001", PATH]
+  };
+
   // src/ui/NavItem.tsx
   function NavItem() {
     const { Nav, Button } = PluginApi.libraries.Bootstrap;
@@ -131,7 +139,7 @@
       /* @__PURE__ */ react_default.createElement(
         Icon,
         {
-          icon: PluginApi.libraries.FontAwesomeSolid.faPaperPlane,
+          icon: imaglrIcon,
           className: "nav-menu-icon d-block d-xl-inline mb-2 mb-xl-0"
         }
       ),
@@ -1540,7 +1548,7 @@
         },
         Object.keys(ACTION_LABELS).map((a) => /* @__PURE__ */ react_default.createElement("option", { key: a, value: a }, ACTION_LABELS[a]))
       ), /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger", onClick: () => remove(blog) }, "Remove")));
-    })) : null, blogs && blogs.length ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-refresh" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", size: "sm", onClick: refresh, disabled: checking }, checking ? "Refreshing\u2026" : "Refresh status"), /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, "Asks imaglr for each blog's name, account status and posts left today. Nothing is changed on imaglr.")) : null, /* @__PURE__ */ react_default.createElement(Form, { onSubmit: add, className: "imaglr-add-blog" }, /* @__PURE__ */ react_default.createElement("h6", null, blogs && blogs.length ? "Add a blog" : "Add your imaglr blog"), /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted" }, "On imaglr, open ", /* @__PURE__ */ react_default.createElement("a", { href: "https://imaglr.com/settings", target: "_blank", rel: "noreferrer" }, "Settings \u2192 API"), " and create a key with the ", /* @__PURE__ */ react_default.createElement("strong", null, "read"), " and ", /* @__PURE__ */ react_default.createElement("strong", null, "manage"), " permissions. Each key belongs to one blog. The key is stored only in this plugin and never shown again."), /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "API key"), /* @__PURE__ */ react_default.createElement(
+    })) : null, blogs && blogs.length ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-refresh" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", size: "sm", onClick: refresh, disabled: checking }, checking ? "Refreshing\u2026" : "Refresh status"), /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, "Asks imaglr for each blog's name, account status and posts left today. Nothing is changed on imaglr.")) : null, /* @__PURE__ */ react_default.createElement(Form, { onSubmit: add, className: "imaglr-add-blog" }, /* @__PURE__ */ react_default.createElement("h6", null, blogs && blogs.length ? "Add a blog" : "Add your imaglr blog"), /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted" }, "On imaglr, open ", /* @__PURE__ */ react_default.createElement("a", { href: "https://imaglr.com/settings", target: "_blank", rel: "noreferrer" }, "Settings \u2192 API"), " and create a key with the ", /* @__PURE__ */ react_default.createElement("strong", null, "read"), " and ", /* @__PURE__ */ react_default.createElement("strong", null, "manage"), " permissions (leave ", /* @__PURE__ */ react_default.createElement("strong", null, "write"), " off: the plugin never needs it). Each key belongs to one blog. The key is stored only in this plugin and never shown again."), /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "API key"), /* @__PURE__ */ react_default.createElement(
       Form.Control,
       {
         className: "text-input",
