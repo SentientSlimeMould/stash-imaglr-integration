@@ -89,7 +89,8 @@ npm run test:py:stash       # the same inside stashapp/stash:v0.31.1 (needs Dock
 python3 dev/e2e.py 9931     # end to end against the running test Stash + fake imaglr (after `seed.py 9931 setup`)
 ```
 
-CI runs all of these on every push, plus a privacy scan (`scripts/check-generic.sh --all`).
+CI runs all of these on every push (the Python tests on Ubuntu and Windows), plus a privacy scan
+(`scripts/check-generic.sh --all`). macOS isn't in CI; run `npm run test:py` there by hand before a release.
 
 ## Privacy gate (contributors)
 

@@ -23,10 +23,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Oldest we support on bare-metal installs, and current; Windows and macOS because bare-metal Stash
-        # runs there too (process handling and paths differ).
+        # Oldest we support on bare-metal installs, and current; Windows because bare-metal Stash runs there
+        # too (process handling and paths differ). macOS runners are not reliably available to this
+        # repository, so macOS is checked by hand (see dev/README.md).
         python: ["3.9", "3.13"]
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
