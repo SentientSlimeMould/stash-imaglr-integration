@@ -101,7 +101,9 @@ settings or reads your feed.
 
 ## Updating and uninstalling
 
-Updates appear under **Settings → Plugins → Installed Plugins → Check for updates**. Uninstalling removes the
+Updates appear under **Settings → Plugins → Installed Plugins → Check for updates**. After updating, do a hard
+refresh of the browser tab (Ctrl/Cmd+Shift+R): the browser keeps the old copy of the plugin's page otherwise. The
+footer of the **Post to imaglr** page shows which version is running. Uninstalling removes the
 plugin's files but leaves its `data` folder (your blogs, keys, history and prepared files) and your Stash tags;
 delete `<Stash plugins folder>/imaglr/imaglrIntegration/data` yourself if you don't need it.
 
