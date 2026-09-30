@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - run: scripts/check-generic.sh --all
+      - run: sh scripts/check-generic.sh --all
 
   python:
     name: Python ${{ matrix.python }}
@@ -80,7 +80,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/plugin"
           cp -R plugins/imaglrIntegration/. "$RUNNER_TEMP/plugin/"
-          rm -rf "$RUNNER_TEMP/plugin/data"
+          rm -rf "$RUNNER_TEMP/plugin/data" && mkdir "$RUNNER_TEMP/plugin/data"  # empty mount point for the data volume
           echo "IMAGLR_DEV_PLUGIN=$RUNNER_TEMP/plugin" >> "$GITHUB_ENV"
       - name: Start Stash and the fake imaglr
         working-directory: dev
