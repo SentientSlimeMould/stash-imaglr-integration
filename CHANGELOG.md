@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.7 — 2026-09-30
+
+- Fixed: saving, listing or deleting a tag rule failed with "name '_rules' is not defined" since 0.1.3 (a helper
+  was lost in the Sent-tab refactor). Tests now cover the tag-rule operations, and a check that every
+  operation only uses names that exist.
+
 ## 0.1.6 — 2026-09-30
 
 - **Settings → Delete all plugin data**: removes every blog and API key, the sent history, tag rules and working

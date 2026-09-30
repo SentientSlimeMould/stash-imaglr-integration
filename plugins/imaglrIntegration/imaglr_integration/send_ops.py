@@ -320,6 +320,11 @@ def op_sent_detail(ctx: Context) -> dict[str, Any]:
     return {"item": _sent_view(ctx, item, names)}
 
 
+def _rules(ctx: Context) -> dict[str, Any]:
+    rows = ctx.db.fetchall("SELECT stash_tag, imaglr_tags FROM tag_rules ORDER BY stash_tag COLLATE NOCASE")
+    return {"rules": [{"stash_tag": r["stash_tag"], "imaglr_tags": json.loads(r["imaglr_tags"])} for r in rows]}
+
+
 def op_tag_rule_set(ctx: Context) -> dict[str, Any]:
     """Whenever this Stash tag is suggested, send these imaglr tags instead ([] = never suggest it)."""
     stash_tag = " ".join(str(ctx.arg("stash_tag")).split())
