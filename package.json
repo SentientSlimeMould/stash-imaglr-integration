@@ -13,7 +13,8 @@
     "test": "node --test \"tests/js/**/*.test.ts\"",
     "test:py": "python3 -m unittest discover -s tests/python -t .",
     "dev:sync": "sh scripts/dev-sync.sh",
-    "dev": "node scripts/build.mjs && sh scripts/dev-sync.sh"
+    "dev": "node scripts/build.mjs && sh scripts/dev-sync.sh",
+    "test:py:stash": "sh scripts/test-in-stash.sh"
   },
   "devDependencies": {
     "@types/node": "^22.20.4",

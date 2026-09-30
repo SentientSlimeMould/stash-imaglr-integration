@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.1 — 2026-09-30
+
+- Menu icon: the imaglr lens mark instead of a paper plane.
+- Images with an EXIF orientation are now rotated correctly on newer ffmpeg builds too (ffmpeg 8.1 ignores
+  `-noautorotate` for images, which would have rotated them twice).
+- README and Settings explain which imaglr key permissions are needed (read + manage, never write) and where
+  "posts left today" comes from.
+- Releases publish from `main` when the plugin version changes.
+
 ## 0.1.0 — 2026-09-29
 
 First test release.

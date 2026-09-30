@@ -105,11 +105,14 @@ class ImageTest(RealMediaTest):
         write(stored, mf.add_jpeg_metadata(read(stored), orientation=6))
         return upright, stored
 
-    def test_ffmpeg_exif_autorotation_is_switched_off(self):
-        # ffmpeg 8 rotates JPEGs by their EXIF orientation when decoding; older versions do not. We rely on
-        # -noautorotate always giving the stored pixels, and apply the orientation ourselves.
+    def test_stripped_copy_leaves_ffmpeg_nothing_to_rotate(self):
+        # ffmpeg versions differ on whether -noautorotate stops EXIF rotation of images (8.0 yes, 8.1 no),
+        # so the re-encode feeds ffmpeg a stripped copy (no EXIF) and applies the orientation itself.
         _, stored = self.make_orient6_jpeg()
-        ff("-noautorotate", "-i", stored, "-frames:v", "1", self.path("n.png"))
+        from imaglr_integration.media import metadata_strip
+        metadata_strip.strip_file(stored, self.path("stripped.jpg"))
+        self.assertEqual(inspect_image(self.path("stripped.jpg")).orientation, 1)
+        ff("-i", self.path("stripped.jpg"), "-frames:v", "1", self.path("n.png"))
         self.assertEqual(inspect_image(self.path("n.png")).display_size, (1600, 1200))
 
     def test_orient6_jpeg_comes_out_upright_and_clean(self):
@@ -138,12 +141,12 @@ class ImageTest(RealMediaTest):
                 stored = self.path(f"o{o}.png")
                 vf = ",".join(fc.ORIENTATION_FILTERS.get(INVERSE[o], ["null"]))
                 ff("-i", upright, "-vf", vf, "-pix_fmt", "rgb24", stored)
+                jpeg = self.path(f"o{o}.jpg")
+                ff("-i", stored, "-q:v", "2", jpeg)  # from the untagged PNG: newer ffmpeg would rotate a tagged one
                 write(stored, mf.add_png_metadata(read(stored), orientation=o))
                 _, res = self.prepare(stored, base=f"png{o}")
                 self.assertEqual((res.width, res.height), (48, 32))
                 self.assertEqual(raw_rgb(res.path, 48, 32), want)  # PNG is lossless: exact match
-                jpeg = self.path(f"o{o}.jpg")
-                ff("-i", self.path(f"o{o}.png"), "-q:v", "2", jpeg)
                 write(jpeg, mf.add_jpeg_metadata(read(jpeg), orientation=o, extras=False))
                 _, res = self.prepare(jpeg, base=f"jpg{o}")
                 self.assertEqual((res.width, res.height), (48, 32))

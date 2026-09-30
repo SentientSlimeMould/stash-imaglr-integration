@@ -70,6 +70,12 @@ def reencode(
             cmd = build_image_cmd(ffmpeg, src, norm, "PNG", autorotate=True)
             run_ffmpeg(cmd, output=norm, should_cancel=should_cancel, timeout=IMAGE_TIMEOUT)
             src, info = norm, inspect_image(norm)
+        elif info.orientation != 1:
+            # Give ffmpeg a copy with no EXIF (so no orientation flag) and apply the rotation ourselves:
+            # whether ffmpeg honours -noautorotate for images differs between versions (8.0 yes, 8.1 no).
+            norm = os.path.join(out_dir, f".{base_name}.source{os.path.splitext(src)[1] or '.bin'}")
+            metadata_strip.strip_file(src, norm)
+            src = norm
         width, height = info.display_size
         crop = compute_crop(width, height, crop_aspect or "original", crop_position)
         if crop:
