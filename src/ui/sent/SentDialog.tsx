@@ -5,15 +5,8 @@
 import React from "react";
 import { baseUrl, runOperation } from "../api.ts";
 import { fmtDate } from "../lib/format.ts";
-import { imaglrLink, SENT_AS_LABELS } from "../lib/send.ts";
-import type { SentFile, SentItem } from "../model.ts";
-
-/** The Stash page a sent file came from. */
-export function stashLink(f: SentFile): string | null {
-  if (f.stash_image_id) return `/images/${f.stash_image_id}`;
-  if (f.stash_scene_id) return `/scenes/${f.stash_scene_id}${f.stash_marker_id ? "?t=markers" : ""}`;
-  return null;
-}
+import { imaglrLink, SENT_AS_LABELS, stashLink } from "../lib/send.ts";
+import type { SentItem } from "../model.ts";
 
 interface Props {
   itemId: string;
@@ -88,7 +81,10 @@ export function SentDialog({ itemId, onClose }: Props) {
         </ol>
         <dl className="row imaglr-sent-facts">
           <dt className="col-4 col-sm-3">{item.kind === "set" ? "Files" : item.kind === "clip" ? "Clip" : item.kind === "still" ? "Still" : "Image"}</dt>
-          <dd className="col-8 col-sm-9">{item.kind === "set" ? `${item.files.length} files in one post` : item.title}</dd>
+          <dd className="col-8 col-sm-9">
+            {item.kind === "set" ? `${item.files.length} files in one post`
+              : stashLink(item.files[0] ?? {}) ? <Link to={stashLink(item.files[0])!} title="Open in Stash">{item.title}</Link> : item.title}
+          </dd>
           <dt className="col-4 col-sm-3">Sent as</dt>
           <dd className="col-8 col-sm-9">
             <Badge variant={item.sent_as === "publish" ? "success" : "primary"}>{SENT_AS_LABELS[item.sent_as]}</Badge>{" "}

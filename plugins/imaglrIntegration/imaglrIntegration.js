@@ -209,6 +209,11 @@
     if (sentAs === "draft" || !postUrl) return "https://imaglr.com/drafts";
     return postUrl;
   }
+  function stashLink(f) {
+    if (f.stash_image_id) return `/images/${f.stash_image_id}`;
+    if (f.stash_scene_id) return `/scenes/${f.stash_scene_id}${f.in_s ? `?t=${Math.floor(f.in_s)}` : ""}`;
+    return null;
+  }
 
   // src/ui/model.ts
   var STATUS_LABELS = {
@@ -589,16 +594,18 @@
     return /* @__PURE__ */ react_default.createElement("div", { ref: box, className: "imaglr-preview" }, src ? /* @__PURE__ */ react_default.createElement("img", { src: baseUrl() + src, alt: "", onLoad: (e) => measure(e.currentTarget) }) : null, rect.axis !== "none" ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-crop", style: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } }) : null);
   }
   function FileStrip({ files, disabled, onArrange }) {
+    const { Link } = PluginApi.libraries.ReactRouterDOM;
     const ids = files.map((f) => f.id);
     const move = (from, to) => {
       const next = [...ids];
       next.splice(to, 0, next.splice(from, 1)[0]);
       onArrange(next);
     };
-    return /* @__PURE__ */ react_default.createElement("ol", { className: "imaglr-strip" }, files.map((f, n) => /* @__PURE__ */ react_default.createElement("li", { key: f.id, className: "imaglr-strip-item" }, f.thumb ? /* @__PURE__ */ react_default.createElement("img", { src: baseUrl() + f.thumb, alt: "" }) : null, /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-strip-number" }, n + 1), disabled ? null : /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-strip-actions" }, /* @__PURE__ */ react_default.createElement("button", { type: "button", "aria-label": "Move earlier", disabled: n === 0, onClick: () => move(n, n - 1) }, "\u25C0"), /* @__PURE__ */ react_default.createElement("button", { type: "button", "aria-label": "Remove from this post", onClick: () => onArrange(ids.filter((i) => i !== f.id)) }, "\xD7"), /* @__PURE__ */ react_default.createElement("button", { type: "button", "aria-label": "Move later", disabled: n === files.length - 1, onClick: () => move(n, n + 1) }, "\u25B6")))));
+    return /* @__PURE__ */ react_default.createElement("ol", { className: "imaglr-strip" }, files.map((f, n) => /* @__PURE__ */ react_default.createElement("li", { key: f.id, className: "imaglr-strip-item", title: f.title }, stashLink(f) ? /* @__PURE__ */ react_default.createElement(Link, { to: stashLink(f), title: `${f.title} in Stash` }, f.thumb ? /* @__PURE__ */ react_default.createElement("img", { src: baseUrl() + f.thumb, alt: "" }) : null) : f.thumb ? /* @__PURE__ */ react_default.createElement("img", { src: baseUrl() + f.thumb, alt: "" }) : null, /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-strip-number" }, n + 1), disabled ? null : /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-strip-actions" }, /* @__PURE__ */ react_default.createElement("button", { type: "button", "aria-label": "Move earlier", disabled: n === 0, onClick: () => move(n, n - 1) }, "\u25C0"), /* @__PURE__ */ react_default.createElement("button", { type: "button", "aria-label": "Remove from this post", onClick: () => onArrange(ids.filter((i) => i !== f.id)) }, "\xD7"), /* @__PURE__ */ react_default.createElement("button", { type: "button", "aria-label": "Move later", disabled: n === files.length - 1, onClick: () => move(n, n + 1) }, "\u25B6")))));
   }
   function Editor({ itemId, onClose }) {
     const { Modal, Button, Form, ButtonGroup, Alert, ProgressBar } = PluginApi.libraries.Bootstrap;
+    const { Link } = PluginApi.libraries.ReactRouterDOM;
     const Toast = PluginApi.hooks.useToast();
     const [detail, setDetail] = react_default.useState(null);
     const [tags, setTags] = react_default.useState([]);
@@ -714,7 +721,8 @@
       }
     }
     const kindLabel = item.kind === "set" ? "Files" : item.kind === "clip" ? "Clip" : item.kind === "still" ? "Still" : "Image";
-    const itemName = item.kind === "set" ? `${files.length} files in one post` : item.source_title;
+    const sourceLink = item.kind === "set" ? null : stashLink(files[0] ?? {});
+    const itemName = item.kind === "set" ? `${files.length} files in one post` : sourceLink ? /* @__PURE__ */ react_default.createElement(Link, { to: sourceLink, title: item.kind === "clip" ? "Open the scene in Stash at this clip (its marker is on the Markers tab)" : "Open in Stash" }, item.source_title) : item.source_title;
     return (
       // Like Stash's own dialogs (ModalComponent): clicking outside or pressing Escape does nothing;
       // leave with Cancel or the send button.
@@ -1519,11 +1527,6 @@
   }
 
   // src/ui/sent/SentDialog.tsx
-  function stashLink(f) {
-    if (f.stash_image_id) return `/images/${f.stash_image_id}`;
-    if (f.stash_scene_id) return `/scenes/${f.stash_scene_id}${f.stash_marker_id ? "?t=markers" : ""}`;
-    return null;
-  }
   function SentDialog({ itemId, onClose }) {
     const { Modal, Button, Badge, Alert } = PluginApi.libraries.Bootstrap;
     const { Link } = PluginApi.libraries.ReactRouterDOM;
@@ -1569,7 +1572,7 @@
         const to = stashLink(f);
         const img = f.thumb ? /* @__PURE__ */ react_default.createElement("img", { src: baseUrl() + f.thumb, alt: "" }) : null;
         return /* @__PURE__ */ react_default.createElement("li", { key: f.id, className: "imaglr-strip-item", title: f.title }, to ? /* @__PURE__ */ react_default.createElement(Link, { to, title: `${f.title} in Stash` }, img) : img);
-      })), /* @__PURE__ */ react_default.createElement("dl", { className: "row imaglr-sent-facts" }, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, item.kind === "set" ? "Files" : item.kind === "clip" ? "Clip" : item.kind === "still" ? "Still" : "Image"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, item.kind === "set" ? `${item.files.length} files in one post` : item.title), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Sent as"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, /* @__PURE__ */ react_default.createElement(Badge, { variant: item.sent_as === "publish" ? "success" : "primary" }, SENT_AS_LABELS[item.sent_as]), " ", item.blog ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, "on ", /* @__PURE__ */ react_default.createElement("strong", null, item.blog)) : null), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "When"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, fmtDate(item.sent_at)), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "On imaglr"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, /* @__PURE__ */ react_default.createElement("a", { href: imaglrLink(item.sent_as, item.post_url), target: "_blank", rel: "noreferrer" }, item.sent_as === "draft" ? "Open imaglr drafts" : "Open the post")), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Tags"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, item.tags.length ? item.tags.map((t) => /* @__PURE__ */ react_default.createElement(Badge, { key: t, variant: "secondary", className: "tag-item" }, t)) : /* @__PURE__ */ react_default.createElement("span", { className: "text-muted" }, "None")), item.dropped_tags.length ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Dropped by imaglr"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, item.dropped_tags.map((tag) => /* @__PURE__ */ react_default.createElement("span", { key: tag, className: "imaglr-dropped" }, /* @__PURE__ */ react_default.createElement(Badge, { variant: "secondary", className: "tag-item" }, tag), /* @__PURE__ */ react_default.createElement(Button, { variant: "link", size: "sm", className: "p-0 align-baseline", onClick: () => alwaysDrop(tag) }, "Always drop"))))) : null, item.caption ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Caption"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9 imaglr-caption" }, item.caption)) : null));
+      })), /* @__PURE__ */ react_default.createElement("dl", { className: "row imaglr-sent-facts" }, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, item.kind === "set" ? "Files" : item.kind === "clip" ? "Clip" : item.kind === "still" ? "Still" : "Image"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, item.kind === "set" ? `${item.files.length} files in one post` : stashLink(item.files[0] ?? {}) ? /* @__PURE__ */ react_default.createElement(Link, { to: stashLink(item.files[0]), title: "Open in Stash" }, item.title) : item.title), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Sent as"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, /* @__PURE__ */ react_default.createElement(Badge, { variant: item.sent_as === "publish" ? "success" : "primary" }, SENT_AS_LABELS[item.sent_as]), " ", item.blog ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, "on ", /* @__PURE__ */ react_default.createElement("strong", null, item.blog)) : null), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "When"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, fmtDate(item.sent_at)), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "On imaglr"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, /* @__PURE__ */ react_default.createElement("a", { href: imaglrLink(item.sent_as, item.post_url), target: "_blank", rel: "noreferrer" }, item.sent_as === "draft" ? "Open imaglr drafts" : "Open the post")), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Tags"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, item.tags.length ? item.tags.map((t) => /* @__PURE__ */ react_default.createElement(Badge, { key: t, variant: "secondary", className: "tag-item" }, t)) : /* @__PURE__ */ react_default.createElement("span", { className: "text-muted" }, "None")), item.dropped_tags.length ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Dropped by imaglr"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, item.dropped_tags.map((tag) => /* @__PURE__ */ react_default.createElement("span", { key: tag, className: "imaglr-dropped" }, /* @__PURE__ */ react_default.createElement(Badge, { variant: "secondary", className: "tag-item" }, tag), /* @__PURE__ */ react_default.createElement(Button, { variant: "link", size: "sm", className: "p-0 align-baseline", onClick: () => alwaysDrop(tag) }, "Always drop"))))) : null, item.caption ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Caption"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9 imaglr-caption" }, item.caption)) : null));
     }
     return (
       // Like Stash's own dialogs (ModalComponent): clicking outside or pressing Escape does nothing.

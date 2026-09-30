@@ -255,7 +255,7 @@ def _sent_view(ctx: Context, item: dict[str, Any], blog_names: dict[int, str]) -
     files = [{
         "id": m["id"], "kind": m["kind"], "title": m["source_title"], "thumb": _thumb(m),
         "stash_image_id": m["stash_image_id"], "stash_scene_id": m["stash_scene_id"],
-        "stash_marker_id": m["stash_marker_id"],
+        "stash_marker_id": m["stash_marker_id"], "in_s": m["in_s"],
     } for m in members]
     return {
         "id": item["id"],

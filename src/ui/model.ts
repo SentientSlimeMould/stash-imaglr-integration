@@ -120,6 +120,7 @@ export interface SentFile {
   kind: Kind;
   title: string;
   thumb: string | null;
+  in_s: number | null;
   stash_image_id: string | null;
   stash_scene_id: string | null;
   stash_marker_id: string | null;

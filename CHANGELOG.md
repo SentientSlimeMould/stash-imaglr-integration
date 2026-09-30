@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.5 — 2026-09-30
+
+- In the editor and the Sent details, the clip or image name links back to Stash: an image opens its image
+  page; a clip opens its scene playing from the clip's start (Stash can't open a scene on its Markers tab from
+  a link, and markers have no page of their own). The thumbnails of a multi-file post link the same way.
+
 ## 0.1.4 — 2026-09-30
 
 - Fixed: **Remove "imaglr" tag** did nothing for clips; the marker kept its tag and the clip came back. It now

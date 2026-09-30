@@ -5,7 +5,7 @@ import React from "react";
 import { baseUrl, runOperation } from "../api.ts";
 import { ASPECTS, overlayRect } from "../lib/crop.ts";
 import type { Aspect } from "../lib/types.ts";
-import { ACTION_LABELS, blogProblem, effectiveAction, pickBlog, sendButtonLabel } from "../lib/send.ts";
+import { ACTION_LABELS, blogProblem, effectiveAction, pickBlog, sendButtonLabel, stashLink } from "../lib/send.ts";
 import { STATUS_LABELS, type FileCard, type ItemDetail, type SendAction } from "../model.ts";
 import { ConfirmDialog } from "../ConfirmDialog.tsx";
 import { ClipPanel, type ClipState } from "./ClipPanel.tsx";
@@ -57,6 +57,7 @@ function FileStrip({ files, disabled, onArrange }: {
   disabled: boolean;
   onArrange: (ids: string[]) => void;
 }) {
+  const { Link } = PluginApi.libraries.ReactRouterDOM;
   const ids = files.map((f) => f.id);
   const move = (from: number, to: number) => {
     const next = [...ids];
@@ -66,8 +67,9 @@ function FileStrip({ files, disabled, onArrange }: {
   return (
     <ol className="imaglr-strip">
       {files.map((f, n) => (
-        <li key={f.id} className="imaglr-strip-item">
-          {f.thumb ? <img src={baseUrl() + f.thumb} alt="" /> : null}
+        <li key={f.id} className="imaglr-strip-item" title={f.title}>
+          {stashLink(f) ? <Link to={stashLink(f)!} title={`${f.title} in Stash`}>{f.thumb ? <img src={baseUrl() + f.thumb} alt="" /> : null}</Link>
+            : f.thumb ? <img src={baseUrl() + f.thumb} alt="" /> : null}
           <span className="imaglr-strip-number">{n + 1}</span>
           {disabled ? null : (
             <div className="imaglr-strip-actions">
@@ -84,6 +86,7 @@ function FileStrip({ files, disabled, onArrange }: {
 
 export function Editor({ itemId, onClose }: Props) {
   const { Modal, Button, Form, ButtonGroup, Alert, ProgressBar } = PluginApi.libraries.Bootstrap;
+  const { Link } = PluginApi.libraries.ReactRouterDOM;
   const Toast = PluginApi.hooks.useToast();
   const [detail, setDetail] = React.useState<ItemDetail | null>(null);
   const [tags, setTags] = React.useState<string[]>([]);
@@ -214,7 +217,11 @@ export function Editor({ itemId, onClose }: Props) {
   }
 
   const kindLabel = item.kind === "set" ? "Files" : item.kind === "clip" ? "Clip" : item.kind === "still" ? "Still" : "Image";
-  const itemName = item.kind === "set" ? `${files.length} files in one post` : item.source_title;
+  // The name links to where the file lives in Stash: the image, or the scene's Markers tab for a clip.
+  const sourceLink = item.kind === "set" ? null : stashLink(files[0] ?? {});
+  const itemName = item.kind === "set" ? `${files.length} files in one post`
+    : sourceLink ? <Link to={sourceLink} title={item.kind === "clip" ? "Open the scene in Stash at this clip (its marker is on the Markers tab)" : "Open in Stash"}>{item.source_title}</Link>
+    : item.source_title;
 
 
   return (

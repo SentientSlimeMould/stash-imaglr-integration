@@ -49,3 +49,14 @@ export function imaglrLink(sentAs: SendAction, postUrl: string | null): string {
   if (sentAs === "draft" || !postUrl) return "https://imaglr.com/drafts";
   return postUrl;
 }
+
+/**
+ * The Stash page a file came from: the image, or the scene for a clip. Stash has no page for one marker and
+ * no way to open a scene on its Markers tab from a link, so a clip links to the scene playing from the
+ * clip's start (?t=<seconds>).
+ */
+export function stashLink(f: { stash_image_id?: string | null; stash_scene_id?: string | null; in_s?: number | null }): string | null {
+  if (f.stash_image_id) return `/images/${f.stash_image_id}`;
+  if (f.stash_scene_id) return `/scenes/${f.stash_scene_id}${f.in_s ? `?t=${Math.floor(f.in_s)}` : ""}`;
+  return null;
+}
