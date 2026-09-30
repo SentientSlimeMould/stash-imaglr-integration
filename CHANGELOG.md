@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2 — 2026-09-30
+
+- Item counts on the Clips, Images and Sent tabs.
+- Paging like Stash's lists: page-size dropdown, "1-40 of 120" index and page buttons on all three tabs.
+- Sent list shows thumbnails for clips and stills too.
+
 ## 0.1.1 — 2026-09-30
 
 - Menu icon: the imaglr lens mark instead of a paper plane.
