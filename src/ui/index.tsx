@@ -2,6 +2,7 @@
 // Plugin UI entry point: runs once when Stash loads the plugin's JavaScript.
 import React from "react";
 import { patchImageLists } from "./imageListActions.tsx";
+import { patchImagePage } from "./imagePageActions.tsx";
 import { NavItem } from "./NavItem.tsx";
 import { PostPage } from "./PostPage.tsx";
 import { ROUTE } from "./routes.ts";
@@ -21,3 +22,4 @@ PluginApi.patch.before("MainNavBar.MenuItems", (props: { children?: React.ReactN
 ]);
 
 patchImageLists();
+patchImagePage();

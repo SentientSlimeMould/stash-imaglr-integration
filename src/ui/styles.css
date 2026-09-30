@@ -427,3 +427,15 @@
 .imaglr-plan {
   padding-left: 1.2rem;
 }
+
+/* "imaglr" section on an image's page, under Stash's own details */
+.imaglr-image-section {
+  margin-top: 1rem;
+}
+
+/* On phones Stash's navbar is fixed to the bottom and would cover the last thing on the page. */
+@media (max-width: 575.98px) {
+  .imaglr-image-section {
+    margin-bottom: 4rem;
+  }
+}

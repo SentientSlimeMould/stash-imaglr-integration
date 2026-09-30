@@ -56,7 +56,8 @@ tag capitals, the default clip length, and how long prepared files are kept.
 
 - **Queue things in Stash.** Tag images or scene markers `imaglr`. In any image list (including a gallery's
   Images tab) you can also tick images and choose **⋯ → Add to imaglr**, or **⋯ → Add to imaglr as one post** for
-  up to 10 images in a single post.
+  up to 10 images in a single post. An image's own page has an **imaglr** section under its details with the
+  same **Add to imaglr** button, which becomes a link to the waiting post.
 - **Open imaglr → Clips or Images.** Search, filter, sort and select work like Stash's own lists. Tick several
   cards and choose **Make one post** to combine clips and images into one post.
 - **Tap a card to edit it:** crop; for clips, set in and out points (written back to the Stash marker), remove

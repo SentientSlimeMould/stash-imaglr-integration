@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.8 — 2026-09-30
+
+- An image's own page gets an **imaglr** section under its details: **Add to imaglr**, or a link to the waiting
+  post once it's queued (the same action as the image lists' ⋯ menu; Stash doesn't let plugins add to the page's
+  ⋯ menu itself).
+
 ## 0.1.7 — 2026-09-30
 
 - Fixed: saving, listing or deleting a tag rule failed with "name '_rules' is not defined" since 0.1.3 (a helper
