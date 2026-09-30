@@ -2,7 +2,7 @@
 // The "Post to imaglr" page: Clips · Images · Sent, plus blog settings.
 import React from "react";
 import { runOperation, type Ping } from "./api.ts";
-import type { Blog } from "./model.ts";
+import type { Blog, QueueResponse } from "./model.ts";
 import { QueueTab } from "./queue/QueueTab.tsx";
 import { SentTab } from "./sent/SentTab.tsx";
 import { Settings } from "./settings/Settings.tsx";
@@ -17,6 +17,48 @@ type TabKey = (typeof TABS)[number]["key"];
 
 function isTab(key: string | null): key is TabKey {
   return TABS.some((t) => t.key === key);
+}
+
+const POLL_MS = 2000;
+const BUSY = ["exporting", "sending"];
+
+/** The queue, fetched once for the whole page: both tabs and the tab counters read from it. */
+function useQueue(paused: boolean) {
+  const [data, setData] = React.useState<QueueResponse | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const load = React.useCallback(() => {
+    return runOperation<QueueResponse>("queue").then((d) => {
+      setData(d);
+      setError(null);
+    }, (e: Error) => setError(e.message));
+  }, []);
+
+  // Sends interrupted by a Stash restart are marked failed (and old prepared files cleaned up) first.
+  React.useEffect(() => {
+    runOperation("recover").catch(() => undefined).finally(load);
+  }, [load]);
+
+  // While anything is being sent, keep progress fresh (not while an editor is open).
+  const inFlight = data?.items.some((c) => BUSY.includes(c.status)) ?? false;
+  React.useEffect(() => {
+    if (!inFlight || paused) return;
+    const timer = window.setTimeout(load, POLL_MS);
+    return () => window.clearTimeout(timer);
+  }, [data, inFlight, paused, load]);
+
+  return { data, error, load };
+}
+
+/** Stash's tab counter: a small pill after the title (ui/v2.5/src/components/Shared/Counter.tsx). */
+function TabTitle({ title, count }: { title: string; count: number | undefined }) {
+  const { Badge } = PluginApi.libraries.Bootstrap;
+  return (
+    <>
+      {title}
+      {count ? <Badge className="left-spacing" pill variant="secondary">{count}</Badge> : null}
+    </>
+  );
 }
 
 function BackendStatus() {
@@ -48,6 +90,12 @@ export function PostPage() {
   const [blogs, setBlogs] = React.useState<Blog[] | null>(null);
   const [showBlogs, setShowBlogs] = React.useState(false);
   const [reloadKey, setReloadKey] = React.useState(0);
+  const queue = useQueue(!!openId || showBlogs);
+  const counts = queue.data && {
+    clips: queue.data.items.filter((c) => c.tab === "clips").length,
+    images: queue.data.items.filter((c) => c.tab === "images").length,
+    sent: queue.data.sent_count,
+  };
 
   const loadBlogs = React.useCallback(() => {
     runOperation<{ blogs: Blog[] }>("blogs_list").then((r) => setBlogs(r.blogs), () => setBlogs([]));
@@ -84,13 +132,13 @@ export function PostPage() {
         <Nav variant="tabs" className="imaglr-tabs">
           {TABS.map(({ key, title }) => (
             <Nav.Item key={key}>
-              <Nav.Link eventKey={key}>{title}</Nav.Link>
+              <Nav.Link eventKey={key}><TabTitle title={title} count={counts?.[key]} /></Nav.Link>
             </Nav.Item>
           ))}
         </Nav>
         <Tab.Content className="imaglr-tab-content" key={reloadKey}>
-          <Tab.Pane eventKey="clips">{tab === "clips" ? <QueueTab tab="clips" openId={openId} /> : null}</Tab.Pane>
-          <Tab.Pane eventKey="images">{tab === "images" ? <QueueTab tab="images" openId={openId} /> : null}</Tab.Pane>
+          <Tab.Pane eventKey="clips">{tab === "clips" ? <QueueTab tab="clips" openId={openId} {...queue} /> : null}</Tab.Pane>
+          <Tab.Pane eventKey="images">{tab === "images" ? <QueueTab tab="images" openId={openId} {...queue} /> : null}</Tab.Pane>
           <Tab.Pane eventKey="sent">{tab === "sent" ? <SentTab /> : null}</Tab.Pane>
         </Tab.Content>
       </Tab.Container>
@@ -101,6 +149,7 @@ export function PostPage() {
             setShowBlogs(false);
             if (changed) {
               loadBlogs();
+              queue.load();
               setReloadKey((k) => k + 1);
             }
           }}

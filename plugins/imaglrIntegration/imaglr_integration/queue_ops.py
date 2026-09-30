@@ -56,7 +56,9 @@ def op_queue(ctx: Context) -> dict[str, Any]:
         order = [m["id"] for m in repo.set_members(db, set_id)]
         members.sort(key=lambda c: order.index(c["id"]))
         out.append(services.post_card(post, members))  # type: ignore[arg-type]
-    return {"items": out, "tags": services.queue_tags(tags)}
+    sent = db.fetchone("SELECT COUNT(*) AS n FROM items WHERE status='sent' "
+                       "AND id NOT IN (SELECT item_id FROM set_members)")["n"]
+    return {"items": out, "tags": services.queue_tags(tags), "sent_count": sent}
 
 
 def _add_images(ctx: Context, image_ids: list[str], as_one_post: bool) -> dict[str, Any]:

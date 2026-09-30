@@ -1183,7 +1183,6 @@
   }
 
   // src/ui/queue/QueueTab.tsx
-  var POLL_MS = 2e3;
   var BUSY2 = ["exporting", "sending"];
   var EMPTY = {
     clips: (tag) => /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("p", null, "No clips waiting."), /* @__PURE__ */ react_default.createElement("p", null, "In Stash, add the tag ", /* @__PURE__ */ react_default.createElement("strong", null, tag), " to a scene marker (on the scene's ", /* @__PURE__ */ react_default.createElement("strong", null, "Markers"), " tab). Its start and end become the clip; you can trim it here.")),
@@ -1200,7 +1199,7 @@
     }, [ref]);
     return width;
   }
-  function QueueTab({ tab, openId }) {
+  function QueueTab({ tab, openId, data, error, load }) {
     const { Button, Table, Badge } = PluginApi.libraries.Bootstrap;
     const { Link, useHistory } = PluginApi.libraries.ReactRouterDOM;
     const { LoadingIndicator } = PluginApi.components;
@@ -1208,35 +1207,18 @@
     const history = useHistory();
     const loading = PluginApi.hooks.useLoadComponents([PluginApi.loadableComponents.SceneCard]);
     const GridCard = loading ? null : PluginApi.components.GridCard;
-    const [data, setData] = react_default.useState(null);
-    const [error, setError] = react_default.useState(null);
     const [controls, setControls] = react_default.useState(() => loadControls(tab));
     const [selected, setSelected] = react_default.useState(/* @__PURE__ */ new Set());
     const [sendAll, setSendAll] = react_default.useState(null);
     const box = react_default.useRef(null);
     const width = useContainerWidth(box);
     const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 576px)").matches;
-    const load = react_default.useCallback(() => {
-      return runOperation("queue").then((d) => {
-        setData(d);
-        setError(null);
-      }, (e) => setError(e.message));
-    }, []);
-    react_default.useEffect(() => {
-      runOperation("recover").catch(() => void 0).finally(load);
-    }, [load]);
     function updateControls(next) {
       setControls(next);
       saveControls(tab, next);
     }
     const all = data?.items.filter((c) => c.tab === tab) ?? [];
     const items = applyControls(all, controls);
-    const inFlight = all.some((c) => BUSY2.includes(c.status));
-    react_default.useEffect(() => {
-      if (!inFlight || openId) return;
-      const timer = window.setTimeout(load, POLL_MS);
-      return () => window.clearTimeout(timer);
-    }, [data, inFlight, openId, load]);
     react_default.useEffect(() => {
       setSelected((s) => new Set([...s].filter((id) => all.some((c) => c.id === id))));
     }, [data]);
@@ -1579,6 +1561,32 @@
   function isTab(key) {
     return TABS.some((t) => t.key === key);
   }
+  var POLL_MS = 2e3;
+  var BUSY3 = ["exporting", "sending"];
+  function useQueue(paused) {
+    const [data, setData] = react_default.useState(null);
+    const [error, setError] = react_default.useState(null);
+    const load = react_default.useCallback(() => {
+      return runOperation("queue").then((d) => {
+        setData(d);
+        setError(null);
+      }, (e) => setError(e.message));
+    }, []);
+    react_default.useEffect(() => {
+      runOperation("recover").catch(() => void 0).finally(load);
+    }, [load]);
+    const inFlight = data?.items.some((c) => BUSY3.includes(c.status)) ?? false;
+    react_default.useEffect(() => {
+      if (!inFlight || paused) return;
+      const timer = window.setTimeout(load, POLL_MS);
+      return () => window.clearTimeout(timer);
+    }, [data, inFlight, paused, load]);
+    return { data, error, load };
+  }
+  function TabTitle({ title, count }) {
+    const { Badge } = PluginApi.libraries.Bootstrap;
+    return /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, title, count ? /* @__PURE__ */ react_default.createElement(Badge, { className: "left-spacing", pill: true, variant: "secondary" }, count) : null);
+  }
   function BackendStatus() {
     const [ping, setPing] = react_default.useState(null);
     const [error, setError] = react_default.useState(null);
@@ -1601,6 +1609,12 @@
     const [blogs, setBlogs] = react_default.useState(null);
     const [showBlogs, setShowBlogs] = react_default.useState(false);
     const [reloadKey, setReloadKey] = react_default.useState(0);
+    const queue = useQueue(!!openId || showBlogs);
+    const counts = queue.data && {
+      clips: queue.data.items.filter((c) => c.tab === "clips").length,
+      images: queue.data.items.filter((c) => c.tab === "images").length,
+      sent: queue.data.sent_count
+    };
     const loadBlogs = react_default.useCallback(() => {
       runOperation("blogs_list").then((r) => setBlogs(r.blogs), () => setBlogs([]));
     }, []);
@@ -1615,13 +1629,14 @@
     function setTab(key) {
       history.replace({ search: `?tab=${key}` });
     }
-    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-page container-fluid" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-page-header" }, /* @__PURE__ */ react_default.createElement("h2", { className: "imaglr-page-title" }, "Post to imaglr"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setShowBlogs(true) }, /* @__PURE__ */ react_default.createElement(Icon, { icon: PluginApi.libraries.FontAwesomeSolid.faCog }), " Settings")), blogs && blogs.length === 0 ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info", className: "imaglr-welcome" }, /* @__PURE__ */ react_default.createElement("strong", null, "Add your imaglr blog to start."), " You'll need an API key from imaglr (paid supporters only).", " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", size: "sm", onClick: () => setShowBlogs(true) }, "Open settings")) : null, /* @__PURE__ */ react_default.createElement(Tab.Container, { activeKey: tab, onSelect: (key) => key && setTab(key) }, /* @__PURE__ */ react_default.createElement(Nav, { variant: "tabs", className: "imaglr-tabs" }, TABS.map(({ key, title }) => /* @__PURE__ */ react_default.createElement(Nav.Item, { key }, /* @__PURE__ */ react_default.createElement(Nav.Link, { eventKey: key }, title)))), /* @__PURE__ */ react_default.createElement(Tab.Content, { className: "imaglr-tab-content", key: reloadKey }, /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "clips" }, tab === "clips" ? /* @__PURE__ */ react_default.createElement(QueueTab, { tab: "clips", openId }) : null), /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "images" }, tab === "images" ? /* @__PURE__ */ react_default.createElement(QueueTab, { tab: "images", openId }) : null), /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "sent" }, tab === "sent" ? /* @__PURE__ */ react_default.createElement(SentTab, null) : null))), /* @__PURE__ */ react_default.createElement(BackendStatus, null), showBlogs ? /* @__PURE__ */ react_default.createElement(
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-page container-fluid" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-page-header" }, /* @__PURE__ */ react_default.createElement("h2", { className: "imaglr-page-title" }, "Post to imaglr"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setShowBlogs(true) }, /* @__PURE__ */ react_default.createElement(Icon, { icon: PluginApi.libraries.FontAwesomeSolid.faCog }), " Settings")), blogs && blogs.length === 0 ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info", className: "imaglr-welcome" }, /* @__PURE__ */ react_default.createElement("strong", null, "Add your imaglr blog to start."), " You'll need an API key from imaglr (paid supporters only).", " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", size: "sm", onClick: () => setShowBlogs(true) }, "Open settings")) : null, /* @__PURE__ */ react_default.createElement(Tab.Container, { activeKey: tab, onSelect: (key) => key && setTab(key) }, /* @__PURE__ */ react_default.createElement(Nav, { variant: "tabs", className: "imaglr-tabs" }, TABS.map(({ key, title }) => /* @__PURE__ */ react_default.createElement(Nav.Item, { key }, /* @__PURE__ */ react_default.createElement(Nav.Link, { eventKey: key }, /* @__PURE__ */ react_default.createElement(TabTitle, { title, count: counts?.[key] }))))), /* @__PURE__ */ react_default.createElement(Tab.Content, { className: "imaglr-tab-content", key: reloadKey }, /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "clips" }, tab === "clips" ? /* @__PURE__ */ react_default.createElement(QueueTab, { tab: "clips", openId, ...queue }) : null), /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "images" }, tab === "images" ? /* @__PURE__ */ react_default.createElement(QueueTab, { tab: "images", openId, ...queue }) : null), /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "sent" }, tab === "sent" ? /* @__PURE__ */ react_default.createElement(SentTab, null) : null))), /* @__PURE__ */ react_default.createElement(BackendStatus, null), showBlogs ? /* @__PURE__ */ react_default.createElement(
       Settings,
       {
         onClose: (changed) => {
           setShowBlogs(false);
           if (changed) {
             loadBlogs();
+            queue.load();
             setReloadKey((k) => k + 1);
           }
         }

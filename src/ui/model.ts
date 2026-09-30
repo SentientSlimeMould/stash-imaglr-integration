@@ -39,6 +39,7 @@ export interface Card {
 export interface QueueResponse {
   items: Card[];
   tags: { queue: { id: string; name: string }; done: { id: string; name: string } };
+  sent_count: number;
 }
 
 export const STATUS_LABELS: Record<Status, string> = {

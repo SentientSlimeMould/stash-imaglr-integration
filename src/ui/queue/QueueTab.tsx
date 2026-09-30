@@ -12,7 +12,6 @@ import { CardImage, cardDetail, CardOverlays, FallbackCard } from "./ItemCard.ts
 import { SendAllDialog } from "./SendAllDialog.tsx";
 import { Toolbar, type SelectionAction } from "./Toolbar.tsx";
 
-const POLL_MS = 2000;
 const BUSY = ["exporting", "sending"];
 
 const EMPTY = {
@@ -48,7 +47,13 @@ function useContainerWidth(ref: React.RefObject<HTMLDivElement>) {
   return width;
 }
 
-export function QueueTab({ tab, openId }: { tab: "clips" | "images"; openId: string | null }) {
+export interface QueueProps {
+  data: QueueResponse | null;
+  error: string | null;
+  load: () => Promise<unknown>;
+}
+
+export function QueueTab({ tab, openId, data, error, load }: { tab: "clips" | "images"; openId: string | null } & QueueProps) {
   const { Button, Table, Badge } = PluginApi.libraries.Bootstrap;
   const { Link, useHistory } = PluginApi.libraries.ReactRouterDOM;
   const { LoadingIndicator } = PluginApi.components;
@@ -58,25 +63,12 @@ export function QueueTab({ tab, openId }: { tab: "clips" | "images"; openId: str
   const loading = PluginApi.hooks.useLoadComponents([PluginApi.loadableComponents.SceneCard]);
   const GridCard = loading ? null : PluginApi.components.GridCard;
 
-  const [data, setData] = React.useState<QueueResponse | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
   const [controls, setControls] = React.useState<QueueControlsState>(() => loadControls(tab));
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [sendAll, setSendAll] = React.useState<string[] | null>(null);
   const box = React.useRef<HTMLDivElement>(null);
   const width = useContainerWidth(box);
   const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 576px)").matches;
-
-  const load = React.useCallback(() => {
-    return runOperation<QueueResponse>("queue").then((d) => {
-      setData(d);
-      setError(null);
-    }, (e: Error) => setError(e.message));
-  }, []);
-
-  React.useEffect(() => {
-    runOperation("recover").catch(() => undefined).finally(load);
-  }, [load]);
 
   function updateControls(next: QueueControlsState) {
     setControls(next);
@@ -85,13 +77,6 @@ export function QueueTab({ tab, openId }: { tab: "clips" | "images"; openId: str
 
   const all = data?.items.filter((c) => c.tab === tab) ?? [];
   const items = applyControls(all, controls);
-  const inFlight = all.some((c) => BUSY.includes(c.status));
-
-  React.useEffect(() => {
-    if (!inFlight || openId) return;
-    const timer = window.setTimeout(load, POLL_MS);
-    return () => window.clearTimeout(timer);
-  }, [data, inFlight, openId, load]);
 
   // Drop selections that no longer exist after a reload.
   React.useEffect(() => {
