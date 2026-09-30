@@ -1,6 +1,6 @@
 name: Imaglr Integration
 description: Share images and clips from Stash to your imaglr blogs as drafts, queued posts or published posts.
-version: 0.1.12
+version: 0.1.13
 url: https://github.com/SentientSlimeMould/stash-imaglr-integration
 exec:
   - python

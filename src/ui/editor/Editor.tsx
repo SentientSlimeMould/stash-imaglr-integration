@@ -124,6 +124,14 @@ export function Editor({ itemId, onClose }: Props) {
 
   React.useEffect(load, [load]);
 
+  // While the item is being prepared or sent the form is locked; keep the progress and status current.
+  const busyStatus = detail ? BUSY.includes(detail.item.status) : false;
+  React.useEffect(() => {
+    if (!busyStatus) return;
+    const timer = window.setInterval(load, 2000);
+    return () => window.clearInterval(timer);
+  }, [busyStatus, load]);
+
   if (!detail) return null;
   const { item, files, blogs } = detail;
   const queueTag = detail.queue_tag;
@@ -224,11 +232,13 @@ export function Editor({ itemId, onClose }: Props) {
       "It leaves this page. Nothing on imaglr is changed and nothing is deleted.";
 
   async function remove() {
+    setBusy(true);
     try {
       await runOperation("remove_from_queue", { item_id: item.id });
       onClose(true);
     } catch (e) {
       setConfirmRemove(false);
+      setBusy(false);
       Toast.error(e);
     }
   }
@@ -305,7 +315,7 @@ export function Editor({ itemId, onClose }: Props) {
             <p className="text-muted mb-1">Files in this post, in order:</p>
             <FileStrip files={files} disabled={locked} onArrange={arrange} />
             {locked ? null : (
-              <Button variant="link" className="p-0 mb-2" onClick={() => arrange([])}>
+              <Button variant="link" className="p-0 mb-2 imaglr-touch" onClick={() => arrange([])}>
                 Split into separate posts
               </Button>
             )}
@@ -380,7 +390,7 @@ export function Editor({ itemId, onClose }: Props) {
         </ConfirmDialog>
       ) : null}
       {confirmRemove ? (
-        <ConfirmDialog title={removeLabel} accept={item.kind === "still" ? "Delete" : "Remove tag"} variant="danger"
+        <ConfirmDialog title={removeLabel} accept={item.kind === "still" ? "Delete" : "Remove tag"} variant="danger" busy={busy}
           onAccept={remove} onCancel={() => setConfirmRemove(false)}>
           {removeQuestion}
         </ConfirmDialog>

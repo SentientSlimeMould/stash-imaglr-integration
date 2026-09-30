@@ -28,7 +28,16 @@ export function SendAllDialog({ itemIds, selected, onClose }: {
     runOperation<{ blogs: Blog[] }>("blogs_list").then((r) => setBlogs(r.blogs.filter((b) => !b.paused_reason)), () => undefined);
   }, [preview]);
 
-  if (!plan) return null;
+  if (!plan) {
+    const { LoadingIndicator } = PluginApi.components;
+    return (
+      <Modal show onHide={() => undefined} keyboard={false}>
+        <Modal.Header><Modal.Title>{selected ? "Send selected" : "Send all"}</Modal.Title></Modal.Header>
+        <Modal.Body>{LoadingIndicator ? <LoadingIndicator message="Checking…" /> : <p className="text-muted">Checking…</p>}</Modal.Body>
+        <Modal.Footer><Button variant="secondary" onClick={() => onClose(false)}>Cancel</Button></Modal.Footer>
+      </Modal>
+    );
+  }
   const noBlog = plan.filter((e) => e.skip === "no_blog");
   const fallback = blogs.find((b) => b.id === fallbackBlog) ?? null;
   const { sending, skipped, downgraded, total: ready } = summarisePlan(plan, fallback);

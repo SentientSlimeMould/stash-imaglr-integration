@@ -9,11 +9,8 @@ export const ACTION_LABELS: Record<SendAction, string> = {
   publish: "Published",
 };
 
-export const SENT_AS_LABELS: Record<SendAction, string> = {
-  draft: "Draft",
-  queue: "Queued",
-  publish: "Published",
-};
+/** The Sent tab's badges use the same words as the "Send as" choice. */
+export const SENT_AS_LABELS = ACTION_LABELS;
 
 /** The item's chosen blog, else the only blog; null when the user must choose. */
 export function pickBlog(blogs: Blog[], blogId: number | null): Blog | null {

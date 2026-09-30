@@ -134,7 +134,7 @@ export function ClipPanel({ sceneId, imageId, value, disabled, onChange, onSaveS
     if (!v) return;
     v.currentTime = value.inS;
     setLooping(true);
-    void v.play();
+    v.play().catch(() => undefined); // autoplay refusals and interrupted loads are not errors
   }
 
   const rect = overlayRect(size.w, size.h, size.vw, size.vh, value.crop.aspect, value.crop.position);

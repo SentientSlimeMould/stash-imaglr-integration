@@ -142,6 +142,7 @@ export interface SentItem {
   tags: string[];
   caption: string;
   dropped_tags: string[];
+  dropped?: { tag: string; from: string | null }[]; // detail only: the Stash name each dropped tag came from
   followup_failed: boolean;
   action: SendAction | null;
   error_code: string | null;

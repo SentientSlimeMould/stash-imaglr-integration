@@ -4,7 +4,7 @@
 import React from "react";
 import { runOperation } from "../api.ts";
 import { Editor } from "../editor/Editor.tsx";
-import { applyControls, loadControls, paginate, saveControls, type QueueControlsState } from "../lib/sort.ts";
+import { applyControls, changesWhatIsListed, loadControls, paginate, saveControls, type QueueControlsState } from "../lib/sort.ts";
 import { fmtDims } from "../lib/format.ts";
 import { MAX_POST_FILES } from "../lib/imageActions.ts";
 import { STATUS_LABELS, STATUS_VARIANTS, type Card, type QueueResponse } from "../model.ts";
@@ -69,9 +69,9 @@ export function QueueTab({ tab, openId, data, error, load }: { tab: "clips" | "i
   const [page, setPage] = React.useState(1);
 
   function updateControls(next: QueueControlsState) {
+    if (changesWhatIsListed(controls, next)) setPage(1); // view and zoom changes keep the page, like Stash
     setControls(next);
     saveControls(tab, next);
-    setPage(1);
   }
 
   const all = data?.items.filter((c) => c.tab === tab) ?? [];
@@ -130,8 +130,8 @@ export function QueueTab({ tab, openId, data, error, load }: { tab: "clips" | "i
     {
       text: "Split into separate posts",
       disabled: !picked.some((c) => c.kind === "set") || busyPicked,
-      onClick: () => run(() => Promise.all(picked.filter((c) => c.kind === "set")
-        .map((c) => runOperation("post_split", { post_id: c.id }))), "Split into separate posts."),
+      onClick: () => run(() => runOperation("post_split", { post_ids: picked.filter((c) => c.kind === "set").map((c) => c.id) }),
+        "Split into separate posts."),
     },
     {
       text: removeTitle,
@@ -144,13 +144,14 @@ export function QueueTab({ tab, openId, data, error, load }: { tab: "clips" | "i
   const selecting = selected.size > 0;
 
   let body: React.ReactNode;
-  if (error) {
-    body = (
-      <div className="alert alert-danger">
-        Couldn't load the queue: {error}{" "}
-        <Button variant="link" className="p-0" onClick={load}>Try again</Button>
-      </div>
-    );
+  const problem = error ? (
+    <div className="alert alert-danger">
+      Couldn't load the list: {error}{" "}
+      <Button variant="link" className="p-0 imaglr-touch" onClick={load}>Try again</Button>
+    </div>
+  ) : null;
+  if (error && !data) {
+    body = problem;
   } else if (!data) {
     body = LoadingIndicator ? <LoadingIndicator /> : <p className="text-muted">Loading…</p>;
   } else if (all.length === 0) {
@@ -174,6 +175,7 @@ export function QueueTab({ tab, openId, data, error, load }: { tab: "clips" | "i
 
   return (
     <div>
+      {data && problem}
       <Toolbar
         tab={tab}
         controls={controls}
@@ -181,7 +183,7 @@ export function QueueTab({ tab, openId, data, error, load }: { tab: "clips" | "i
         selected={selected.size}
         selectionActions={selectionActions}
         onChange={updateControls}
-        onSelectAll={() => setSelected(new Set(matching.map((c) => c.id)))}
+        onSelectAll={() => setSelected(new Set(items.map((c) => c.id)))}
         onSelectNone={() => setSelected(new Set())}
         onRefresh={load}
         onSendAll={matching.length ? () => setSendAll(selected.size ? [...selected] : matching.map((c) => c.id)) : undefined}
@@ -204,8 +206,7 @@ export function QueueTab({ tab, openId, data, error, load }: { tab: "clips" | "i
         <ConfirmDialog title={removeTitle} accept={stills.length && stills.length === picked.length ? "Delete" : "Remove"} variant="danger"
           onAccept={() => {
             setConfirmRemove(false);
-            void run(() => Promise.all(picked.map((c) => runOperation("remove_from_queue", { item_id: c.id }))),
-              "Removed from this page.");
+            void run(() => runOperation("remove_from_queue", { item_ids: picked.map((c) => c.id) }), "Removed from this page.");
           }}
           onCancel={() => setConfirmRemove(false)}>
           {removeQuestion}

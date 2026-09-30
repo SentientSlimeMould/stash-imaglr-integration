@@ -3,6 +3,7 @@
 import React from "react";
 import { runOperation } from "../api.ts";
 import { TagInput } from "../editor/TagField.tsx";
+import { ConfirmDialog } from "../ConfirmDialog.tsx";
 
 interface Rule {
   stash_tag: string;
@@ -69,12 +70,15 @@ export function TagRules() {
     }
   }
 
+  const [removing, setRemoving] = React.useState<string | null>(null);
+
   async function remove(tag: string) {
     try {
       setRules((await runOperation<{ rules: Rule[] }>("tag_rule_delete", { stash_tag: tag })).rules);
     } catch (e) {
       Toast.error(e);
     }
+    setRemoving(null);
   }
 
   return (
@@ -95,8 +99,8 @@ export function TagRules() {
                   : <em>never suggested</em>}
               </div>
               <div className="imaglr-rule-actions">
-                <Button variant="link" className="p-0" onClick={() => { setStashTag(r.stash_tag); setTargets(r.imaglr_tags); }}>Edit</Button>
-                <Button variant="link" className="text-danger p-0" onClick={() => remove(r.stash_tag)}>Remove</Button>
+                <Button variant="link" className="p-0 imaglr-touch" onClick={() => { setStashTag(r.stash_tag); setTargets(r.imaglr_tags); }}>Edit</Button>
+                <Button variant="link" className="text-danger p-0 imaglr-touch" onClick={() => setRemoving(r.stash_tag)}>Remove</Button>
               </div>
             </li>
           ))}
@@ -115,6 +119,12 @@ export function TagRules() {
         <Button variant="primary" disabled={!stashTag || !targets.length} onClick={() => save(targets)}>Save rule</Button>
         <Button variant="secondary" disabled={!stashTag} onClick={() => save([])}>Never suggest</Button>
       </div>
+      {removing ? (
+        <ConfirmDialog title={`Remove the rule for "${removing}"`} accept="Remove" variant="danger"
+          onAccept={() => remove(removing)} onCancel={() => setRemoving(null)}>
+          The Stash tag "{removing}" goes back to being suggested as it is.
+        </ConfirmDialog>
+      ) : null}
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import React from "react";
 import { runOperation, type Ping } from "./api.ts";
 import type { Blog, QueueResponse } from "./model.ts";
+import type { Status } from "./lib/types.ts";
 import { QueueTab } from "./queue/QueueTab.tsx";
 import { SentTab } from "./sent/SentTab.tsx";
 import { Settings } from "./settings/Settings.tsx";
@@ -22,16 +23,21 @@ function isTab(key: string | null): key is TabKey {
 const POLL_MS = 2000;
 const BUSY = ["exporting", "sending"];
 
+interface SendStatus {
+  items: { id: string; status: Status; progress: number; error_code: string | null; error_detail: string | null }[];
+}
+
 /** The queue, fetched once for the whole page: both tabs and the tab counters read from it. */
 function useQueue(paused: boolean) {
   const [data, setData] = React.useState<QueueResponse | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [tick, setTick] = React.useState(0); // bumped after every poll, success or failure, to schedule the next
 
   const load = React.useCallback(() => {
     return runOperation<QueueResponse>("queue").then((d) => {
       setData(d);
       setError(null);
-    }, (e: Error) => setError(e.message));
+    }, (e: Error) => setError(e.message)).finally(() => setTick((t) => t + 1));
   }, []);
 
   // Sends interrupted by a Stash restart are marked failed (and old prepared files cleaned up) first.
@@ -39,13 +45,22 @@ function useQueue(paused: boolean) {
     runOperation("recover").catch(() => undefined).finally(load);
   }, [load]);
 
-  // While anything is being sent, keep progress fresh (not while an editor is open).
+  // While anything is being sent, keep progress fresh (not while an editor is open) with the light status
+  // call; the whole list is fetched again once something finishes. A failed poll just tries again.
   const inFlight = data?.items.some((c) => BUSY.includes(c.status)) ?? false;
   React.useEffect(() => {
-    if (!inFlight || paused) return;
-    const timer = window.setTimeout(load, POLL_MS);
+    if (!inFlight || paused || !data) return;
+    const timer = window.setTimeout(() => {
+      runOperation<SendStatus>("send_status").then((s) => {
+        const fresh = new Map(s.items.map((i) => [i.id, i]));
+        const finished = data.items.some((c) => BUSY.includes(c.status) && !fresh.has(c.id));
+        if (finished) return load();
+        setData({ ...data, items: data.items.map((c) => (fresh.has(c.id) ? { ...c, ...fresh.get(c.id)! } : c)) });
+        setTick((t) => t + 1);
+      }, (e: Error) => { setError(e.message); setTick((t) => t + 1); });
+    }, POLL_MS);
     return () => window.clearTimeout(timer);
-  }, [data, inFlight, paused, load]);
+  }, [tick, inFlight, paused, load]);
 
   return { data, error, load };
 }

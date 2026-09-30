@@ -12,13 +12,6 @@
 .imaglr-tab-content {
   padding: 1rem 0;
 }
-.imaglr-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
-}
 .imaglr-empty {
   padding: 2rem 0;
   max-width: 36rem;
@@ -42,11 +35,6 @@
   z-index: 1;
   right: 0.4rem;
   top: 0.4rem;
-}
-.imaglr-card-title {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .imaglr-card-highlight {
   outline: 2px solid #48aff0;
@@ -97,12 +85,6 @@
 .imaglr-segmented .btn,
 .imaglr-strip-actions button {
   min-height: 44px;
-}
-.imaglr-confirm {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
 }
 .imaglr-segmented {
   flex-wrap: wrap;
@@ -208,6 +190,11 @@
   padding-top: 1rem;
 }
 @media (max-width: 575.98px) {
+  .imaglr-touch {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
   .imaglr-preview {
     height: 38vh;
   }

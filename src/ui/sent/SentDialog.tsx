@@ -43,10 +43,10 @@ export function SentDialog({ itemId, onClose }: Props) {
     }
   }
 
-  async function alwaysDrop(tag: string) {
+  async function alwaysDrop(stashTag: string) {
     try {
-      await runOperation("tag_rule_set", { stash_tag: tag, imaglr_tags: [] });
-      Toast.success(`"${tag}" won't be suggested again.`);
+      await runOperation("tag_rule_set", { stash_tag: stashTag, imaglr_tags: [] });
+      Toast.success(`"${stashTag}" won't be suggested again.`);
     } catch (e) {
       Toast.error(e);
     }
@@ -63,7 +63,7 @@ export function SentDialog({ itemId, onClose }: Props) {
         {item.followup_failed ? (
           <Alert variant="warning">
             {item.error_detail}{" "}
-            <Button variant="link" className="p-0 align-baseline" disabled={busy} onClick={retry}>
+            <Button variant="link" className="p-0 align-baseline imaglr-touch" disabled={busy} onClick={retry}>
               {item.action === "publish" ? "Retry publishing" : "Retry adding to queue"}
             </Button>
           </Alert>
@@ -106,10 +106,13 @@ export function SentDialog({ itemId, onClose }: Props) {
             <>
               <dt className="col-4 col-sm-3">Dropped by imaglr</dt>
               <dd className="col-8 col-sm-9">
-                {item.dropped_tags.map((tag) => (
+                {(item.dropped ?? item.dropped_tags.map((tag) => ({ tag, from: null }))).map(({ tag, from }) => (
                   <span key={tag} className="imaglr-dropped">
                     <Badge variant="secondary" className="tag-item">{tag}</Badge>
-                    <Button variant="link" size="sm" className="p-0 align-baseline" onClick={() => alwaysDrop(tag)}>Always drop</Button>
+                    {from ? (
+                      <Button variant="link" size="sm" className="p-0 align-baseline imaglr-touch" title={`Never suggest the Stash tag "${from}"`}
+                        onClick={() => alwaysDrop(from)}>Always drop</Button>
+                    ) : null}
                   </span>
                 ))}
               </dd>
@@ -128,7 +131,7 @@ export function SentDialog({ itemId, onClose }: Props) {
 
   return (
     // Like Stash's own dialogs (ModalComponent): clicking outside or pressing Escape does nothing.
-    <Modal show onHide={() => undefined} keyboard={false} size="lg" scrollable>
+    <Modal show onHide={() => undefined} keyboard={false} size="lg" dialogClassName="imaglr-editor" scrollable>
       <Modal.Header>
         <Modal.Title>
           Sent to imaglr {item ? <small className="text-muted">{SENT_AS_LABELS[item.sent_as]}</small> : null}
@@ -136,7 +139,7 @@ export function SentDialog({ itemId, onClose }: Props) {
       </Modal.Header>
       <Modal.Body>{body}</Modal.Body>
       <Modal.Footer>
-        <Button variant="secondary" onClick={() => onClose(changed.current)}>Close</Button>
+        <Button variant="primary" onClick={() => onClose(changed.current)}>Close</Button>
       </Modal.Footer>
     </Modal>
   );

@@ -135,8 +135,11 @@ def op_post_create(ctx: Context) -> dict[str, Any]:
 
 
 def op_post_split(ctx: Context) -> dict[str, Any]:
+    """Split one post (post_id) or several (post_ids) into separate items."""
+    ids = ctx.args.get("post_ids") if isinstance(ctx.args.get("post_ids"), list) else [ctx.arg("post_id")]
     try:
-        services.dissolve_post(ctx.db, ctx.arg("post_id"))
+        for post_id in [str(i) for i in ids][:500]:
+            services.dissolve_post(ctx.db, post_id)
     except services.PostError as e:
         raise UserError(str(e)) from None
     return {"ok": True}
@@ -208,31 +211,51 @@ def op_post_arrange(ctx: Context) -> dict[str, Any]:
 
 
 def op_remove_from_queue(ctx: Context) -> dict[str, Any]:
-    """Take an item (or every file in a post) off the imaglr page: removes the queue tag in Stash."""
-    item = _item(ctx)
+    """Take items (item_id, or item_ids for several; a post means every file in it) off the imaglr page:
+    removes the queue tag in Stash. Stills, which only exist here, are deleted."""
+    ids = ctx.args.get("item_ids") if isinstance(ctx.args.get("item_ids"), list) else [ctx.arg("item_id")]
+    removed = 0
+    for item_id in [str(i) for i in ids][:500]:
+        removed += _remove_one(ctx, item_id)
+    return {"removed": removed}
+
+
+def _remove_one(ctx: Context, item_id: str) -> int:
+    item = repo.get_item(ctx.db, item_id)
+    if item is None:
+        return 0
     if item["status"] == "sent":
         raise UserError("This has been sent; it's on the Sent tab.")
     if item["status"] in services.BUSY_STATUSES:
         raise UserError("This can't be removed while it's being sent.")
     config, (queue_tag, _) = _workflow(ctx)
     members = repo.set_members(ctx.db, item["id"]) if item["kind"] == "set" else [item]
-    image_ids = [m["stash_image_id"] for m in members if m["stash_image_id"]]
-    if image_ids:
-        api.images_remove_tags(ctx.stash, image_ids, [queue_tag.id])
+    if item["kind"] == "set" and any(m["status"] in services.BUSY_STATUSES for m in members):
+        raise UserError("This can't be removed while it's being sent.")
+    # Check every marker before changing anything in Stash, so a refusal leaves the post whole.
+    markers = []
     for m in members:
         if not m["stash_marker_id"]:
             continue
         marker = api.find_marker(ctx.stash, m["stash_marker_id"])
-        if marker and not api.marker_remove_tag(ctx.stash, marker, queue_tag):
+        if marker is None:
+            continue
+        if marker.primary_tag and marker.primary_tag.id == queue_tag.id and not [t for t in marker.tags if t.id != queue_tag.id]:
             raise UserError(
                 f'"{queue_tag.name}" is the only tag on the marker for {m["source_title"]}, and Stash markers must '
                 "keep one tag. Give the marker another primary tag on the scene's Markers tab (or delete the marker there)."
             )
+        markers.append(marker)
+    image_ids = [m["stash_image_id"] for m in members if m["stash_image_id"]]
+    if image_ids:
+        api.images_remove_tags(ctx.stash, image_ids, [queue_tag.id])
+    for marker in markers:
+        api.marker_remove_tag(ctx.stash, marker, queue_tag)
     for m in members:
         repo.delete_item(ctx.db, m["id"])
     if item["kind"] == "set":
         repo.delete_item(ctx.db, item["id"])
-    return {"removed": len(members)}
+    return len(members)
 
 
 OPERATIONS = {

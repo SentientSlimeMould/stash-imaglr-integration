@@ -130,7 +130,7 @@ export function TagField({ tags, suggestions, lowercase, disabled, auto, onChang
       ) : (
         <div className="small text-muted mb-1">
           Edited by you.{" "}
-          {onReset ? <Button variant="link" size="sm" className="p-0 align-baseline" disabled={disabled} onClick={onReset}>Use the suggested tags again</Button> : null}
+          {onReset ? <Button variant="link" size="sm" className="p-0 align-baseline imaglr-touch" disabled={disabled} onClick={onReset}>Use the suggested tags again</Button> : null}
         </div>
       )}
       <TagInput inputId="imaglr-tag-field" tags={tags} extra={spare.addable} lowercase={lowercase} disabled={disabled}

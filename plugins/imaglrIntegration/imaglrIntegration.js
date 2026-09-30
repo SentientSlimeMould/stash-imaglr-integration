@@ -18,6 +18,11 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query, variables })
     });
+    if (response.status === 401) {
+      const here = window.location.pathname + window.location.search;
+      window.location.assign(`${baseUrl()}login?returnURL=${encodeURIComponent(here)}`);
+      throw new Error("Please log in to Stash again.");
+    }
     if (!response.ok) throw new Error(`Stash returned HTTP ${response.status}`);
     const result = await response.json();
     if (result.errors?.length) {
@@ -178,11 +183,7 @@
     queue: "Queued",
     publish: "Published"
   };
-  var SENT_AS_LABELS = {
-    draft: "Draft",
-    queue: "Queued",
-    publish: "Published"
-  };
+  var SENT_AS_LABELS = ACTION_LABELS;
   function pickBlog(blogs, blogId) {
     if (blogId != null) return blogs.find((b) => b.id === blogId) ?? null;
     return blogs.length === 1 ? blogs[0] : null;
@@ -380,7 +381,7 @@
       if (!v) return;
       v.currentTime = value.inS;
       setLooping(true);
-      void v.play();
+      v.play().catch(() => void 0);
     }
     const rect = overlayRect(size.w, size.h, size.vw, size.vh, value.crop.aspect, value.crop.position);
     return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-clip" }, error ? /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-danger" }, "Can't play this video: ", error) : null, /* @__PURE__ */ react_default.createElement("div", { ref: box, className: "imaglr-preview imaglr-video" }, playback ? /* @__PURE__ */ react_default.createElement(
@@ -555,7 +556,7 @@
     const { Button } = PluginApi.libraries.Bootstrap;
     const [message, setMessage] = react_default.useState(null);
     const spare = spareSuggestions(suggestions, tags);
-    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags-header" }, /* @__PURE__ */ react_default.createElement("label", { htmlFor: "imaglr-tag-field" }, /* @__PURE__ */ react_default.createElement("strong", null, "imaglr tags")), /* @__PURE__ */ react_default.createElement("span", { className: tags.length >= MAX_TAGS ? "text-warning" : "text-muted" }, tags.length, " / ", MAX_TAGS)), auto === void 0 ? null : auto ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mb-1" }, "From the Stash tags and your tag rules; they keep up with changes until you edit them.") : /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mb-1" }, "Edited by you.", " ", onReset ? /* @__PURE__ */ react_default.createElement(Button, { variant: "link", size: "sm", className: "p-0 align-baseline", disabled, onClick: onReset }, "Use the suggested tags again") : null), /* @__PURE__ */ react_default.createElement(
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags-header" }, /* @__PURE__ */ react_default.createElement("label", { htmlFor: "imaglr-tag-field" }, /* @__PURE__ */ react_default.createElement("strong", null, "imaglr tags")), /* @__PURE__ */ react_default.createElement("span", { className: tags.length >= MAX_TAGS ? "text-warning" : "text-muted" }, tags.length, " / ", MAX_TAGS)), auto === void 0 ? null : auto ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mb-1" }, "From the Stash tags and your tag rules; they keep up with changes until you edit them.") : /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mb-1" }, "Edited by you.", " ", onReset ? /* @__PURE__ */ react_default.createElement(Button, { variant: "link", size: "sm", className: "p-0 align-baseline imaglr-touch", disabled, onClick: onReset }, "Use the suggested tags again") : null), /* @__PURE__ */ react_default.createElement(
       TagInput,
       {
         inputId: "imaglr-tag-field",
@@ -640,6 +641,12 @@
       });
     }, [itemId]);
     react_default.useEffect(load, [load]);
+    const busyStatus = detail ? BUSY.includes(detail.item.status) : false;
+    react_default.useEffect(() => {
+      if (!busyStatus) return;
+      const timer = window.setInterval(load, 2e3);
+      return () => window.clearInterval(timer);
+    }, [busyStatus, load]);
     if (!detail) return null;
     const { item, files, blogs } = detail;
     const queueTag = detail.queue_tag;
@@ -728,11 +735,13 @@
     const removeLabel = item.kind === "still" ? "Delete still" : `Remove "${queueTag}" tag${item.kind === "set" ? "s" : ""}`;
     const removeQuestion = item.kind === "still" ? "Delete this still? It only exists in the plugin." : `Remove the "${queueTag}" tag in Stash${item.kind === "set" ? " from every file in this post" : ""}? It leaves this page. Nothing on imaglr is changed and nothing is deleted.`;
     async function remove() {
+      setBusy(true);
       try {
         await runOperation("remove_from_queue", { item_id: item.id });
         onClose(true);
       } catch (e) {
         setConfirmRemove(false);
+        setBusy(false);
         Toast.error(e);
       }
     }
@@ -777,7 +786,7 @@
           className: "mt-2",
           onChange: (e) => edit(setCrop)({ ...crop, position: Number(e.target.value) })
         }
-      ) : null)) : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("p", { className: "text-muted mb-1" }, "Files in this post, in order:"), /* @__PURE__ */ react_default.createElement(FileStrip, { files, disabled: locked, onArrange: arrange }), locked ? null : /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0 mb-2", onClick: () => arrange([]) }, "Split into separate posts")), /* @__PURE__ */ react_default.createElement(
+      ) : null)) : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("p", { className: "text-muted mb-1" }, "Files in this post, in order:"), /* @__PURE__ */ react_default.createElement(FileStrip, { files, disabled: locked, onArrange: arrange }), locked ? null : /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0 mb-2 imaglr-touch", onClick: () => arrange([]) }, "Split into separate posts")), /* @__PURE__ */ react_default.createElement(
         TagField,
         {
           tags,
@@ -848,6 +857,7 @@
           title: removeLabel,
           accept: item.kind === "still" ? "Delete" : "Remove tag",
           variant: "danger",
+          busy,
           onAccept: remove,
           onCancel: () => setConfirmRemove(false)
         },
@@ -980,13 +990,28 @@
       const raw = (storage ?? localStorage).getItem(storageKey(tab));
       if (raw) {
         const saved = { ...base, ...JSON.parse(raw) };
-        saved.zoom = Math.min(Math.max(Number(saved.zoom) || 0, 0), ZOOM_WIDTHS.length - 1);
-        saved.perPage = Math.max(1, Math.floor(Number(saved.perPage))) || DEFAULTS.perPage;
-        return saved;
+        const sorts = (SORTS[tab] ?? SORTS.images).map((s) => s.key);
+        return {
+          ...base,
+          sort: sorts.includes(saved.sort) ? saved.sort : base.sort,
+          dir: saved.dir === "asc" ? "asc" : "desc",
+          search: typeof saved.search === "string" ? saved.search : "",
+          status: typeof saved.status === "string" ? saved.status : "all",
+          types: Array.isArray(saved.types) ? saved.types.filter((t) => typeof t === "string") : [],
+          orientation: ["portrait", "landscape", "square"].includes(saved.orientation) ? saved.orientation : "any",
+          view: saved.view === "list" ? "list" : "grid",
+          zoom: Math.min(Math.max(Number(saved.zoom) || 0, 0), ZOOM_WIDTHS.length - 1),
+          perPage: Math.max(1, Math.floor(Number(saved.perPage))) || DEFAULTS.perPage,
+          blog: typeof saved.blog === "number" ? saved.blog : null,
+          sentAs: ["draft", "queue", "publish"].includes(saved.sentAs) ? saved.sentAs : "all"
+        };
       }
     } catch {
     }
     return base;
+  }
+  function changesWhatIsListed(a, b) {
+    return a.sort !== b.sort || a.dir !== b.dir || a.search !== b.search || a.status !== b.status || a.types.join() !== b.types.join() || a.orientation !== b.orientation || a.perPage !== b.perPage || a.blog !== b.blog || a.sentAs !== b.sentAs;
   }
   function saveControls(tab, s, storage) {
     try {
@@ -1006,16 +1031,19 @@
   }
 
   // src/ui/queue/CardGrid.tsx
-  function useContainerWidth(ref) {
+  function useContainerWidth() {
     const [width, setWidth] = react_default.useState(0);
-    react_default.useEffect(() => {
-      const el = ref.current;
+    const observer = react_default.useRef(null);
+    const attach = react_default.useCallback((el) => {
+      observer.current?.disconnect();
+      observer.current = null;
       if (!el) return;
-      const observer = new ResizeObserver(() => setWidth(el.clientWidth));
-      observer.observe(el);
-      return () => observer.disconnect();
-    }, [ref]);
-    return width;
+      setWidth(el.clientWidth);
+      observer.current = new ResizeObserver(() => setWidth(el.clientWidth));
+      observer.current.observe(el);
+    }, []);
+    react_default.useEffect(() => () => observer.current?.disconnect(), []);
+    return [width, attach];
   }
   function CardImage({ item }) {
     const [hover, setHover] = react_default.useState(false);
@@ -1037,23 +1065,27 @@
   function CardGrid({ items, view, zoom, highlightId, selected, onToggle }) {
     const { Table, Badge } = PluginApi.libraries.Bootstrap;
     const { Link } = PluginApi.libraries.ReactRouterDOM;
-    const loading = PluginApi.hooks.useLoadComponents([PluginApi.loadableComponents.SceneCard, PluginApi.loadableComponents.Images]);
-    const GridCard = loading ? null : PluginApi.components.GridCard;
-    const box = react_default.useRef(null);
-    const width = useContainerWidth(box);
+    const loaders = [PluginApi.loadableComponents.SceneCard, PluginApi.loadableComponents.Images].filter(Boolean);
+    const loading = PluginApi.hooks.useLoadComponents(loaders);
+    const GridCard = PluginApi.components.GridCard ?? (loading ? null : void 0);
+    const [width, box] = useContainerWidth();
     const isMobile = window.matchMedia("(max-width: 576px)").matches;
     const selecting = !!selected?.size;
     if (view === "list") {
-      return /* @__PURE__ */ react_default.createElement(Table, { striped: true, bordered: true, size: "sm", className: "imaglr-table" }, /* @__PURE__ */ react_default.createElement("tbody", null, items.map((c) => /* @__PURE__ */ react_default.createElement("tr", { key: c.id }, onToggle ? /* @__PURE__ */ react_default.createElement("td", { className: "select-col" }, /* @__PURE__ */ react_default.createElement(
-        "input",
-        {
-          type: "checkbox",
-          className: "mousetrap",
-          checked: selected?.has(c.id) ?? false,
-          "aria-label": `Select ${c.title}`,
-          onChange: (e) => onToggle(c.id, e.target.checked)
-        }
-      )) : null, /* @__PURE__ */ react_default.createElement("td", { className: "imaglr-table-thumb" }, /* @__PURE__ */ react_default.createElement(CardImage, { item: c })), /* @__PURE__ */ react_default.createElement("td", null, /* @__PURE__ */ react_default.createElement(Link, { to: c.url }, c.title), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted" }, c.detail)), /* @__PURE__ */ react_default.createElement("td", { className: "imaglr-table-status" }, c.badge ? /* @__PURE__ */ react_default.createElement(Badge, { variant: c.badge.variant }, c.badge.text) : null)))));
+      return /* @__PURE__ */ react_default.createElement(Table, { striped: true, bordered: true, size: "sm", className: "imaglr-table" }, /* @__PURE__ */ react_default.createElement("tbody", null, items.map((c) => /* @__PURE__ */ react_default.createElement("tr", { key: c.id }, onToggle ? (
+        // the whole cell toggles: a 22 px checkbox is a poor thumb target
+        /* @__PURE__ */ react_default.createElement("td", { className: "select-col", onClick: () => onToggle(c.id, !(selected?.has(c.id) ?? false)) }, /* @__PURE__ */ react_default.createElement(
+          "input",
+          {
+            type: "checkbox",
+            className: "mousetrap",
+            checked: selected?.has(c.id) ?? false,
+            "aria-label": `Select ${c.title}`,
+            onChange: (e) => onToggle(c.id, e.target.checked),
+            onClick: (e) => e.stopPropagation()
+          }
+        ))
+      ) : null, /* @__PURE__ */ react_default.createElement("td", { className: "imaglr-table-thumb" }, /* @__PURE__ */ react_default.createElement(CardImage, { item: c })), /* @__PURE__ */ react_default.createElement("td", null, /* @__PURE__ */ react_default.createElement(Link, { to: c.url }, c.title), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted" }, c.detail)), /* @__PURE__ */ react_default.createElement("td", { className: "imaglr-table-status" }, c.badge ? /* @__PURE__ */ react_default.createElement(Badge, { variant: c.badge.variant }, c.badge.text) : null)))));
     }
     const w = isMobile ? void 0 : cardWidth(width, zoom);
     return /* @__PURE__ */ react_default.createElement("div", { ref: box, className: "row justify-content-center imaglr-cards" }, items.map(
@@ -1187,7 +1219,10 @@
       preview();
       runOperation("blogs_list").then((r) => setBlogs(r.blogs.filter((b) => !b.paused_reason)), () => void 0);
     }, [preview]);
-    if (!plan) return null;
+    if (!plan) {
+      const { LoadingIndicator } = PluginApi.components;
+      return /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: () => void 0, keyboard: false }, /* @__PURE__ */ react_default.createElement(Modal.Header, null, /* @__PURE__ */ react_default.createElement(Modal.Title, null, selected ? "Send selected" : "Send all")), /* @__PURE__ */ react_default.createElement(Modal.Body, null, LoadingIndicator ? /* @__PURE__ */ react_default.createElement(LoadingIndicator, { message: "Checking\u2026" }) : /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Checking\u2026")), /* @__PURE__ */ react_default.createElement(Modal.Footer, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => onClose(false) }, "Cancel")));
+    }
     const noBlog = plan.filter((e) => e.skip === "no_blog");
     const fallback = blogs.find((b) => b.id === fallbackBlog) ?? null;
     const { sending, skipped, downgraded, total: ready } = summarisePlan(plan, fallback);
@@ -1328,63 +1363,66 @@
     const { Modal, Button, Form } = PluginApi.libraries.Bootstrap;
     const [draft, setDraft] = react_default.useState(controls);
     const formats = formatsIn(items);
-    return /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: () => void 0, keyboard: false }, /* @__PURE__ */ react_default.createElement(Modal.Header, null, /* @__PURE__ */ react_default.createElement(Modal.Title, null, "Filter ", tab)), /* @__PURE__ */ react_default.createElement(Modal.Body, null, tab === "sent" ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Blog"), /* @__PURE__ */ react_default.createElement(
-      Form.Control,
-      {
-        as: "select",
-        className: "text-input",
-        value: draft.blog ?? "",
-        onChange: (e) => setDraft({ ...draft, blog: e.target.value ? Number(e.target.value) : null })
-      },
-      /* @__PURE__ */ react_default.createElement("option", { value: "" }, "Any"),
-      (blogs ?? []).map((b) => /* @__PURE__ */ react_default.createElement("option", { key: b.id, value: b.id }, b.name))
-    )), /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Sent as"), /* @__PURE__ */ react_default.createElement(
-      Form.Control,
-      {
-        as: "select",
-        className: "text-input",
-        value: draft.sentAs,
-        onChange: (e) => setDraft({ ...draft, sentAs: e.target.value })
-      },
-      /* @__PURE__ */ react_default.createElement("option", { value: "all" }, "Any"),
-      ["draft", "queue", "publish"].map((a) => /* @__PURE__ */ react_default.createElement("option", { key: a, value: a }, SENT_AS_LABELS[a]))
-    ))) : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Status"), /* @__PURE__ */ react_default.createElement(
-      Form.Control,
-      {
-        as: "select",
-        className: "text-input",
-        value: draft.status,
-        onChange: (e) => setDraft({ ...draft, status: e.target.value })
-      },
-      /* @__PURE__ */ react_default.createElement("option", { value: "all" }, "Any"),
-      STATUS_FILTERS.map((s) => /* @__PURE__ */ react_default.createElement("option", { key: s, value: s }, STATUS_LABELS[s]))
-    )), formats.length > 1 ? /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Type"), formats.map((f) => /* @__PURE__ */ react_default.createElement(
-      Form.Check,
-      {
-        key: f,
-        id: `imaglr-type-${f}`,
-        type: "checkbox",
-        label: f,
-        checked: draft.types.includes(f),
-        onChange: (e) => setDraft({
-          ...draft,
-          types: e.target.checked ? [...draft.types, f] : draft.types.filter((t) => t !== f)
-        })
-      }
-    ))) : null, /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Orientation"), /* @__PURE__ */ react_default.createElement(
-      Form.Control,
-      {
-        as: "select",
-        className: "text-input",
-        value: draft.orientation,
-        onChange: (e) => setDraft({ ...draft, orientation: e.target.value })
-      },
-      /* @__PURE__ */ react_default.createElement("option", { value: "any" }, "Any"),
-      ORIENTATIONS.map((o) => /* @__PURE__ */ react_default.createElement("option", { key: o, value: o }, o[0].toUpperCase() + o.slice(1)))
-    )))), /* @__PURE__ */ react_default.createElement(Modal.Footer, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: onClose }, "Cancel"), /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => {
-      onChange(draft);
-      onClose();
-    } }, "Apply")));
+    return (
+      // Stash's own filter dialog closes on Escape and outside clicks (nothing is lost: Apply is explicit).
+      /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: onClose }, /* @__PURE__ */ react_default.createElement(Modal.Header, null, /* @__PURE__ */ react_default.createElement(Modal.Title, null, "Filter")), /* @__PURE__ */ react_default.createElement(Modal.Body, null, tab === "sent" ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Blog"), /* @__PURE__ */ react_default.createElement(
+        Form.Control,
+        {
+          as: "select",
+          className: "text-input",
+          value: draft.blog ?? "",
+          onChange: (e) => setDraft({ ...draft, blog: e.target.value ? Number(e.target.value) : null })
+        },
+        /* @__PURE__ */ react_default.createElement("option", { value: "" }, "Any"),
+        (blogs ?? []).map((b) => /* @__PURE__ */ react_default.createElement("option", { key: b.id, value: b.id }, b.name))
+      )), /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Sent as"), /* @__PURE__ */ react_default.createElement(
+        Form.Control,
+        {
+          as: "select",
+          className: "text-input",
+          value: draft.sentAs,
+          onChange: (e) => setDraft({ ...draft, sentAs: e.target.value })
+        },
+        /* @__PURE__ */ react_default.createElement("option", { value: "all" }, "Any"),
+        ["draft", "queue", "publish"].map((a) => /* @__PURE__ */ react_default.createElement("option", { key: a, value: a }, SENT_AS_LABELS[a]))
+      ))) : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Status"), /* @__PURE__ */ react_default.createElement(
+        Form.Control,
+        {
+          as: "select",
+          className: "text-input",
+          value: draft.status,
+          onChange: (e) => setDraft({ ...draft, status: e.target.value })
+        },
+        /* @__PURE__ */ react_default.createElement("option", { value: "all" }, "Any"),
+        STATUS_FILTERS.map((s) => /* @__PURE__ */ react_default.createElement("option", { key: s, value: s }, STATUS_LABELS[s]))
+      )), formats.length > 1 ? /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Type"), formats.map((f) => /* @__PURE__ */ react_default.createElement(
+        Form.Check,
+        {
+          key: f,
+          id: `imaglr-type-${f}`,
+          type: "checkbox",
+          label: f,
+          checked: draft.types.includes(f),
+          onChange: (e) => setDraft({
+            ...draft,
+            types: e.target.checked ? [...draft.types, f] : draft.types.filter((t) => t !== f)
+          })
+        }
+      ))) : null, /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Orientation"), /* @__PURE__ */ react_default.createElement(
+        Form.Control,
+        {
+          as: "select",
+          className: "text-input",
+          value: draft.orientation,
+          onChange: (e) => setDraft({ ...draft, orientation: e.target.value })
+        },
+        /* @__PURE__ */ react_default.createElement("option", { value: "any" }, "Any"),
+        ORIENTATIONS.map((o) => /* @__PURE__ */ react_default.createElement("option", { key: o, value: o }, o[0].toUpperCase() + o.slice(1)))
+      )))), /* @__PURE__ */ react_default.createElement(Modal.Footer, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: onClose }, "Cancel"), /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => {
+        onChange(draft);
+        onClose();
+      } }, "Apply")))
+    );
   }
   function Toolbar(props) {
     const { ButtonToolbar, ButtonGroup, Button, Badge, Dropdown } = PluginApi.libraries.Bootstrap;
@@ -1422,9 +1460,9 @@
     const [confirmRemove, setConfirmRemove] = react_default.useState(false);
     const [page, setPage] = react_default.useState(1);
     function updateControls(next) {
+      if (changesWhatIsListed(controls, next)) setPage(1);
       setControls(next);
       saveControls(tab, next);
-      setPage(1);
     }
     const all = data?.items.filter((c) => c.tab === tab) ?? [];
     const matching = applyControls(all, controls);
@@ -1476,7 +1514,10 @@
       {
         text: "Split into separate posts",
         disabled: !picked.some((c) => c.kind === "set") || busyPicked,
-        onClick: () => run(() => Promise.all(picked.filter((c) => c.kind === "set").map((c) => runOperation("post_split", { post_id: c.id }))), "Split into separate posts.")
+        onClick: () => run(
+          () => runOperation("post_split", { post_ids: picked.filter((c) => c.kind === "set").map((c) => c.id) }),
+          "Split into separate posts."
+        )
       },
       {
         text: removeTitle,
@@ -1487,8 +1528,9 @@
     const url = (c) => `${ROUTE}?tab=${tab}&open=${c.id}`;
     const selecting = selected.size > 0;
     let body;
-    if (error) {
-      body = /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-danger" }, "Couldn't load the queue: ", error, " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0", onClick: load }, "Try again"));
+    const problem = error ? /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-danger" }, "Couldn't load the list: ", error, " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0 imaglr-touch", onClick: load }, "Try again")) : null;
+    if (error && !data) {
+      body = problem;
     } else if (!data) {
       body = LoadingIndicator ? /* @__PURE__ */ react_default.createElement(LoadingIndicator, null) : /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Loading\u2026");
     } else if (all.length === 0) {
@@ -1509,7 +1551,7 @@
       }));
       body = /* @__PURE__ */ react_default.createElement(CardGrid, { items: gridItems, view: controls.view, zoom: controls.zoom, highlightId: openId, selected, onToggle: toggle });
     }
-    return /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(
+    return /* @__PURE__ */ react_default.createElement("div", null, data && problem, /* @__PURE__ */ react_default.createElement(
       Toolbar,
       {
         tab,
@@ -1518,7 +1560,7 @@
         selected: selected.size,
         selectionActions,
         onChange: updateControls,
-        onSelectAll: () => setSelected(new Set(matching.map((c) => c.id))),
+        onSelectAll: () => setSelected(new Set(items.map((c) => c.id))),
         onSelectNone: () => setSelected(/* @__PURE__ */ new Set()),
         onRefresh: load,
         onSendAll: matching.length ? () => setSendAll(selected.size ? [...selected] : matching.map((c) => c.id)) : void 0
@@ -1548,10 +1590,7 @@
         variant: "danger",
         onAccept: () => {
           setConfirmRemove(false);
-          void run(
-            () => Promise.all(picked.map((c) => runOperation("remove_from_queue", { item_id: c.id }))),
-            "Removed from this page."
-          );
+          void run(() => runOperation("remove_from_queue", { item_ids: picked.map((c) => c.id) }), "Removed from this page.");
         },
         onCancel: () => setConfirmRemove(false)
       },
@@ -1596,10 +1635,10 @@
         setBusy(false);
       }
     }
-    async function alwaysDrop(tag) {
+    async function alwaysDrop(stashTag) {
       try {
-        await runOperation("tag_rule_set", { stash_tag: tag, imaglr_tags: [] });
-        Toast.success(`"${tag}" won't be suggested again.`);
+        await runOperation("tag_rule_set", { stash_tag: stashTag, imaglr_tags: [] });
+        Toast.success(`"${stashTag}" won't be suggested again.`);
       } catch (e) {
         Toast.error(e);
       }
@@ -1610,15 +1649,25 @@
     } else if (!item) {
       body = LoadingIndicator ? /* @__PURE__ */ react_default.createElement(LoadingIndicator, null) : /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Loading\u2026");
     } else {
-      body = /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, item.followup_failed ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, item.error_detail, " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0 align-baseline", disabled: busy, onClick: retry }, item.action === "publish" ? "Retry publishing" : "Retry adding to queue")) : item.error_detail ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, item.error_detail) : null, /* @__PURE__ */ react_default.createElement("ol", { className: "imaglr-strip" }, item.files.map((f) => {
+      body = /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, item.followup_failed ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, item.error_detail, " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0 align-baseline imaglr-touch", disabled: busy, onClick: retry }, item.action === "publish" ? "Retry publishing" : "Retry adding to queue")) : item.error_detail ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, item.error_detail) : null, /* @__PURE__ */ react_default.createElement("ol", { className: "imaglr-strip" }, item.files.map((f) => {
         const to = stashLink(f);
         const img = f.thumb ? /* @__PURE__ */ react_default.createElement("img", { src: baseUrl() + f.thumb, alt: "" }) : null;
         return /* @__PURE__ */ react_default.createElement("li", { key: f.id, className: "imaglr-strip-item", title: f.title }, to ? /* @__PURE__ */ react_default.createElement(Link, { to, title: `${f.title} in Stash` }, img) : img);
-      })), /* @__PURE__ */ react_default.createElement("dl", { className: "row imaglr-sent-facts" }, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, item.kind === "set" ? "Files" : item.kind === "clip" ? "Clip" : item.kind === "still" ? "Still" : "Image"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, item.kind === "set" ? `${item.files.length} files in one post` : stashLink(item.files[0] ?? {}) ? /* @__PURE__ */ react_default.createElement(Link, { to: stashLink(item.files[0]), title: "Open in Stash" }, item.title) : item.title), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Sent as"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, /* @__PURE__ */ react_default.createElement(Badge, { variant: item.sent_as === "publish" ? "success" : "primary" }, SENT_AS_LABELS[item.sent_as]), " ", item.blog ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, "on ", /* @__PURE__ */ react_default.createElement("strong", null, item.blog)) : null), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "When"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, fmtDate(item.sent_at)), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "On imaglr"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, /* @__PURE__ */ react_default.createElement("a", { href: imaglrLink(item.sent_as, item.post_url), target: "_blank", rel: "noreferrer" }, item.sent_as === "draft" ? "Open imaglr drafts" : "Open the post")), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Tags"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, item.tags.length ? item.tags.map((t) => /* @__PURE__ */ react_default.createElement(Badge, { key: t, variant: "secondary", className: "tag-item" }, t)) : /* @__PURE__ */ react_default.createElement("span", { className: "text-muted" }, "None")), item.dropped_tags.length ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Dropped by imaglr"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, item.dropped_tags.map((tag) => /* @__PURE__ */ react_default.createElement("span", { key: tag, className: "imaglr-dropped" }, /* @__PURE__ */ react_default.createElement(Badge, { variant: "secondary", className: "tag-item" }, tag), /* @__PURE__ */ react_default.createElement(Button, { variant: "link", size: "sm", className: "p-0 align-baseline", onClick: () => alwaysDrop(tag) }, "Always drop"))))) : null, item.caption ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Caption"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9 imaglr-caption" }, item.caption)) : null));
+      })), /* @__PURE__ */ react_default.createElement("dl", { className: "row imaglr-sent-facts" }, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, item.kind === "set" ? "Files" : item.kind === "clip" ? "Clip" : item.kind === "still" ? "Still" : "Image"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, item.kind === "set" ? `${item.files.length} files in one post` : stashLink(item.files[0] ?? {}) ? /* @__PURE__ */ react_default.createElement(Link, { to: stashLink(item.files[0]), title: "Open in Stash" }, item.title) : item.title), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Sent as"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, /* @__PURE__ */ react_default.createElement(Badge, { variant: item.sent_as === "publish" ? "success" : "primary" }, SENT_AS_LABELS[item.sent_as]), " ", item.blog ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, "on ", /* @__PURE__ */ react_default.createElement("strong", null, item.blog)) : null), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "When"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, fmtDate(item.sent_at)), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "On imaglr"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, /* @__PURE__ */ react_default.createElement("a", { href: imaglrLink(item.sent_as, item.post_url), target: "_blank", rel: "noreferrer" }, item.sent_as === "draft" ? "Open imaglr drafts" : "Open the post")), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Tags"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, item.tags.length ? item.tags.map((t) => /* @__PURE__ */ react_default.createElement(Badge, { key: t, variant: "secondary", className: "tag-item" }, t)) : /* @__PURE__ */ react_default.createElement("span", { className: "text-muted" }, "None")), item.dropped_tags.length ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Dropped by imaglr"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, (item.dropped ?? item.dropped_tags.map((tag) => ({ tag, from: null }))).map(({ tag, from }) => /* @__PURE__ */ react_default.createElement("span", { key: tag, className: "imaglr-dropped" }, /* @__PURE__ */ react_default.createElement(Badge, { variant: "secondary", className: "tag-item" }, tag), from ? /* @__PURE__ */ react_default.createElement(
+        Button,
+        {
+          variant: "link",
+          size: "sm",
+          className: "p-0 align-baseline imaglr-touch",
+          title: `Never suggest the Stash tag "${from}"`,
+          onClick: () => alwaysDrop(from)
+        },
+        "Always drop"
+      ) : null)))) : null, item.caption ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Caption"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9 imaglr-caption" }, item.caption)) : null));
     }
     return (
       // Like Stash's own dialogs (ModalComponent): clicking outside or pressing Escape does nothing.
-      /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: () => void 0, keyboard: false, size: "lg", scrollable: true }, /* @__PURE__ */ react_default.createElement(Modal.Header, null, /* @__PURE__ */ react_default.createElement(Modal.Title, null, "Sent to imaglr ", item ? /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, SENT_AS_LABELS[item.sent_as]) : null)), /* @__PURE__ */ react_default.createElement(Modal.Body, null, body), /* @__PURE__ */ react_default.createElement(Modal.Footer, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => onClose(changed.current) }, "Close")))
+      /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: () => void 0, keyboard: false, size: "lg", dialogClassName: "imaglr-editor", scrollable: true }, /* @__PURE__ */ react_default.createElement(Modal.Header, null, /* @__PURE__ */ react_default.createElement(Modal.Title, null, "Sent to imaglr ", item ? /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, SENT_AS_LABELS[item.sent_as]) : null)), /* @__PURE__ */ react_default.createElement(Modal.Body, null, body), /* @__PURE__ */ react_default.createElement(Modal.Footer, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => onClose(changed.current) }, "Close")))
     );
   }
 
@@ -1655,14 +1704,14 @@
       void load();
     }, [load]);
     function updateControls(next) {
+      if (changesWhatIsListed(controls, next)) setPage(1);
       setControls(next);
       saveControls("sent", next);
-      setPage(1);
     }
     const filtered = !!controls.search || controls.blog != null || controls.sentAs !== "all";
     let body;
     if (error) {
-      body = /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-danger" }, "Couldn't load the sent posts: ", error, " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0", onClick: () => void load() }, "Try again"));
+      body = /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-danger" }, "Couldn't load the sent posts: ", error, " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0 imaglr-touch", onClick: () => void load() }, "Try again"));
     } else if (!data) {
       body = LoadingIndicator ? /* @__PURE__ */ react_default.createElement(LoadingIndicator, null) : /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Loading\u2026");
     } else if (data.total === 0) {
@@ -1774,17 +1823,19 @@
         Toast.error(e);
       }
     }
+    const [removing, setRemoving] = react_default.useState(null);
     async function remove(tag) {
       try {
         setRules((await runOperation("tag_rule_delete", { stash_tag: tag })).rules);
       } catch (e) {
         Toast.error(e);
       }
+      setRemoving(null);
     }
-    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-settings-section" }, /* @__PURE__ */ react_default.createElement("h5", null, "Tag rules"), /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted" }, "Whenever a Stash tag is suggested for imaglr, send these imaglr tags instead. Include the original if you still want it. A rule with no imaglr tags means the Stash tag is never suggested."), rules.length ? /* @__PURE__ */ react_default.createElement("ul", { className: "imaglr-rules" }, rules.map((r) => /* @__PURE__ */ react_default.createElement("li", { key: r.stash_tag }, /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement("strong", null, r.stash_tag), " \u2192", " ", r.imaglr_tags.length ? r.imaglr_tags.map((t) => /* @__PURE__ */ react_default.createElement(Badge, { key: t, variant: "secondary", className: "tag-item" }, t)) : /* @__PURE__ */ react_default.createElement("em", null, "never suggested")), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-rule-actions" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0", onClick: () => {
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-settings-section" }, /* @__PURE__ */ react_default.createElement("h5", null, "Tag rules"), /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted" }, "Whenever a Stash tag is suggested for imaglr, send these imaglr tags instead. Include the original if you still want it. A rule with no imaglr tags means the Stash tag is never suggested."), rules.length ? /* @__PURE__ */ react_default.createElement("ul", { className: "imaglr-rules" }, rules.map((r) => /* @__PURE__ */ react_default.createElement("li", { key: r.stash_tag }, /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement("strong", null, r.stash_tag), " \u2192", " ", r.imaglr_tags.length ? r.imaglr_tags.map((t) => /* @__PURE__ */ react_default.createElement(Badge, { key: t, variant: "secondary", className: "tag-item" }, t)) : /* @__PURE__ */ react_default.createElement("em", null, "never suggested")), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-rule-actions" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0 imaglr-touch", onClick: () => {
       setStashTag(r.stash_tag);
       setTargets(r.imaglr_tags);
-    } }, "Edit"), /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger p-0", onClick: () => remove(r.stash_tag) }, "Remove"))))) : null, /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, { htmlFor: "imaglr-rule-stash-tag" }, "Stash tag"), /* @__PURE__ */ react_default.createElement(StashTagPicker, { value: stashTag, onChange: setStashTag })), /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, { htmlFor: "imaglr-rule-targets" }, "Send as (imaglr tags)"), /* @__PURE__ */ react_default.createElement(
+    } }, "Edit"), /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger p-0 imaglr-touch", onClick: () => setRemoving(r.stash_tag) }, "Remove"))))) : null, /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, { htmlFor: "imaglr-rule-stash-tag" }, "Stash tag"), /* @__PURE__ */ react_default.createElement(StashTagPicker, { value: stashTag, onChange: setStashTag })), /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, { htmlFor: "imaglr-rule-targets" }, "Send as (imaglr tags)"), /* @__PURE__ */ react_default.createElement(
       TagInput,
       {
         inputId: "imaglr-rule-targets",
@@ -1793,7 +1844,19 @@
         onChange: setTargets,
         placeholder: "Add imaglr tags\u2026"
       }
-    )), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-rule-buttons" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", disabled: !stashTag || !targets.length, onClick: () => save(targets) }, "Save rule"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled: !stashTag, onClick: () => save([]) }, "Never suggest")));
+    )), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-rule-buttons" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", disabled: !stashTag || !targets.length, onClick: () => save(targets) }, "Save rule"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled: !stashTag, onClick: () => save([]) }, "Never suggest")), removing ? /* @__PURE__ */ react_default.createElement(
+      ConfirmDialog,
+      {
+        title: `Remove the rule for "${removing}"`,
+        accept: "Remove",
+        variant: "danger",
+        onAccept: () => remove(removing),
+        onCancel: () => setRemoving(null)
+      },
+      'The Stash tag "',
+      removing,
+      '" goes back to being suggested as it is.'
+    ) : null);
   }
 
   // src/ui/settings/Settings.tsx
@@ -1937,21 +2000,33 @@
   function useQueue(paused) {
     const [data, setData] = react_default.useState(null);
     const [error, setError] = react_default.useState(null);
+    const [tick, setTick] = react_default.useState(0);
     const load = react_default.useCallback(() => {
       return runOperation("queue").then((d) => {
         setData(d);
         setError(null);
-      }, (e) => setError(e.message));
+      }, (e) => setError(e.message)).finally(() => setTick((t) => t + 1));
     }, []);
     react_default.useEffect(() => {
       runOperation("recover").catch(() => void 0).finally(load);
     }, [load]);
     const inFlight = data?.items.some((c) => BUSY3.includes(c.status)) ?? false;
     react_default.useEffect(() => {
-      if (!inFlight || paused) return;
-      const timer = window.setTimeout(load, POLL_MS);
+      if (!inFlight || paused || !data) return;
+      const timer = window.setTimeout(() => {
+        runOperation("send_status").then((s) => {
+          const fresh = new Map(s.items.map((i) => [i.id, i]));
+          const finished = data.items.some((c) => BUSY3.includes(c.status) && !fresh.has(c.id));
+          if (finished) return load();
+          setData({ ...data, items: data.items.map((c) => fresh.has(c.id) ? { ...c, ...fresh.get(c.id) } : c) });
+          setTick((t) => t + 1);
+        }, (e) => {
+          setError(e.message);
+          setTick((t) => t + 1);
+        });
+      }, POLL_MS);
       return () => window.clearTimeout(timer);
-    }, [data, inFlight, paused, load]);
+    }, [tick, inFlight, paused, load]);
     return { data, error, load };
   }
   function TabTitle({ title, count }) {

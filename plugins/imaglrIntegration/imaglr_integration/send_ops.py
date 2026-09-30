@@ -63,7 +63,12 @@ def op_item_update(ctx: Context) -> dict[str, Any]:
     item = _item(ctx)
     if item["status"] in IN_FLIGHT + ("sent",):
         raise UserError("This item is being sent or has been sent, so it can't be changed.")
-    changes = {k: v for k, v in (ctx.args.get("changes") or {}).items() if k in EDITABLE}
+    owner = repo.set_of(ctx.db, item["id"])
+    if owner and (repo.get_item(ctx.db, owner) or {}).get("status") in IN_FLIGHT + ("sent",):
+        raise UserError("This file's post is being sent or has been sent, so it can't be changed.")
+    if not isinstance(ctx.args.get("changes"), dict):
+        raise UserError("Nothing to change.")
+    changes = {k: v for k, v in ctx.args["changes"].items() if k in EDITABLE}
     if "tags" in changes:
         changes["tags"] = _clean_tags(changes["tags"], not plugin_settings.load(ctx.stash).keep_tag_case)
         if changes["tags"] != item["tags"]:
@@ -84,7 +89,7 @@ def op_item_update(ctx: Context) -> dict[str, Any]:
     if "action" in changes and changes["action"] not in (None,) + blogs.ACTIONS:
         raise UserError("Unknown send action.")
     if "crop" in changes:
-        crop = changes["crop"] or {}
+        crop = changes["crop"] if isinstance(changes["crop"], dict) else {}
         if crop.get("aspect") not in ASPECTS:
             raise UserError("Unknown crop.")
         changes["crop"] = {"aspect": crop["aspect"], "position": min(max(float(crop.get("position", 0.5)), 0.0), 1.0)}
@@ -344,7 +349,19 @@ def op_sent_detail(ctx: Context) -> dict[str, Any]:
     if item["status"] != "sent":
         raise UserError("That post hasn't been sent.")
     names = {b["id"]: b["name"] or f"Blog {b['id']}" for b in blogs.list_blogs(ctx.db)}
-    return {"item": _sent_view(ctx, item, names)}
+    view = _sent_view(ctx, item, names)
+    # Which Stash tag (or performer/studio name) each dropped imaglr tag came from, so "Always drop" can
+    # write a rule for it. Unknown when the tag was typed by hand or the source has changed since.
+    origins: dict[str, str] = {}
+    if view["dropped_tags"]:
+        config = plugin_settings.load(ctx.stash)
+        members = repo.set_members(ctx.db, item["id"]) if item["kind"] == "set" else [item]
+        for m in members:
+            _, sugg = services.source_suggestions(ctx.stash, ctx.db, config, m)
+            for t in (sugg.active + sugg.greyed) if sugg else []:
+                origins.setdefault(t.tag.lower(), t.original)
+    view["dropped"] = [{"tag": t, "from": origins.get(t.lower())} for t in view["dropped_tags"]]
+    return {"item": view}
 
 
 def _rules(ctx: Context) -> dict[str, Any]:

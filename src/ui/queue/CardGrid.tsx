@@ -26,16 +26,20 @@ interface Props {
   onToggle?: (id: string, on: boolean) => void;
 }
 
-function useContainerWidth(ref: React.RefObject<HTMLDivElement>) {
+/** Width of the grid container, kept current by a ResizeObserver (re-attached whenever the grid mounts). */
+function useContainerWidth(): [number, (el: HTMLDivElement | null) => void] {
   const [width, setWidth] = React.useState(0);
-  React.useEffect(() => {
-    const el = ref.current;
+  const observer = React.useRef<ResizeObserver | null>(null);
+  const attach = React.useCallback((el: HTMLDivElement | null) => {
+    observer.current?.disconnect();
+    observer.current = null;
     if (!el) return;
-    const observer = new ResizeObserver(() => setWidth(el.clientWidth));
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [ref]);
-  return width;
+    setWidth(el.clientWidth);
+    observer.current = new ResizeObserver(() => setWidth(el.clientWidth));
+    observer.current.observe(el);
+  }, []);
+  React.useEffect(() => () => observer.current?.disconnect(), []);
+  return [width, attach];
 }
 
 /** Thumbnail; plays the preview while hovered on devices with a mouse. */
@@ -69,10 +73,11 @@ export function CardGrid({ items, view, zoom, highlightId, selected, onToggle }:
   const { Table, Badge } = PluginApi.libraries.Bootstrap;
   const { Link } = PluginApi.libraries.ReactRouterDOM;
   // Stash's GridCard and Pagination are loaded on demand; these modules bring them in.
-  const loading = PluginApi.hooks.useLoadComponents([PluginApi.loadableComponents.SceneCard, PluginApi.loadableComponents.Images]);
-  const GridCard = loading ? null : PluginApi.components.GridCard;
-  const box = React.useRef<HTMLDivElement>(null);
-  const width = useContainerWidth(box);
+  const loaders = [PluginApi.loadableComponents.SceneCard, PluginApi.loadableComponents.Images].filter(Boolean);
+  const loading = PluginApi.hooks.useLoadComponents(loaders);
+  // Stash's card as soon as it is registered (no flash of the fallback when it already is).
+  const GridCard = PluginApi.components.GridCard ?? (loading ? null : undefined);
+  const [width, box] = useContainerWidth();
   const isMobile = window.matchMedia("(max-width: 576px)").matches;
   const selecting = !!selected?.size;
 
@@ -83,9 +88,10 @@ export function CardGrid({ items, view, zoom, highlightId, selected, onToggle }:
           {items.map((c) => (
             <tr key={c.id}>
               {onToggle ? (
-                <td className="select-col">
+                // the whole cell toggles: a 22 px checkbox is a poor thumb target
+                <td className="select-col" onClick={() => onToggle(c.id, !(selected?.has(c.id) ?? false))}>
                   <input type="checkbox" className="mousetrap" checked={selected?.has(c.id) ?? false} aria-label={`Select ${c.title}`}
-                    onChange={(e) => onToggle(c.id, e.target.checked)} />
+                    onChange={(e) => onToggle(c.id, e.target.checked)} onClick={(e) => e.stopPropagation()} />
                 </td>
               ) : null}
               <td className="imaglr-table-thumb"><CardImage item={c} /></td>

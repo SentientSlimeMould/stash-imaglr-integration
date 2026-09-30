@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.1.13 — 2026-09-30
+
+Interface polish (third batch from the code review).
+
+- While something is being sent, the page polls a light status call instead of re-reading the whole list, keeps
+  the list on screen if a refresh fails, and the editor of a sending item shows live progress.
+- An expired Stash login takes you to the login page and back, as Stash does.
+- **Select all** selects the current page, like Stash; Send all still covers every matching item. Removing or
+  splitting several items is one call each instead of one per item.
+- Changing the view or zoom keeps the current page; only filters, sort and page size go back to page 1.
+- Card widths are fitted correctly after switching from list to grid view.
+- On phones, small link-style buttons (Try again, Retry, Always drop, Edit/Remove rules, Split) are thumb-sized
+  and the whole selection cell of a list row toggles it.
+- Removing a tag rule asks first, like every other removal; the filter dialog closes on Escape or an outside
+  click; the Sent details dialog is full screen on phones with a primary Close; Send all shows that it's
+  checking before the plan appears.
+- **Always drop** on the Sent tab now writes the rule for the Stash tag (or performer/studio name) the dropped
+  imaglr tag came from, and only appears when that is known.
+- Saved list settings from older versions can't break the list any more.
+- Editing a file that belongs to a post being sent is refused; removing several items checks every marker
+  before changing anything in Stash.
+
 ## 0.1.12 — 2026-09-30
 
 Send-pipeline robustness (second batch from the code review).

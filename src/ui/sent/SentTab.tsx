@@ -6,7 +6,7 @@ import React from "react";
 import { runOperation } from "../api.ts";
 import { fmtDate } from "../lib/format.ts";
 import { SENT_AS_LABELS } from "../lib/send.ts";
-import { loadControls, saveControls, type QueueControlsState } from "../lib/sort.ts";
+import { changesWhatIsListed, loadControls, saveControls, type QueueControlsState } from "../lib/sort.ts";
 import type { SentItem } from "../model.ts";
 import { CardGrid, type GridItem } from "../queue/CardGrid.tsx";
 import { Pager } from "../queue/Paging.tsx";
@@ -50,9 +50,9 @@ export function SentTab({ openId }: { openId: string | null }) {
   React.useEffect(() => { void load(); }, [load]);
 
   function updateControls(next: QueueControlsState) {
+    if (changesWhatIsListed(controls, next)) setPage(1); // view and zoom changes keep the page, like Stash
     setControls(next);
     saveControls("sent", next);
-    setPage(1);
   }
 
   const filtered = !!controls.search || controls.blog != null || controls.sentAs !== "all";
@@ -62,7 +62,7 @@ export function SentTab({ openId }: { openId: string | null }) {
     body = (
       <div className="alert alert-danger">
         Couldn't load the sent posts: {error}{" "}
-        <Button variant="link" className="p-0" onClick={() => void load()}>Try again</Button>
+        <Button variant="link" className="p-0 imaglr-touch" onClick={() => void load()}>Try again</Button>
       </div>
     );
   } else if (!data) {

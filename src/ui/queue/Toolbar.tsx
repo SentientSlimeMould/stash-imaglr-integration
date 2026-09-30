@@ -157,9 +157,10 @@ function FilterDialog({ tab, controls, items, blogs, onChange, onClose }: Pick<P
   const [draft, setDraft] = React.useState(controls);
   const formats = formatsIn(items);
   return (
-    <Modal show onHide={() => undefined} keyboard={false}>
+    // Stash's own filter dialog closes on Escape and outside clicks (nothing is lost: Apply is explicit).
+    <Modal show onHide={onClose}>
       <Modal.Header>
-        <Modal.Title>Filter {tab}</Modal.Title>
+        <Modal.Title>Filter</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         {tab === "sent" ? (

@@ -16,6 +16,12 @@ export async function gql<T>(query: string, variables: Record<string, unknown> =
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ query, variables }),
   });
+  if (response.status === 401) {
+    // The login expired: go to Stash's login page and come back here, as Stash's own client does.
+    const here = window.location.pathname + window.location.search;
+    window.location.assign(`${baseUrl()}login?returnURL=${encodeURIComponent(here)}`);
+    throw new Error("Please log in to Stash again.");
+  }
   if (!response.ok) throw new Error(`Stash returned HTTP ${response.status}`);
   const result = await response.json();
   if (result.errors?.length) {

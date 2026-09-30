@@ -126,19 +126,38 @@ type ControlsStorage = Pick<Storage, "getItem" | "setItem">;
 
 const storageKey = (tab: string) => `imaglr.controls.${tab}`;
 
-/** Saved controls for a tab; defaults when nothing is saved or storage is unavailable. */
+/** Saved controls for a tab; defaults when nothing is saved, unreadable, or from an older version. */
 export function loadControls(tab: string, storage?: ControlsStorage): QueueControlsState {
   const base = defaultsFor(tab as Tab);
   try {
     const raw = (storage ?? localStorage).getItem(storageKey(tab));
     if (raw) {
       const saved = { ...base, ...JSON.parse(raw) } as QueueControlsState;
-      saved.zoom = Math.min(Math.max(Number(saved.zoom) || 0, 0), ZOOM_WIDTHS.length - 1);
-      saved.perPage = Math.max(1, Math.floor(Number(saved.perPage))) || DEFAULTS.perPage;
-      return saved;
+      const sorts = (SORTS[tab as Tab] ?? SORTS.images).map((s) => s.key);
+      return {
+        ...base,
+        sort: sorts.includes(saved.sort) ? saved.sort : base.sort,
+        dir: saved.dir === "asc" ? "asc" : "desc",
+        search: typeof saved.search === "string" ? saved.search : "",
+        status: typeof saved.status === "string" ? saved.status : "all",
+        types: Array.isArray(saved.types) ? saved.types.filter((t) => typeof t === "string") : [],
+        orientation: ["portrait", "landscape", "square"].includes(saved.orientation) ? saved.orientation : "any",
+        view: saved.view === "list" ? "list" : "grid",
+        zoom: Math.min(Math.max(Number(saved.zoom) || 0, 0), ZOOM_WIDTHS.length - 1),
+        perPage: Math.max(1, Math.floor(Number(saved.perPage))) || DEFAULTS.perPage,
+        blog: typeof saved.blog === "number" ? saved.blog : null,
+        sentAs: ["draft", "queue", "publish"].includes(saved.sentAs) ? saved.sentAs : "all",
+      };
     }
   } catch { /* ignore */ }
   return base;
+}
+
+/** True when the change alters which items are listed or their order (so the page goes back to 1). */
+export function changesWhatIsListed(a: QueueControlsState, b: QueueControlsState): boolean {
+  return a.sort !== b.sort || a.dir !== b.dir || a.search !== b.search || a.status !== b.status
+    || a.types.join() !== b.types.join() || a.orientation !== b.orientation || a.perPage !== b.perPage
+    || a.blog !== b.blog || a.sentAs !== b.sentAs;
 }
 
 export function saveControls(tab: string, s: QueueControlsState, storage?: ControlsStorage): void {
