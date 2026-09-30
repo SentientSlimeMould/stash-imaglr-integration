@@ -67,13 +67,21 @@ def image_source(image: Image) -> LocalFile | HttpStream | None:
     return resolve_source(f.path if f else None, image.image_url, in_zip=bool(f and f.zip_path))
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """The request carries Stash's credentials, which must not follow a redirect to another host."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 def fetch(url: str, dest: str, headers: dict[str, str], timeout: float = 60, context=None) -> str:
     """Download url to dest via dest + ".part", so a partial file never has the final name.
     Returns the response's Content-Type. headers carry Stash auth (see api.auth_headers)."""
     part = dest + ".part"
     req = urllib.request.Request(url, headers=headers)
+    opener = urllib.request.build_opener(_NoRedirect, urllib.request.HTTPSHandler(context=context))
     try:
-        with urllib.request.urlopen(req, timeout=timeout, context=context) as resp, open(part, "wb") as fh:
+        with opener.open(req, timeout=timeout) as resp, open(part, "wb") as fh:
             shutil.copyfileobj(resp, fh, 1 << 16)
             content_type = resp.headers.get("Content-Type") or ""
     except (urllib.error.URLError, OSError) as e:

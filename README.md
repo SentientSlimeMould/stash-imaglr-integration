@@ -110,6 +110,9 @@ server with the `IMAGLR_API_BASE` environment variable; leave it unset.)
 - Animated WebP images can be sent as they are, but not cropped or converted to video (Stash's ffmpeg can't read
   them).
 - If you stop a send from Stash's Tasks page on macOS or Windows, the ffmpeg process may run on until it finishes.
+- The page shows at most 1000 tagged images and 500 tagged markers at a time; send some before tagging more.
+- The plugin's `data` folder holds a SQLite database, which doesn't work reliably on network shares (SMB/NFS).
+  Keep Stash's plugins directory on a local disk, as Stash itself needs for its own database.
   The plugin's own **Stop sending** button stops cleanly everywhere.
 
 ## Updating and uninstalling

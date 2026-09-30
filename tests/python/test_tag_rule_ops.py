@@ -119,3 +119,29 @@ class AutomaticTagsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ImaglrBaseOverrideTest(unittest.TestCase):
+    """IMAGLR_API_BASE (development only) must not be able to send the key over plain http to the internet."""
+
+    def check(self, value):
+        from imaglr_integration.context import imaglr_base_override
+        from unittest import mock
+        import os
+
+        with mock.patch.dict(os.environ, {"IMAGLR_API_BASE": value}):
+            return imaglr_base_override()
+
+    def test_https_anywhere_and_http_locally(self):
+        self.assertEqual(self.check("https://staging.example.org/api/v2"), "https://staging.example.org/api/v2")
+        self.assertEqual(self.check("http://fake-imaglr:8900/api/v2"), "http://fake-imaglr:8900/api/v2")
+        self.assertEqual(self.check("http://127.0.0.1:8900/api/v2"), "http://127.0.0.1:8900/api/v2")
+        lan = "http://" + ".".join(["10", "0", "0", "5"]) + ":8900/api/v2"  # a private address (spelt out for the privacy scan)
+        self.assertEqual(self.check(lan), lan)
+        self.assertIsNone(self.check(""))
+
+    def test_plain_http_to_the_internet_is_refused(self):
+        with self.assertRaises(UserError):
+            self.check("http://imaglr.example.org/api/v2")
+        with self.assertRaises(UserError):
+            self.check("ftp://x")

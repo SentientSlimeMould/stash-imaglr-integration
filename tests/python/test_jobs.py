@@ -10,7 +10,7 @@ from unittest import mock
 
 from imaglr_integration import blogs, items, jobs, log, services
 from imaglr_integration.context import Context
-from imaglr_integration.imaglr import DraftResult, ImaglrError
+from imaglr_integration.imaglr import DraftResult, ImaglrError, UploadCancelled
 from imaglr_integration.media.ffmpeg_run import FfmpegError
 from imaglr_integration.settings import Settings
 from imaglr_integration.stash import Image, StashError, Tag
@@ -22,12 +22,17 @@ QUEUE, DONE = Tag("10", "imaglr"), Tag("11", "imaglr-sent")
 
 
 class FakeImaglr:
-    def __init__(self, fail=None, follow_up_fail=None, returned_tags=None):
+    def __init__(self, fail=None, follow_up_fail=None, returned_tags=None, during_upload=None):
         self.fail, self.follow_up_fail, self.returned_tags = fail, follow_up_fail, returned_tags
+        self.during_upload = during_upload  # called once the body is being streamed (e.g. the user presses Stop)
         self.calls = []
 
-    def create_draft(self, files, tags=(), body_html=None, progress_cb=None):
+    def create_draft(self, files, tags=(), body_html=None, progress_cb=None, should_cancel=None):
         self.calls.append(("create_draft", [os.path.basename(f[0]) for f in files], list(tags), body_html))
+        if self.during_upload:
+            self.during_upload()
+        if should_cancel and should_cancel():
+            raise UploadCancelled()
         if self.fail:
             raise self.fail
         return DraftResult("d1", "https://imaglr.example/p/d1", list(tags) if self.returned_tags is None else self.returned_tags)
@@ -71,8 +76,10 @@ class SendTest(unittest.TestCase):
         return services.item_from_image(self.db, Settings(), self.image()) if not fields else items.create_item(self.db, **fields)
 
     def send(self, item_id, client=None, tools=("/nonexistent/ffmpeg", "/nonexistent/ffprobe"), swap=None, settings=None,
-            find_image=None):
+            find_image=None, action=None, mark=True):
         client = client or FakeImaglr()
+        if mark:  # what the send operation does before queueing the task
+            items.update_item(self.db, item_id, status="exporting")
 
         def record_swap(stash, image_id, q, d):
             self.swaps.append(image_id)
@@ -87,7 +94,7 @@ class SendTest(unittest.TestCase):
              mock.patch.object(services.api, "find_image", find_image or (lambda s, i: self.image())), \
              mock.patch.object(Context, "imaglr", lambda self_, b: client), \
              redirect_stderr(self.stderr):
-            jobs.run_send(self.ctx, item_id)
+            jobs.run_send(self.ctx, item_id, action)
         return items.get_item(self.db, item_id), client
 
     # ---- the happy paths ------------------------------------------------------------------------
@@ -194,6 +201,7 @@ class SendTest(unittest.TestCase):
         item, _ = self.send(item["id"], swap=fail)
         self.assertEqual((item["status"], item["error_code"]), ("sent", "tag_swap_failed"))
         self.assertIn("Photo", item["error_detail"])
+        self.assertTrue(item["tags_pending"])
 
     def test_exception_after_the_draft_still_marks_the_item_sent(self):
         item = self.queued_image_item()
@@ -206,11 +214,67 @@ class SendTest(unittest.TestCase):
         self.assertEqual((item["status"], item["draft_id"], item["error_code"]), ("sent", "d1", "unexpected"))
         self.assertIn("cleanup exploded", item["error_detail"])
 
-    def test_already_sent_items_are_not_sent_again(self):
+    def test_only_items_marked_by_the_send_operation_run(self):
+        # A task that starts for an item no longer "exporting" (already sent, cancelled, or never queued) does nothing.
         item = self.queued_image_item()
-        items.update_item(self.db, item["id"], status="sent")
-        _, client = self.send(item["id"])
-        self.assertEqual(client.calls, [])
+        for status in ("sent", "pending", "ready", "failed"):
+            items.update_item(self.db, item["id"], status=status)
+            _, client = self.send(item["id"], mark=False)
+            self.assertEqual(client.calls, [], status)
+
+    def test_send_all_downgrade_does_not_change_the_item_setting(self):
+        item = self.queued_image_item()
+        items.update_item(self.db, item["id"], action="publish")
+        item, client = self.send(item["id"], action="draft")
+        self.assertEqual((item["sent_as"], item["action"]), ("draft", "publish"))
+        self.assertEqual([c[0] for c in client.calls], ["create_draft"])
+
+    def test_stop_during_the_upload_creates_no_draft(self):
+        item = self.queued_image_item()
+        press_stop = lambda: items.update_item(self.db, item["id"], cancel_requested=True)
+        item, client = self.send(item["id"], FakeImaglr(during_upload=press_stop))
+        self.assertEqual((item["error_code"], item["draft_id"]), ("cancelled", None))
+        self.assertIn(item["status"], ("pending", "ready"))
+        self.assertEqual(len(client.calls), 1)  # the upload started and was aborted from inside the body
+
+    def test_no_retry_once_the_body_was_sent(self):
+        item = self.queued_image_item()
+        lost = ImaglrError("network_error", "timed out")
+        lost.body_sent = True
+        item, client = self.send(item["id"], FakeImaglr(fail=lost))
+        self.assertEqual(len(client.calls), 1)
+        self.assertEqual(item["status"], "failed")
+        self.assertIn("check your imaglr drafts", item["error_detail"])
+
+    def test_transient_error_before_the_body_is_retried(self):
+        item = self.queued_image_item()
+        client = FakeImaglr(fail=ImaglrError("server_error", "boom", http_status=500))
+        with mock.patch.object(jobs.time, "sleep", lambda s: None):
+            item, client = self.send(item["id"], client)
+        self.assertEqual(len(client.calls), 3)
+        self.assertEqual(item["status"], "failed")
+
+    def test_pending_tag_swap_is_retried_from_the_queue_instead_of_requeueing(self):
+        from imaglr_integration import queue_ops
+
+        item = self.queued_image_item()
+
+        def fail():
+            raise StashError("tag update failed")
+
+        item, _ = self.send(item["id"], swap=fail)
+        self.assertTrue(item["tags_pending"])
+        self.assertEqual(item["error_code"], "tag_swap_failed")
+        # the queue sees the image still tagged: it retries the swap rather than creating a new item
+        self.swaps.clear()
+        with mock.patch.object(jobs.api, "image_swap_tags", lambda s, i, q, d: self.swaps.append(i)):
+            skipped = queue_ops._retry_pending_swap(self.ctx, (QUEUE, DONE), image_id="801")
+        self.assertTrue(skipped)
+        self.assertEqual(self.swaps, ["801"])
+        after = items.get_item(self.db, item["id"])
+        self.assertFalse(after["tags_pending"])
+        self.assertIsNone(after["error_code"])
+        self.assertIsNone(items.active_for_image(self.db, "801"))
 
 
 class RedactionTest(unittest.TestCase):

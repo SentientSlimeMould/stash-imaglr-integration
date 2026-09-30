@@ -34,6 +34,7 @@ class ImaglrError(Exception):
         super().__init__(code, detail)
         self.code = code
         self.detail = detail
+        self.body_sent = False  # network_error after the whole request body went out (the server may have acted)
         self.http_status = http_status
         self.retry_after = retry_after
         self.field = field

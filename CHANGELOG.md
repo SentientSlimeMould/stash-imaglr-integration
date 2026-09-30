@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.1.12 — 2026-09-30
+
+Send-pipeline robustness (second batch from the code review).
+
+- **Stop** now works during the upload and during rate-limit waits: the connection is dropped before imaglr has
+  the whole post, so no draft is created.
+- A network error after the whole upload went out is no longer retried (it could have created duplicate
+  drafts); the item fails with a note to check your imaglr drafts.
+- If the Stash tag swap fails after a send, the plugin remembers it and retries on the next page load instead of
+  showing the same image or clip as newly queued (which risked sending it twice). Such failures are always
+  reported, even alongside a queue/publish failure.
+- Saving a clip's edits no longer rewrites the Stash marker (or regenerates previews) when only the sound or
+  crop changed; marker times are stored to the millisecond.
+- Send all runs an item as a draft without changing the item's own "Send as" setting; a send can no longer be
+  queued twice by a double click.
+- The plugin's database file is created readable by its owner only; Stash downloads never follow redirects
+  with Stash's credentials; the development-only `IMAGLR_API_BASE` override refuses plain http to the internet
+  and is reported by the ping check.
+- Fewer database writes per page load; clearer messages when removing a sent item and after an interrupted send.
+- README: limits on how many tagged items are shown, and that the plugins folder must not be on a network share.
+
 ## 0.1.11 — 2026-09-30
 
 Fixes from a full code review (security, correctness, UI, release process).

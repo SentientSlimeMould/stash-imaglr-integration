@@ -126,6 +126,10 @@ MIGRATIONS = [
     """
     ALTER TABLE items ADD COLUMN tags_auto INTEGER NOT NULL DEFAULT 1;
     """,
+    # v5: a sent item whose Stash tag swap (queue tag -> sent tag) still has to be done
+    """
+    ALTER TABLE items ADD COLUMN tags_pending INTEGER NOT NULL DEFAULT 0;
+    """,
 ]
 
 
@@ -151,6 +155,12 @@ class Database:
         self.conn.row_factory = sqlite3.Row
         if path != ":memory:":
             self.conn.execute("PRAGMA journal_mode=WAL")
+            for f in (path, path + "-wal", path + "-shm"):  # the file holds imaglr keys: owner-only
+                try:
+                    if os.path.exists(f):
+                        os.chmod(f, 0o600)
+                except OSError:
+                    pass
         self.conn.execute("PRAGMA busy_timeout=15000")
         self.conn.execute("PRAGMA foreign_keys=ON")
         self.migrate()

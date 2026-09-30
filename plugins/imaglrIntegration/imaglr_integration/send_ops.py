@@ -8,6 +8,7 @@ runPluginTask so the job appears on Stash's Tasks page, and records the job id o
 from __future__ import annotations
 
 import json
+import math
 import os
 
 from typing import Any
@@ -92,13 +93,15 @@ def op_item_update(ctx: Context) -> dict[str, Any]:
     if {"in_s", "out_s", "mute"} & set(changes):
         if item["kind"] != "clip":
             raise UserError("Only clips can be trimmed or muted.")
-        in_s = float(changes.get("in_s", item["in_s"]) or 0)
-        out_s = float(changes.get("out_s", item["out_s"]) or 0)
+        in_s = round(float(changes["in_s"]), 3) if "in_s" in changes else float(item["in_s"] or 0)
+        out_s = round(float(changes["out_s"]), 3) if "out_s" in changes else float(item["out_s"] or 0)
+        if not (math.isfinite(in_s) and math.isfinite(out_s)):
+            raise UserError("The clip times must be numbers.")
         if in_s < 0 or out_s - in_s < 0.1:
             raise UserError("The clip must end after it starts.")
         if out_s - in_s > MAX_CLIP_SECONDS:
             raise UserError(f"Clips can be at most {MAX_CLIP_SECONDS // 60} minutes long.")
-        changes.update(in_s=round(in_s, 3), out_s=round(out_s, 3), mute=bool(changes.get("mute", item["mute"])))
+        changes.update(in_s=in_s, out_s=out_s, mute=bool(changes.get("mute", item["mute"])))
         if (changes["in_s"], changes["out_s"], changes["mute"]) != (item["in_s"], item["out_s"], item["mute"]):
             changes.update(output_path=None, output_bytes=None, output_mime=None)  # export again
         if item["stash_marker_id"] and (changes["in_s"], changes["out_s"]) != (item["in_s"], item["out_s"]):
@@ -139,14 +142,21 @@ def op_send(ctx: Context) -> dict[str, Any]:
 def _start(ctx: Context, item: dict[str, Any], blog: dict[str, Any], action: str) -> dict[str, Any]:
     """Queue the send task in Stash (it appears on Stash's Tasks page) and record its job id."""
     title = item["source_title"] or "post"
-    job_id = ctx.stash.gql(RUN_TASK, {
-        "id": PLUGIN_ID,
-        "description": f"imaglr: sending {title[:60]} to {blog['name'] or 'imaglr'} ({action})",
-        "args": {"mode": "task_send", "item_id": item["id"]},
-    })["runPluginTask"]
-    item = repo.update_item(ctx.db, item["id"], status="exporting", progress=0, stash_job_id=str(job_id),
-                            action=action, cancel_requested=False, error_code=None,
-                            error_detail=None)  # type: ignore[assignment]
+    # Marked busy first: the task only runs items in this state, so a second Send can't queue it twice, and
+    # the item's own action setting is left alone (Send all may run it as a draft).
+    repo.update_item(ctx.db, item["id"], status="exporting", progress=0, stash_job_id=None,
+                     cancel_requested=False, error_code=None, error_detail=None)
+    try:
+        job_id = ctx.stash.gql(RUN_TASK, {
+            "id": PLUGIN_ID,
+            "description": f"imaglr: sending {title[:60]} to {blog['name'] or 'imaglr'} ({action})",
+            "args": {"mode": "task_send", "item_id": item["id"], "action": action},
+        })["runPluginTask"]
+    except Exception:
+        repo.update_item(ctx.db, item["id"], status="pending", error_code="stash_error",
+                         error_detail="Stash couldn't start the send task.")
+        raise
+    item = repo.update_item(ctx.db, item["id"], stash_job_id=str(job_id))  # type: ignore[assignment]
     return {"item": item, "job_id": job_id}
 
 
@@ -218,6 +228,13 @@ def op_cancel(ctx: Context) -> dict[str, Any]:
     return {"item": repo.update_item(ctx.db, item["id"], cancel_requested=True)}  # the task stops itself
 
 
+def op_send_status(ctx: Context) -> dict[str, Any]:
+    """Progress of everything not yet settled, from the database only: what the page polls every couple of
+    seconds while a send runs, instead of re-discovering the whole queue."""
+    rows = repo.list_items(ctx.db, statuses=repo.ACTIVE_STATUSES)
+    return {"items": [{k: r[k] for k in ("id", "status", "progress", "error_code", "error_detail")} for r in rows]}
+
+
 def op_recover(ctx: Context) -> dict[str, Any]:
     """Runs when the page loads: items left mid-send by a Stash restart or a killed job are marked failed
     (so they can be retried), and old prepared files are cleaned up."""
@@ -231,7 +248,8 @@ def op_recover(ctx: Context) -> dict[str, Any]:
     for item in stuck:
         if item["stash_job_id"] not in running:
             repo.update_item(ctx.db, item["id"], status="failed", progress=0, cancel_requested=False,
-                             error_code="interrupted", error_detail="Stash stopped before this finished. Send it again.")
+                             error_code="interrupted",
+                             error_detail="This send didn't finish (Stash restarted, or the task was stopped). Send it again.")
             recovered += 1
     return {"recovered": recovered}
 
@@ -384,7 +402,7 @@ def op_tags_suggest(ctx: Context) -> dict[str, Any]:
 
 
 def task_send(ctx: Context) -> None:
-    jobs.run_send(ctx, ctx.arg("item_id"))
+    jobs.run_send(ctx, ctx.arg("item_id"), ctx.args.get("action"))
 
 
 OPERATIONS = {
@@ -405,4 +423,5 @@ OPERATIONS = {
 
 TASKS = {
     "task_send": task_send,
+    "send_status": op_send_status,
 }

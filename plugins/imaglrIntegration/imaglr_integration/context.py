@@ -3,16 +3,39 @@
 
 from __future__ import annotations
 
+import ipaddress
 import os
+import urllib.parse
 import re
 from typing import Any
 
+from . import log
 from .db import Database
 from .imaglr import ImaglrClient
 from .stash import StashClient
 
 # Development only: point the plugin at a fake imaglr (dev/fake_imaglr.py). Unset in normal use.
 IMAGLR_BASE_ENV = "IMAGLR_API_BASE"
+
+
+def imaglr_base_override() -> str | None:
+    """The dev override, if set and safe: https anywhere, or plain http only to a loopback, private-network or
+    bare (Docker service) host. Anything else is refused, because the request would carry the API key."""
+    value = (os.environ.get(IMAGLR_BASE_ENV) or "").strip()
+    if not value:
+        return None
+    parts = urllib.parse.urlsplit(value)
+    host = parts.hostname or ""
+    if parts.scheme == "https":
+        return value
+    if parts.scheme == "http":
+        try:
+            private = ipaddress.ip_address(host).is_private or ipaddress.ip_address(host).is_loopback
+        except ValueError:
+            private = host == "localhost" or "." not in host  # a Compose service name
+        if private:
+            return value
+    raise UserError(f"{IMAGLR_BASE_ENV} must be an https URL (or http to a local address); refusing {value!r}.")
 
 
 class UserError(Exception):
@@ -55,8 +78,10 @@ class Context:
 
     def imaglr(self, blog: dict[str, Any]) -> ImaglrClient:
         kwargs = {}
-        if os.environ.get(IMAGLR_BASE_ENV):
-            kwargs["base_url"] = os.environ[IMAGLR_BASE_ENV]
+        base = imaglr_base_override()
+        if base:
+            log.warning(f"{IMAGLR_BASE_ENV} is set: talking to {base} instead of imaglr.com (development only)")
+            kwargs["base_url"] = base
         return ImaglrClient(blog["api_key"], self.version, **kwargs)
 
     def arg(self, name: str, kind: type = str, required: bool = True) -> Any:

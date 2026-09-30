@@ -62,7 +62,7 @@ def marker_bounds(marker: Marker, default_len: float) -> tuple[float, float]:
     duration = marker.scene.duration if marker.scene else None
     if duration and out_s > duration:
         out_s = max(in_s + 0.5, duration)
-    return in_s, out_s
+    return round(in_s, 3), round(out_s, 3)  # the editor works in milliseconds; keep the two in step
 
 
 def marker_title(marker: Marker) -> str:
@@ -71,10 +71,11 @@ def marker_title(marker: Marker) -> str:
     return f"{scene} — {title}" if scene and scene != title else title
 
 
-def refresh_tags(db: Database, item: dict[str, Any], suggested: list[str] | None) -> dict[str, Any]:
+def refresh_tags(db: Database, item: dict[str, Any], suggested: list[str] | None, force: bool = False) -> dict[str, Any]:
     """While an item's tags are automatic (never edited), keep them equal to what its Stash tags and the
-    tag rules currently give, so rule changes and Stash tag changes flow through until the user takes over."""
-    if suggested is None or not item.get("tags_auto") or item["status"] in BUSY_STATUSES:
+    tag rules currently give, so rule changes and Stash tag changes flow through until the user takes over.
+    Busy items are left alone unless `force` (the send task itself, before it uploads)."""
+    if suggested is None or not item.get("tags_auto") or (item["status"] in BUSY_STATUSES and not force):
         return item
     if suggested != item["tags"]:
         return repo.update_item(db, item["id"], tags=suggested) or item
@@ -104,16 +105,17 @@ def source_suggestions(stash: Any, db: Database, settings: Settings, member: dic
     return image, image_suggestions(db, settings, image) if image else None
 
 
-def refresh_item_tags(stash: Any, db: Database, settings: Settings, item: dict[str, Any]) -> dict[str, Any]:
+def refresh_item_tags(stash: Any, db: Database, settings: Settings, item: dict[str, Any], force: bool = False) -> dict[str, Any]:
     """Bring an automatic item's tags up to date from Stash (a post's from its members'). Used where the
-    editor isn't involved: sending."""
+    editor isn't involved: sending (`force`, since the item is already marked busy) and switching back to
+    automatic tags."""
     members = repo.set_members(db, item["id"]) if item["kind"] == "set" else [item]
     fresh = []
     for m in members:
         _, sugg = source_suggestions(stash, db, settings, m)
-        fresh.append(refresh_tags(db, m, sugg.active_names() if sugg else None))
+        fresh.append(refresh_tags(db, m, sugg.active_names() if sugg else None, force))
     if item["kind"] == "set":
-        return refresh_tags(db, item, merged_tags(fresh))
+        return refresh_tags(db, item, merged_tags(fresh), force)
     return fresh[0]
 
 
@@ -160,8 +162,8 @@ def item_from_image(db: Database, settings: Settings, image: Image) -> dict[str,
 def mark_seen(db: Database, keys: list[str]) -> dict[str, str]:
     """First time each queued Stash object was seen: the "Added" sort order."""
     ts = now_iso()
-    for key in keys:
-        db.execute("INSERT OR IGNORE INTO queue_seen(key, first_seen) VALUES(?, ?)", (key, ts))
+    with db.transaction() as conn:
+        conn.executemany("INSERT OR IGNORE INTO queue_seen(key, first_seen) VALUES(?, ?)", [(k, ts) for k in keys])
     return {r["key"]: r["first_seen"] for r in db.fetchall("SELECT key, first_seen FROM queue_seen")}
 
 

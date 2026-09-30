@@ -65,6 +65,11 @@ class DraftResult:
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
 
+class UploadCancelled(Exception):
+    """Raised from inside the request body when the caller's should_cancel() says stop; the connection is
+    dropped before imaglr has a complete body, so no draft is created."""
+
+
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     """A redirect could reach a route outside the allowlist (and would carry the key), so it is an error."""
 
@@ -121,7 +126,11 @@ class ImaglrClient:
                     e.close()
         except (OSError, http.client.HTTPException) as e:
             reason = getattr(e, "reason", None) or e
-            raise ImaglrError("network_error", detail=f"{type(e).__name__}: {reason}") from e
+            err = ImaglrError("network_error", detail=f"{type(e).__name__}: {reason}")
+            # If the whole body went out, the server may well have committed the request (a draft) before the
+            # reply was lost: the caller must not simply retry.
+            err.body_sent = bool(getattr(data, "length", 0)) and getattr(data, "sent", 0) >= data.length
+            raise err from e
         return _parse(status, resp_headers, body)
 
     # ---- the permitted operations ----------------------------------------------------------
@@ -137,11 +146,13 @@ class ImaglrClient:
         tags: Sequence[str] = (),
         body_html: str | None = None,
         progress_cb: ProgressCallback | None = None,
+        should_cancel: Callable[[], bool] | None = None,
     ) -> DraftResult:
         """One draft carrying 1..MAX_FILES_PER_DRAFT files, in the given order, streamed from disk.
 
         Each media item is a path, or (path, content type) to override the type guessed from its extension.
-        `progress_cb` receives the fraction of the request body sent so far, ending at 1.0.
+        `progress_cb` receives the fraction of the request body sent so far, ending at 1.0. `should_cancel`
+        is polled between chunks; True aborts the upload with UploadCancelled before the body is complete.
         """
         if not media or len(media) > MAX_FILES_PER_DRAFT:
             raise ValueError(f"a draft needs 1 to {MAX_FILES_PER_DRAFT} files")
@@ -155,7 +166,7 @@ class ImaglrClient:
         fields = [("tags[]", str(t)) for t in tags]
         if body_html:
             fields.insert(0, ("body", body_html))
-        body = MultipartBody(fields, files, progress_cb)
+        body = MultipartBody(fields, files, progress_cb, should_cancel)
         headers = {"Content-Type": body.content_type, "Content-Length": str(body.length)}
         response = self._request("POST", "/drafts", data=body, headers=headers, timeout=self._upload_timeout)
         return parse_draft_response(response)
@@ -193,10 +204,13 @@ class MultipartBody:
         fields: Sequence[tuple[str, str]],
         files: Sequence[tuple[str, str]],
         progress_cb: ProgressCallback | None = None,
+        should_cancel: Callable[[], bool] | None = None,
     ):
         self.boundary = "stash-imaglr-" + secrets.token_hex(16)
         self.content_type = f"multipart/form-data; boundary={self.boundary}"
         self._progress_cb = progress_cb
+        self._should_cancel = should_cancel
+        self.sent = 0  # bytes handed to the connection so far (this attempt)
         self._parts: list[bytes | tuple[str, int]] = []
         for name, value in fields:
             self._parts.append(self._head(name) + value.encode("utf-8") + b"\r\n")
@@ -217,14 +231,16 @@ class MultipartBody:
         return ("\r\n".join(lines) + "\r\n\r\n").encode("utf-8")
 
     def __iter__(self) -> Iterator[bytes]:
-        sent = 0
+        self.sent = 0
         for part in self._parts:
             chunks = (part,) if isinstance(part, bytes) else _file_chunks(*part)
             for chunk in chunks:
+                if self._should_cancel and self.sent < self.length and self._should_cancel():
+                    raise UploadCancelled()
                 yield chunk
-                sent += len(chunk)
+                self.sent += len(chunk)
                 if self._progress_cb:
-                    self._progress_cb(min(1.0, sent / self.length))
+                    self._progress_cb(min(1.0, self.sent / self.length))
 
 
 def _quote_filename(name: str) -> str:

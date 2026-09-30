@@ -15,7 +15,7 @@ from typing import Any
 
 from . import blog_ops, clip_ops, log, queue_ops, send_ops
 from .settings import SettingsError
-from .context import Context, UserError, plugin_version
+from .context import Context, imaglr_base_override, UserError, plugin_version
 
 __all__ = ["handle", "OPERATIONS", "UserError", "plugin_version"]
 
@@ -35,6 +35,7 @@ def op_ping(ctx: Context) -> dict[str, Any]:
         "stash_version": data["version"]["version"],
         "ffmpeg": data["systemStatus"]["ffmpegPath"],
         "ffprobe": data["systemStatus"]["ffprobePath"],
+        "imaglr_api_base": imaglr_base_override(),  # None in normal use
         "echo": ctx.args.get("echo"),
     }
 

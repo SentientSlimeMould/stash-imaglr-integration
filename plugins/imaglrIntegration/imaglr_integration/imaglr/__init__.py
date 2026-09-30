@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """Talking to imaglr: the allowlisted API client and its error model."""
 
-from .client import ALLOWED_ENDPOINTS, DisallowedEndpoint, DraftResult, ImaglrClient
+from .client import ALLOWED_ENDPOINTS, DisallowedEndpoint, DraftResult, ImaglrClient, UploadCancelled
 from .errors import ErrorClass, ImaglrError, classify
 
 __all__ = [
@@ -11,5 +11,6 @@ __all__ = [
     "ErrorClass",
     "ImaglrClient",
     "ImaglrError",
+    "UploadCancelled",
     "classify",
 ]

@@ -20,7 +20,7 @@ from . import items as repo
 from . import settings as plugin_settings
 from .context import Context
 from .db import now_iso
-from .imaglr import ErrorClass, ImaglrError
+from .imaglr import ErrorClass, ImaglrError, UploadCancelled
 from .media.ffmpeg_run import Cancelled, FfmpegError
 from .media.image_inspect import ImageFormatError, inspect_image
 from .media.image_plan import plan_image
@@ -226,20 +226,34 @@ def _is_prepared(member: dict[str, Any]) -> bool:
 # ---- sending --------------------------------------------------------------------------------
 
 
-def _upload(client, files, tags, body, progress) -> Any:
-    """POST /drafts, riding out short rate limits and brief imaglr/network hiccups."""
+def _wait(seconds: float, should_cancel) -> None:
+    """Sleep in short slices so Stop is noticed during rate-limit and retry waits."""
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        if should_cancel():
+            raise Cancelled()
+        time.sleep(min(0.5, max(0.0, end - time.monotonic())))
+
+
+def _upload(client, files, tags, body, progress, should_cancel) -> Any:
+    """POST /drafts, riding out short rate limits and brief imaglr/network hiccups. Never retries once the
+    whole body went out: imaglr may have saved the draft although the reply was lost."""
     for attempt in range(4):
         try:
-            return client.create_draft(files, tags=tags, body_html=body, progress_cb=progress)
+            return client.create_draft(files, tags=tags, body_html=body, progress_cb=progress, should_cancel=should_cancel)
+        except UploadCancelled:
+            raise Cancelled() from None
         except ImaglrError as e:
             if e.klass is ErrorClass.RATE_LIMITED and e.retry_after and e.retry_after <= MAX_RATE_LIMIT_WAIT and attempt < 3:
                 log.info(f"imaglr rate limit: waiting {e.retry_after:.0f} s")
-                time.sleep(e.retry_after)
+                _wait(e.retry_after, should_cancel)
                 continue
-            if e.klass is ErrorClass.TRANSIENT and attempt < 2:
+            if e.klass is ErrorClass.TRANSIENT and attempt < 2 and not e.body_sent:
                 log.info(f"imaglr {e.code}: retrying in {5 * 4 ** attempt} s")
-                time.sleep(5 * 4**attempt)
+                _wait(5 * 4**attempt, should_cancel)
                 continue
+            if e.body_sent:
+                e.detail = (e.detail or e.code) + " (after the upload completed; check your imaglr drafts before sending again)"
             raise
 
 
@@ -280,9 +294,11 @@ def _follow_up(client, action: str, draft_id: str) -> dict[str, Any]:
     return client.publish_draft(draft_id) if action == "publish" else client.queue_draft(draft_id)
 
 
-def run_send(ctx: Context, item_id: str) -> None:
+def run_send(ctx: Context, item_id: str, action: str | None = None) -> None:
+    """The task. `action` is what the send operation decided (Send all downgrades publish to draft without
+    changing the item's own setting); otherwise the item's or the blog's default applies."""
     item = repo.get_item(ctx.db, item_id)
-    if item is None or item["status"] == "sent":
+    if item is None or item["status"] != "exporting":  # only what send/send_all just queued; never twice
         return
     should_cancel = _cancel_check(ctx, item_id)
     members = repo.set_members(ctx.db, item_id) if item["kind"] == "set" else [item]
@@ -290,15 +306,16 @@ def run_send(ctx: Context, item_id: str) -> None:
         if not members:
             raise JobFailed("post_empty", "This post has no files.")
         blog = choose_blog(ctx, item)
-        action = blogs.resolve_action(blog, item["action"])
+        if action not in blogs.ACTIONS:
+            action = blogs.resolve_action(blog, item["action"])
         try:
             config = plugin_settings.load(ctx.stash)
         except plugin_settings.SettingsError as e:
             raise JobFailed("settings", str(e), status="ready") from None
         queue_tag, done_tag = api.workflow_tags(ctx.stash, config.queue_tag, config.done_tag)
-        # Automatic tags follow Stash and the tag rules until edited: bring them up to date now, before the
-        # item is marked busy (refresh_tags leaves busy items alone).
-        item = services.refresh_item_tags(ctx.stash, ctx.db, config, item)
+        # Automatic tags follow Stash and the tag rules until edited: bring them up to date now (the send
+        # operation already marked the item busy, hence force).
+        item = services.refresh_item_tags(ctx.stash, ctx.db, config, item, force=True)
         tags = list(item["tags"])[:MAX_TAGS]
 
         # 1. prepare (0-40 %)
@@ -337,14 +354,14 @@ def run_send(ctx: Context, item_id: str) -> None:
             log.progress(0.4 + 0.55 * fraction)
 
         try:
-            draft = _upload(client, files, tags, caption_to_html(item["caption"]), progress)
+            draft = _upload(client, files, tags, caption_to_html(item["caption"]), progress, should_cancel)
         except ImaglrError as e:
             if e.klass is not ErrorClass.TOO_LARGE or not _shrink_videos(ctx, members, should_cancel):
                 raise _upload_error(ctx, blog, e) from None
             log.info(f"imaglr said too large; re-encoded smaller, uploading {item_id} again")
             files = [(m["output_path"], m["output_mime"]) for m in members]
             try:
-                draft = _upload(client, files, tags, caption_to_html(item["caption"]), progress)
+                draft = _upload(client, files, tags, caption_to_html(item["caption"]), progress, should_cancel)
             except ImaglrError as e2:
                 raise _upload_error(ctx, blog, e2) from None
     except Cancelled:
@@ -368,7 +385,8 @@ def run_send(ctx: Context, item_id: str) -> None:
     # 3. the draft exists: from here on nothing may re-upload it
     record = dict(status="sent", progress=1.0, draft_id=draft.id, post_url=draft.url, sent_as="draft",
                   sent_at=now_iso(), blog_id=blog["id"], dropped_tags=dropped_tags(tags, draft.tags) if draft.tags else [],
-                  followup_failed=False, error_code=None, error_detail=None, cancel_requested=False)
+                  followup_failed=False, error_code=None, error_detail=None, cancel_requested=False,
+                  tags_pending=True)
     try:
         if action != "draft":
             try:
@@ -380,25 +398,22 @@ def run_send(ctx: Context, item_id: str) -> None:
         repo.update_item(ctx.db, item_id, **record)
         for m in members if item["kind"] == "set" else []:
             repo.update_item(ctx.db, m["id"], status="sent", draft_id=draft.id, post_url=draft.url,
-                             sent_as=record["sent_as"], sent_at=record["sent_at"], blog_id=blog["id"])
+                             sent_as=record["sent_as"], sent_at=record["sent_at"], blog_id=blog["id"], tags_pending=True)
         repo.bump_used_tags(ctx.db, tags)
         log.progress(0.97)
 
-        # 4. Stash: swap the queue tag for the sent tag on every source
-        failed = []
-        for m in members:
-            try:
-                if m["stash_marker_id"]:
-                    marker = api.find_marker(ctx.stash, m["stash_marker_id"])
-                    if marker:
-                        api.marker_swap_tags(ctx.stash, marker, queue_tag, done_tag)
-                elif m["stash_image_id"]:
-                    api.image_swap_tags(ctx.stash, m["stash_image_id"], queue_tag, done_tag)
-            except StashError as e:
-                failed.append(f"{m['source_title']} ({e})")
-        if failed and not record["followup_failed"]:
-            repo.update_item(ctx.db, item_id, error_code="tag_swap_failed",
-                             error_detail=log.redact("Sent, but Stash's tags couldn't be updated for: " + ", ".join(failed))[:500])
+        # 4. Stash: swap the queue tag for the sent tag on every source. A source whose swap fails keeps
+        # tags_pending, so the queue retries it later instead of treating the source as newly queued.
+        failed = swap_source_tags(ctx, members, queue_tag, done_tag)
+        if not failed:
+            repo.update_item(ctx.db, item_id, tags_pending=False)
+        else:
+            message = "Stash's tags couldn't be updated for: " + ", ".join(failed)
+            log.warning(f"sent {item_id}: {message}")
+            if record["followup_failed"]:
+                repo.update_item(ctx.db, item_id, error_detail=log.redact(f"{record['error_detail']} Also, {message}")[:500])
+            else:
+                repo.update_item(ctx.db, item_id, error_code="tag_swap_failed", error_detail=log.redact("Sent, but " + message)[:500])
         log.info(f"sent {item_id} to {blog['name']} as {record['sent_as']} (draft {draft.id})")
         cleanup_prepared(ctx.db, os.path.join(ctx.data_dir, "prepared"), config.prepared_retention_days)
     except Exception as e:  # the draft is on imaglr: the item is sent, whatever else broke
@@ -407,6 +422,24 @@ def run_send(ctx: Context, item_id: str) -> None:
                       error_detail=log.redact(f"Saved as a draft, but then: {type(e).__name__}: {e}")[:500])
         repo.update_item(ctx.db, item_id, **record)
     log.progress(1.0)
+
+
+def swap_source_tags(ctx: Context, members: list[dict[str, Any]], queue_tag, done_tag) -> list[str]:
+    """Queue tag -> sent tag on each member's Stash source; clears tags_pending per member. Returns the
+    members that failed, as text for the user."""
+    failed = []
+    for m in members:
+        try:
+            if m["stash_marker_id"]:
+                marker = api.find_marker(ctx.stash, m["stash_marker_id"])
+                if marker:
+                    api.marker_swap_tags(ctx.stash, marker, queue_tag, done_tag)
+            elif m["stash_image_id"]:
+                api.image_swap_tags(ctx.stash, m["stash_image_id"], queue_tag, done_tag)
+            repo.update_item(ctx.db, m["id"], tags_pending=False)
+        except StashError as e:
+            failed.append(f"{m['source_title']} ({e})")
+    return failed
 
 
 def retry_follow_up(ctx: Context, item: dict[str, Any]) -> dict[str, Any]:
@@ -419,5 +452,7 @@ def retry_follow_up(ctx: Context, item: dict[str, Any]) -> dict[str, Any]:
         _follow_up(ctx.imaglr(blog), action, item["draft_id"])
     except ImaglrError as e:
         raise JobFailed(e.code, f"{FOLLOW_UP_LABELS.get(action, action)} failed again: {e.detail or e.code}") from None
-    return repo.update_item(ctx.db, item["id"], sent_as=action, followup_failed=False, error_code=None,
-                            error_detail=None)  # type: ignore[return-value]
+    still_pending = item["tags_pending"]  # keep saying so if the Stash tags are still wrong
+    return repo.update_item(ctx.db, item["id"], sent_as=action, followup_failed=False,
+                            error_code="tag_swap_failed" if still_pending else None,
+                            error_detail="Sent, but Stash's tags couldn't be updated." if still_pending else None)  # type: ignore[return-value]

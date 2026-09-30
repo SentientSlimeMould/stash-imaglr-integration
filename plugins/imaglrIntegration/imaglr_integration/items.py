@@ -12,7 +12,8 @@ from .db import Database, loads, now_iso
 ACTIVE_STATUSES = ("pending", "exporting", "ready", "sending", "failed")
 IN_FLIGHT_STATUSES = ("exporting", "sending")
 JSON_FIELDS = {"crop", "tags", "dropped_tags"}
-BOOL_FIELDS = ("mute", "hdr_warning", "cancel_requested", "followup_failed", "size_guard_retried", "tags_auto")
+BOOL_FIELDS = ("mute", "hdr_warning", "cancel_requested", "followup_failed", "size_guard_retried", "tags_auto",
+               "tags_pending")
 DEFAULT_CROP = {"aspect": "original", "position": 0.5}
 MAX_SET_MEMBERS = 10
 
@@ -97,6 +98,13 @@ def active_for_marker(db: Database, marker_id: str) -> dict[str, Any] | None:
         "SELECT * FROM items WHERE stash_marker_id=? AND status!='sent' ORDER BY created_at DESC LIMIT 1",
         (marker_id,),
     )
+    return decode(row) if row else None
+
+
+def sent_with_pending_swap(db: Database, *, marker_id: str | None = None, image_id: str | None = None) -> dict[str, Any] | None:
+    """A sent item for this source whose Stash tags never got swapped (the swap failed or the task died)."""
+    column, value = ("stash_marker_id", marker_id) if marker_id else ("stash_image_id", image_id)
+    row = db.fetchone(f"SELECT * FROM items WHERE {column}=? AND status='sent' AND tags_pending=1 ORDER BY created_at DESC LIMIT 1", (value,))
     return decode(row) if row else None
 
 

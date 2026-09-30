@@ -26,8 +26,9 @@ def cleanup_prepared(db: Database, prepared_root: str, retention_days: int, now:
     now = now or datetime.now(timezone.utc)
     cutoff = (now - timedelta(days=max(0, retention_days))).isoformat(timespec="seconds")
     rows = db.fetchall(
-        "SELECT id FROM items WHERE (status='sent' AND COALESCE(sent_at, updated_at) < ?) "
-        "OR (status='failed' AND kind!='still' AND updated_at < ?)",
+        "SELECT id FROM items WHERE (output_path IS NOT NULL OR source_path IS NOT NULL) AND ("
+        "(status='sent' AND COALESCE(sent_at, updated_at) < ?) "
+        "OR (status='failed' AND kind!='still' AND updated_at < ?))",
         (cutoff, cutoff),
     )
     removed = 0

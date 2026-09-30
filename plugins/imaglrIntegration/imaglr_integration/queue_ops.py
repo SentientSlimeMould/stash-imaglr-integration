@@ -24,6 +24,22 @@ def _workflow(ctx: Context):
     return config, api.workflow_tags(ctx.stash, config.queue_tag, config.done_tag)
 
 
+def _retry_pending_swap(ctx: Context, tags, **source) -> bool:
+    """A source still carrying the queue tag because its send's tag swap failed: swap now (or leave it for
+    next time) rather than queueing it again, which would send a duplicate. True = not a queue candidate."""
+    sent = repo.sent_with_pending_swap(ctx.db, **source)
+    if sent is None:
+        return False
+    from . import jobs  # local: jobs imports services, not the other way round
+
+    if not jobs.swap_source_tags(ctx, [sent], tags[0], tags[1]):
+        owner = repo.set_of(ctx.db, sent["id"]) or sent["id"]
+        post = repo.get_item(ctx.db, owner)
+        if post and post["error_code"] == "tag_swap_failed":
+            repo.update_item(ctx.db, owner, error_code=None, error_detail=None)
+    return True
+
+
 def op_queue(ctx: Context) -> dict[str, Any]:
     """Everything waiting to be sent: queued markers and images (as items), stills, and posts grouping them.
     Each card says which tab it belongs on."""
@@ -35,9 +51,13 @@ def op_queue(ctx: Context) -> dict[str, Any]:
 
     cards: dict[str, dict[str, Any]] = {}
     for marker in markers:
+        if _retry_pending_swap(ctx, tags, marker_id=marker.id):
+            continue
         item = services.item_from_marker(db, config, marker)
         cards[item["id"]] = services.clip_card(item, marker, seen.get(f"marker:{marker.id}"))
     for image in images:
+        if _retry_pending_swap(ctx, tags, image_id=image.id):
+            continue
         item = services.item_from_image(db, config, image)
         cards[item["id"]] = services.image_card(item, image, seen.get(f"image:{image.id}"))
     for item in repo.list_items(db, kinds=("still",), statuses=repo.ACTIVE_STATUSES):
@@ -190,6 +210,8 @@ def op_post_arrange(ctx: Context) -> dict[str, Any]:
 def op_remove_from_queue(ctx: Context) -> dict[str, Any]:
     """Take an item (or every file in a post) off the imaglr page: removes the queue tag in Stash."""
     item = _item(ctx)
+    if item["status"] == "sent":
+        raise UserError("This has been sent; it's on the Sent tab.")
     if item["status"] in services.BUSY_STATUSES:
         raise UserError("This can't be removed while it's being sent.")
     config, (queue_tag, _) = _workflow(ctx)
