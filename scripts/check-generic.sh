@@ -10,26 +10,28 @@ PATTERN="$PATTERN|pbk_[A-Za-z0-9]{4,}\|[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|git
 EMAIL='[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}'
 ALLOWED_EMAIL='@users\.noreply\.github\.com|@anthropic\.com|@example\.'
 status=0
-scan() {  # $1 = label, stdin = content
+scan() {  # $1 = label, stdin = content; returns 1 on a hit
   content=$(cat)
   hits=$(printf '%s\n' "$content" | grep -nE "$PATTERN" | head -5)
   mails=$(printf '%s\n' "$content" | grep -noE "$EMAIL" | grep -vE "$ALLOWED_EMAIL" | head -5)
   if [ -n "$hits$mails" ]; then
     printf '%s\n' "$hits" "$mails" | grep . >&2
     echo "check-generic: private-looking content in $1 (above)." >&2
-    status=1
+    return 1
   fi
+  return 0
 }
+# File lists are read line by line (names may contain spaces); a hit inside the loop ends it with status 1.
 if [ "$1" = "--all" ]; then
-  for f in $(git ls-files | grep -vE 'package-lock.json$|^scripts/check-generic.sh$'); do
-    scan "$f" < "$f"
-  done
+  git ls-files | grep -vE 'package-lock.json$|^scripts/check-generic.sh$' | while IFS= read -r f; do
+    scan "$f" < "$f" || exit 1
+  done || status=1
 else
-  for f in $(git diff --cached --name-only --diff-filter=ACMR | grep -vE 'package-lock.json$|^scripts/check-generic.sh$'); do
-    git show ":$f" | scan "staged $f"
-  done
+  git diff --cached --name-only --diff-filter=ACMR | grep -vE 'package-lock.json$|^scripts/check-generic.sh$' | while IFS= read -r f; do
+    git show ":$f" | scan "staged $f" || exit 1
+  done || status=1
   if [ -n "$1" ] && [ -f "$1" ]; then
-    scan "the commit message" < "$1"
+    scan "the commit message" < "$1" || status=1
   fi
 fi
 exit $status

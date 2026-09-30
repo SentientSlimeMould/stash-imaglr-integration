@@ -11,13 +11,13 @@ PATTERNS="$here/../docs/private/private-patterns.txt"
 [ -f "$PATTERNS" ] || { echo "check-private: $PATTERNS missing" >&2; exit 1; }
 status=0
 # 1. staged file contents
-for f in $(git diff --cached --name-only --diff-filter=ACMR | grep -v '^scripts/check-generic.sh$'); do
+git diff --cached --name-only --diff-filter=ACMR | grep -v '^scripts/check-generic.sh$' | while IFS= read -r f; do
   if git show ":$f" | grep -niE -f "$PATTERNS" -- >/dev/null 2>&1; then
     echo "check-private: personal details in staged $f:" >&2
     git show ":$f" | grep -niE -f "$PATTERNS" -- | head -5 >&2
-    status=1
+    exit 1
   fi
-done
+done || status=1
 # 2. the commit message, when the commit-msg hook passes its file
 if [ -n "$1" ] && [ -f "$1" ]; then
   if grep -niE -f "$PATTERNS" -- "$1" >/dev/null 2>&1; then

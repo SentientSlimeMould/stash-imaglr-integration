@@ -125,9 +125,11 @@ footer of the **Post to imaglr** page shows which version is running.
 
 Uninstalling removes the plugin's files but **leaves its `data` folder** — your blogs and their API keys, the sent
 history, tag rules and working files — and your Stash tags. Stash's plugin manager doesn't ask; it only removes
-what it installed. So if you're removing the plugin for good, first open **Settings → Delete all plugin data**
-(or delete `<Stash plugins folder>/imaglr/imaglrIntegration/data` yourself). Reinstalling or updating keeps
-everything, which is what you usually want.
+what it installed, so the plugin folder itself may also remain (Python leaves a `__pycache__` folder in it). If
+you're removing the plugin for good, first open the **Post to imaglr** page, press its **Settings** button and
+use **Delete all plugin data** at the bottom; then, after uninstalling, delete what is left of
+`<Stash plugins folder>/imaglr/imaglrIntegration` if you want a clean plugins folder. Reinstalling or updating
+keeps everything, which is what you usually want.
 
 ## Development
 

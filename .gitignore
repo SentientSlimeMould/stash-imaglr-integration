@@ -1,9 +1,7 @@
 # Local-only notes (personal details, third-party copies)
 docs/private/
 
-# Local test environment state and secrets
-dev/stash/
-dev/media/
+# Local test environment secrets (Stash state and test media live in Docker volumes)
 dev/*.env
 dev/.env*
 
