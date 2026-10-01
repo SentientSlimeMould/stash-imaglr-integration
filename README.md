@@ -23,19 +23,19 @@ Demos performed on a demo library of public-domain films and NASA images.
 One image: tick it in Stash's Images list, **⋯ → Add to imaglr**, open the card, **Save draft** — then over on
 imaglr to **Publish**.
 
-https://github.com/user-attachments/assets/REPLACE-one-image
+https://github.com/user-attachments/assets/2c2d1845-b4b8-4f8f-981d-3dab37551908
 
 **Clips created from markers - no video editing knowledge needed**
 Make a marker on a scene the same way you bookmark your favourite bits, tag the marker `imaglr`, trim the in and out points in the editor
 if necessary and send to Imaglr.
 
-https://github.com/user-attachments/assets/REPLACE-clip-from-marker
+https://github.com/user-attachments/assets/5a98b1db-fe1a-4b8b-a2da-eb19c941e514
 
 **Create posts from several images**
 Select a few images, **Add to imaglr as one post**, put them in order, choose the blog and **Published** —
 it goes straight to the blog.
 
-https://github.com/user-attachments/assets/REPLACE-one-post
+https://github.com/user-attachments/assets/4a9fb196-368e-48a4-86b4-b03ec7e26b87
 
 <sub>Demo media: Prelinger Archives films via archive.org and NASA images, all public domain. The clips are also
 in [docs/media](docs/media).</sub>
