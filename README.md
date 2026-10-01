@@ -5,15 +5,40 @@ your [imaglr](https://imaglr.com) blogs.
 
 - **Images:** tag them `imaglr` in Stash (or tick them in any image list and choose **⋯ → Add to imaglr**),
   crop if you like, and send.
-- **Clips:** create a scene marker in Stash as usual and tag it `imaglr`. Trim, crop and send.
-- **Tags:** suggested from your Stash tags, performers, studio and galleries, and editable before you send.
-- **Where it goes:** your imaglr drafts (the default), your imaglr queue, or published straight away. Set a
-  default for each blog and change it when you send.
+- **Clips:** create a scene marker in Stash as usual and tag it `imaglr`. Fine-tune the edit if needed, and send.
+- **Tags:** Tags on your imaglr posts are suggested from your Stash tags (performers, studio and galleries). All editable before you send.
+- **Tag Mapping:** Set up rules on your Stash tags to convert them to one or many corresponding Imaglr tags. 
+- **Draft, Queue or Publish immediately:** Set a default for each blog. You can change it each time you send.
 - **Privacy:** location, camera and other metadata are stripped from every file before upload.
 
 > **Status: early release (0.1.x).** It works end to end and is tested on Stash v0.31.1 and the development
 > build, but it hasn't been used widely yet. Please report problems on the
 > [issue tracker](https://github.com/SentientSlimeMould/stash-imaglr-integration/issues).
+
+## See it work
+
+Demos performed on a demo library of public-domain films and NASA images.
+
+**Tag media & send it to Imaglr**
+One image: tick it in Stash's Images list, **⋯ → Add to imaglr**, open the card, **Save draft** — then over on
+imaglr to **Publish**.
+
+https://github.com/user-attachments/assets/REPLACE-one-image
+
+**Clips created from markers - no video editing knowledge needed**
+Make a marker on a scene the same way you bookmark your favourite bits, tag the marker `imaglr`, trim the in and out points in the editor
+if necessary and send to Imaglr.
+
+https://github.com/user-attachments/assets/REPLACE-clip-from-marker
+
+**Create posts from several images**
+Select a few images, **Add to imaglr as one post**, put them in order, choose the blog and **Published** —
+it goes straight to the blog.
+
+https://github.com/user-attachments/assets/REPLACE-one-post
+
+<sub>Demo media: Prelinger Archives films via archive.org and NASA images, all public domain. The clips are also
+in [docs/media](docs/media).</sub>
 
 ## Requirements
 
@@ -27,7 +52,7 @@ your [imaglr](https://imaglr.com) blogs.
   - **read**: lets the plugin check the blog's name, supporter status and daily limit;
   - **manage**: drafts, including publishing or queueing a draft, which is how everything is posted.
 
-  Leave **write** off: it allows creating, editing and deleting posts directly, which the plugin never does.
+  Leave **write** off: weirdly, this permission is not needed?! - Likely to change, as the Imaglr API is currently in Beta. 
 
 The plugin's Settings show each blog's **posts left today**, as reported by imaglr. imaglr allows 1,000 new posts
 a day; saving a draft doesn't use one, publishing does (including when imaglr publishes from your queue).
@@ -49,9 +74,9 @@ a day; saving a draft doesn't use one, publishing does (including when imaglr pu
    **Draft**, **Queued** or **Published**. The plugin checks the key with imaglr before saving it.
    Repeat for each blog.
 3. Optional: under **Tag rules**, choose Stash tags that should always be sent as different imaglr tags (one Stash
-   tag can become several), or never suggested. Rules apply to everything waiting to be sent, not just new items:
-   an item's tags follow its Stash tags and the rules until you edit them in the editor (there's a link to go
-   back to the suggested tags).
+   tag can become several tags for your Imaglr post), or block tags from being suggested. e.g. a Stash tag of "Ham" can be configured to always automatically convert to the Imaglr tags "Ham", "Meat", "Deli Meat".
+
+![The plugin's Settings dialog: two blogs with their status and posts left today, Add a blog, Tag rules, and Delete all plugin data](docs/media/settings.png)
 
 A few more options live in Stash under **Settings → Plugins → Imaglr Integration**: the queue tag (default
 `imaglr`), the tag applied after sending (default `imaglr-sent`), tags never suggested (default `^AI_`), keeping
@@ -62,17 +87,17 @@ tag capitals, the default clip length, and how long prepared files are kept.
 - **Queue things in Stash.** Tag images or scene markers `imaglr`. In any image list (including a gallery's
   Images tab) you can also tick images and choose **⋯ → Add to imaglr**, or **⋯ → Add to imaglr as one post** for
   up to 10 images in a single post.
-- **Open imaglr → Clips or Images.** Search, filter, sort and select work like Stash's own lists. Tick several
+- **Open imaglr → Clips or Images.** Search, filter, sort and select items. Select several
   cards and choose **Make one post** to combine clips and images into one post.
 - **Tap a card to edit it:** crop; for clips, set in and out points (written back to the Stash marker), remove
   the sound or save a still; edit tags and caption; choose the blog and what happens when sent. Then press the
-  send button, which says exactly what it will do. **Publish now** asks for confirmation.
+  send button.
 - **Send all** sends every item shown (or the ticked ones) using each item's settings. It never publishes
   straight away: items set to Publish now are saved as drafts instead.
 - **Sent** lists where each post went, which tags imaglr dropped, and lets you retry queueing or publishing if
   that step failed after the draft was saved.
 
-Sending runs as a Stash task, so it also shows on Stash's **Settings → Tasks** page.
+Sending is queued as a Stash task, so it shows on Stash's **Settings → Tasks** page.
 
 ## What the plugin changes
 
@@ -87,12 +112,9 @@ Sending runs as a Stash task, so it also shows on Stash's **Settings → Tasks**
 
 It never modifies, moves or deletes your media files, and it never creates markers.
 
-**Its own data** — the imaglr API keys, the sent history, tag rules and prepared files — is kept in its `data`
-folder inside Stash's plugins directory, in plain text (a SQLite database), just as Stash keeps its own settings
-in `config.yml`; protect that folder the same way. The plugin doesn't add its own login: anyone who can use your
-Stash can use it, including sending to your blogs.
-
-**On imaglr** it can only make these five calls, enforced by a test: read your profile, read your limits, create a
+**Its own data** — the imaglr API keys, the sent history, tag rules and prepared files — are kept in its `data`
+folder inside Stash's plugins directory, in a SQLite database.
+**On imaglr** it can only make these five calls: read your profile, read your API rate limits, create a
 draft, and publish or queue a draft it has just created. It never edits or deletes posts, changes your queue
 settings or reads your feed.
 
@@ -101,19 +123,19 @@ the Stash title or original file name (letters, digits and dashes only — renam
 too much); the tags and caption you chose; and the plugin's name and version as the `User-Agent`. Nothing about
 your Stash library, other files or your machine.
 
-**Nothing else:** no telemetry and no other network connections. (Developers can point the plugin at a test
-server with the `IMAGLR_API_BASE` environment variable; leave it unset.)
+**Nothing else:** no telemetry and no other network connections.
 
 ## Limitations
 
-- Stash runs one task at a time, so long clip exports and uploads wait for (and hold up) Stash's own tasks such
-  as scans.
+- Stash runs one task at a time in a queue, so clip exports and uploads can be held up by Stash's own tasks such
+  as scans and vice versa.
 - HDR videos are not tone-mapped; colours may look flat.
 - Animated WebP images can be sent as they are, but not cropped or converted to video (Stash's ffmpeg can't read
   them).
-- If you stop a send from Stash's Tasks page on macOS or Windows, the ffmpeg process may run on until it finishes.
+- If you stop a send from Stash's Tasks page on macOS or Windows, the ffmpeg process may continue to run on until 
+  it finishes.
 - The page shows at most 1000 tagged images and 500 tagged markers at a time; send some before tagging more.
-- The plugin's `data` folder holds a SQLite database, which doesn't work reliably on network shares (SMB/NFS).
+- The plugin's `data` folder holds a SQLite database, which doesn't always work reliably on network shares (SMB/NFS).
   Keep Stash's plugins directory on a local disk, as Stash itself needs for its own database.
   The plugin's own **Stop sending** button stops cleanly everywhere.
 
