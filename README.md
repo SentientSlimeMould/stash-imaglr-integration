@@ -17,22 +17,29 @@ your [imaglr](https://imaglr.com) blogs.
 
 ## See it work
 
-Demos performed on a demo library of public-domain films and NASA images.
+Three short recordings (no sound) on a demo library of public-domain films and NASA images.
 
-**Tag media & send it to Imaglr**
+### 1 · Tag it, send it, it's a post.
+
 One image: tick it in Stash's Images list, **⋯ → Add to imaglr**, open the card, **Save draft** — then over on
-imaglr to **Publish**.
+imaglr, **Publish**.
 
 https://github.com/user-attachments/assets/2c2d1845-b4b8-4f8f-981d-3dab37551908
 
-**Clips created from markers - no video editing knowledge needed**
-Make a marker on a scene the same way you bookmark your favourite bits, tag the marker `imaglr`, trim the in and out points in the editor
-if necessary and send to Imaglr.
+---
+
+### 2 · Clips come from markers, nothing else to learn.
+
+Make a marker on a scene the way you always do, tag it `imaglr`, trim the in and out points in the editor
+(they're written back to the marker), remove the sound, send — and publish the draft on imaglr.
 
 https://github.com/user-attachments/assets/5a98b1db-fe1a-4b8b-a2da-eb19c941e514
 
-**Create posts from several images**
-Select a few images, **Add to imaglr as one post**, put them in order, choose the blog and **Published** —
+---
+
+### 3 · Several images, one post.
+
+Tick a few images, **Add to imaglr as one post**, put them in order, choose the blog and **Published** —
 it goes straight to the blog.
 
 https://github.com/user-attachments/assets/4a9fb196-368e-48a4-86b4-b03ec7e26b87
