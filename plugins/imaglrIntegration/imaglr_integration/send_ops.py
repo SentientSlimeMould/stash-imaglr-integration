@@ -24,7 +24,8 @@ from .settings import PLUGIN_ID
 from .tags.pipeline import MAX_TAG_LEN, MAX_TAGS
 
 IN_FLIGHT = ("exporting", "sending")
-EDITABLE = {"tags", "caption", "blog_id", "action", "crop", "in_s", "out_s", "mute", "flip"}
+EDITABLE = {"tags", "caption", "blog_id", "action", "crop", "in_s", "out_s", "mute", "flip", "format"}
+FORMATS = ("video", "gif")
 MAX_CLIP_SECONDS = 600
 ASPECTS = ("original", "9:16", "4:5", "1:1")
 
@@ -94,10 +95,12 @@ def op_item_update(ctx: Context) -> dict[str, Any]:
             raise UserError("Unknown crop.")
         changes["crop"] = {"aspect": crop["aspect"], "position": min(max(float(crop.get("position", 0.5)), 0.0), 1.0)}
         if changes["crop"] != item["crop"]:
-            changes.update(output_path=None, output_bytes=None, output_mime=None)  # prepare again
-    if {"in_s", "out_s", "mute", "flip"} & set(changes):
+            changes.update(output_path=None, output_bytes=None, output_mime=None, output_note=None)  # prepare again
+    if "format" in changes and changes["format"] not in FORMATS:
+        raise UserError("Unknown format.")
+    if {"in_s", "out_s", "mute", "flip", "format"} & set(changes):
         if item["kind"] != "clip":
-            raise UserError("Only clips can be trimmed, muted or flipped.")
+            raise UserError("Only clips can be trimmed, muted, flipped or made into GIFs.")
         in_s = round(float(changes["in_s"]), 3) if "in_s" in changes else float(item["in_s"] or 0)
         out_s = round(float(changes["out_s"]), 3) if "out_s" in changes else float(item["out_s"] or 0)
         if not (math.isfinite(in_s) and math.isfinite(out_s)):
@@ -107,9 +110,11 @@ def op_item_update(ctx: Context) -> dict[str, Any]:
         if out_s - in_s > MAX_CLIP_SECONDS:
             raise UserError(f"Clips can be at most {MAX_CLIP_SECONDS // 60} minutes long.")
         changes.update(in_s=in_s, out_s=out_s, mute=bool(changes.get("mute", item["mute"])),
-                       flip=bool(changes.get("flip", item["flip"])))
-        if (changes["in_s"], changes["out_s"], changes["mute"], changes["flip"]) != (item["in_s"], item["out_s"], item["mute"], item["flip"]):
-            changes.update(output_path=None, output_bytes=None, output_mime=None, size_guard_retried=False)  # export again
+                       flip=bool(changes.get("flip", item["flip"])), format=changes.get("format", item["format"]))
+        before = (item["in_s"], item["out_s"], item["mute"], item["flip"], item["format"])
+        if (changes["in_s"], changes["out_s"], changes["mute"], changes["flip"], changes["format"]) != before:
+            changes.update(output_path=None, output_bytes=None, output_mime=None, output_note=None,
+                           size_guard_retried=False)  # export again
         if item["stash_marker_id"] and (changes["in_s"], changes["out_s"]) != (item["in_s"], item["out_s"]):
             marker = api.find_marker(ctx.stash, item["stash_marker_id"])
             if marker:  # keep Stash's marker in step with the trimmed clip
@@ -142,10 +147,11 @@ def op_send(ctx: Context) -> dict[str, Any]:
         blog = jobs.choose_blog(ctx, item)
     except jobs.JobFailed as e:
         raise UserError(e.detail) from None
-    return _start(ctx, item, blog, blogs.resolve_action(blog, item["action"]))
+    return _start(ctx, item, blog, blogs.resolve_action(blog, item["action"]), bool(ctx.args.get("gif_fallback")))
 
 
-def _start(ctx: Context, item: dict[str, Any], blog: dict[str, Any], action: str) -> dict[str, Any]:
+def _start(ctx: Context, item: dict[str, Any], blog: dict[str, Any], action: str, gif_fallback: bool = False,
+           format_override: str | None = None) -> dict[str, Any]:
     """Queue the send task in Stash (it appears on Stash's Tasks page) and record its job id."""
     title = item["source_title"] or "post"
     # Marked busy first: the task only runs items in this state, so a second Send can't queue it twice, and
@@ -156,7 +162,8 @@ def _start(ctx: Context, item: dict[str, Any], blog: dict[str, Any], action: str
         job_id = ctx.stash.gql(RUN_TASK, {
             "id": PLUGIN_ID,
             "description": f"imaglr: sending {title[:60]} to {blog['name'] or 'imaglr'} ({action})",
-            "args": {"mode": "task_send", "item_id": item["id"], "action": action},
+            "args": {"mode": "task_send", "item_id": item["id"], "action": action,
+                     "gif_fallback": gif_fallback, "format_override": format_override},
         })["runPluginTask"]
     except Exception:
         repo.update_item(ctx.db, item["id"], status="pending", error_code="stash_error",
@@ -165,6 +172,8 @@ def _start(ctx: Context, item: dict[str, Any], blog: dict[str, Any], action: str
     item = repo.update_item(ctx.db, item["id"], stash_job_id=str(job_id))  # type: ignore[assignment]
     return {"item": item, "job_id": job_id}
 
+
+LONG_GIF_SECONDS = 15  # beyond this a GIF gets heavy; Send all offers to send such clips as videos
 
 SKIP_REASONS = {
     "no_blog": "no blog chosen",
@@ -202,6 +211,11 @@ def plan_send_all(ctx: Context, item_ids: list[str]) -> list[dict[str, Any]]:
                 action = blogs.resolve_action(blog, item["action"])
                 entry.update(blog_id=blog["id"], blog=blog["name"] or f"Blog {blog['id']}",
                              action="draft" if action == "publish" else action, downgraded=action == "publish")
+                members = repo.set_members(ctx.db, item_id) if item["kind"] == "set" else [item]
+                gifs = [m for m in members if m["kind"] == "clip" and m["format"] == "gif"]
+                if gifs:
+                    entry["gif"] = True
+                    entry["long_gif"] = any(((m["out_s"] or 0) - (m["in_s"] or 0)) > LONG_GIF_SECONDS for m in gifs)
         if "skip" in entry:
             entry["reason"] = SKIP_REASONS[entry["skip"]]
         plan.append(entry)
@@ -215,10 +229,14 @@ def op_send_all(ctx: Context) -> dict[str, Any]:
         raise UserError("Nothing to send.")
     plan = plan_send_all(ctx, ids)
     if not ctx.args.get("dry_run"):
+        long_as_video = ctx.args.get("long_gifs_as_video", True)
+        gif_fallback = ctx.args.get("gif_fallback", True)
         for entry in plan:
             if "skip" not in entry:
                 item = repo.get_item(ctx.db, entry["id"])
-                _start(ctx, item, blogs.get_blog(ctx.db, entry["blog_id"]), entry["action"])  # type: ignore[arg-type]
+                override = "video" if (long_as_video and entry.get("long_gif")) else None
+                _start(ctx, item, blogs.get_blog(ctx.db, entry["blog_id"]), entry["action"],  # type: ignore[arg-type]
+                       bool(gif_fallback), override)
     return {"plan": plan}
 
 
@@ -289,6 +307,7 @@ def _sent_view(ctx: Context, item: dict[str, Any], blog_names: dict[int, str]) -
         "id": m["id"], "kind": m["kind"], "title": m["source_title"], "thumb": _thumb(m),
         "stash_image_id": m["stash_image_id"], "stash_scene_id": m["stash_scene_id"],
         "stash_marker_id": m["stash_marker_id"], "in_s": m["in_s"],
+        "send_format": m["format"], "output_note": m["output_note"],
     } for m in members]
     return {
         "id": item["id"],
@@ -309,6 +328,7 @@ def _sent_view(ctx: Context, item: dict[str, Any], blog_names: dict[int, str]) -
         "action": item["action"],
         "error_code": item["error_code"],
         "error_detail": item["error_detail"],
+        "output_note": item["output_note"],
     }
 
 
@@ -420,7 +440,8 @@ def op_tags_suggest(ctx: Context) -> dict[str, Any]:
 
 
 def task_send(ctx: Context) -> None:
-    jobs.run_send(ctx, ctx.arg("item_id"), ctx.args.get("action"))
+    jobs.run_send(ctx, ctx.arg("item_id"), ctx.args.get("action"), bool(ctx.args.get("gif_fallback")),
+                  ctx.args.get("format_override"))
 
 
 OPERATIONS = {

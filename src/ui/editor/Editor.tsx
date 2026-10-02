@@ -93,7 +93,8 @@ export function Editor({ itemId, onClose }: Props) {
   const [tags, setTags] = React.useState<string[]>([]);
   const [caption, setCaption] = React.useState("");
   const [crop, setCrop] = React.useState<{ aspect: Aspect; position: number }>({ aspect: "original", position: 0.5 });
-  const [trim, setTrim] = React.useState({ inS: 0, outS: 0, mute: false, flip: false });
+  const [trim, setTrim] = React.useState<{ inS: number; outS: number; mute: boolean; flip: boolean; format: "video" | "gif" }>(
+    { inS: 0, outS: 0, mute: false, flip: false, format: "video" });
   const [blogId, setBlogId] = React.useState<number | null>(null);
   const [action, setAction] = React.useState<SendAction | null>(null);
   const [confirmPublish, setConfirmPublish] = React.useState(false);
@@ -112,7 +113,7 @@ export function Editor({ itemId, onClose }: Props) {
       setResetTags(false);
       setCaption(d.item.caption);
       setCrop(d.item.crop);
-      setTrim({ inS: d.item.in_s ?? 0, outS: d.item.out_s ?? 0, mute: d.item.mute, flip: d.item.flip });
+      setTrim({ inS: d.item.in_s ?? 0, outS: d.item.out_s ?? 0, mute: d.item.mute, flip: d.item.flip, format: d.item.format });
       setBlogId(d.item.blog_id);
       setAction(d.item.action);
       setDirty(false);
@@ -156,7 +157,7 @@ export function Editor({ itemId, onClose }: Props) {
       changes: {
         tags, caption, crop, blog_id: blogId, action,
         ...(resetTags ? { tags_auto: true } : {}),
-        ...(isClip ? { in_s: trim.inS, out_s: trim.outS, mute: trim.mute, flip: trim.flip } : {}),
+        ...(isClip ? { in_s: trim.inS, out_s: trim.outS, mute: trim.mute, flip: trim.flip, format: trim.format } : {}),
       },
     });
     setDirty(false);
@@ -281,8 +282,9 @@ export function Editor({ itemId, onClose }: Props) {
             imageId={files[0].stash_marker_id ? null : files[0].stash_image_id}
             value={{ ...trim, crop }}
             disabled={locked}
+            gifTargetMb={detail.gif_target_mb}
             onChange={(v: ClipState) => {
-              edit(setTrim)({ inS: v.inS, outS: v.outS, mute: v.mute, flip: v.flip });
+              edit(setTrim)({ inS: v.inS, outS: v.outS, mute: v.mute, flip: v.flip, format: v.format });
               setCrop(v.crop);
             }}
             onSaveStill={saveStill}

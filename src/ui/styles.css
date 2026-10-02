@@ -416,3 +416,8 @@
 .imaglr-plan {
   padding-left: 1.2rem;
 }
+
+/* Send all: the GIF line and its two choices */
+.imaglr-plan-gifs {
+  margin: 0.5rem 0 0.75rem;
+}

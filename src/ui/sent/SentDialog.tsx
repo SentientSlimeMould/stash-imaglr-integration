@@ -85,6 +85,12 @@ export function SentDialog({ itemId, onClose }: Props) {
             {item.kind === "set" ? `${item.files.length} files in one post`
               : stashLink(item.files[0] ?? {}) ? <Link to={stashLink(item.files[0])!} title="Open in Stash">{item.title}</Link> : item.title}
           </dd>
+          {item.output_note ? (
+            <>
+              <dt className="col-4 col-sm-3">File</dt>
+              <dd className="col-8 col-sm-9">{item.output_note}</dd>
+            </>
+          ) : null}
           <dt className="col-4 col-sm-3">Sent as</dt>
           <dd className="col-8 col-sm-9">
             <Badge variant={item.sent_as === "publish" ? "success" : "primary"}>{SENT_AS_LABELS[item.sent_as]}</Badge>{" "}

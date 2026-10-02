@@ -42,6 +42,16 @@ class ExportResult:
     height: int
     hdr: bool = False
     thumb: str | None = None
+    note: str | None = None  # what the user gets, e.g. "GIF · 9.4 MB · 480 px · 10 fps"
+
+
+class GifTooLarge(Exception):
+    """Even the smallest rung of the ladder is over imaglr's limit; `fit_seconds` is about how long the clip
+    could be at that rung and still fit."""
+
+    def __init__(self, size: int, limit: int, fit_seconds: float):
+        super().__init__(f"{size} bytes at the smallest setting; limit {limit}")
+        self.size, self.limit, self.fit_seconds = size, limit, fit_seconds
 
 
 def _remove(path: str) -> None:
@@ -150,6 +160,75 @@ def export_clip(
         progress_cb(1.0)
     ow, oh = _output_dims(w, h, aspect, position, settings.max_long_edge)
     return ExportResult(final_path, size, ow, oh, hdr, thumb)
+
+
+def gif_note(size: int, long_edge: int, fps: int) -> str:
+    return f"GIF · {size / 1048576:.1f} MB · {long_edge} px · {fps} fps"
+
+
+def export_gif(
+    src: str,
+    out_dir: str,
+    *,
+    title: str,
+    in_s: float,
+    out_s: float,
+    settings: VideoSettings,
+    target_bytes: int,
+    limit_bytes: int,
+    headers: dict[str, str] | None = None,
+    aspect: str = "original",
+    position: float = 0.5,
+    flip: bool = False,
+    progress_cb=None,
+    should_cancel=None,
+    probe_info: ProbeInfo | None = None,
+) -> ExportResult:
+    """Cut [in_s, out_s] of src to an animated GIF under target_bytes, going down the quality ladder until it
+    fits. The bottom rung is accepted up to limit_bytes (imaglr's ceiling); beyond that GifTooLarge says how
+    much shorter the clip would have to be."""
+    os.makedirs(out_dir, exist_ok=True)
+    info = probe_info or probe(settings.ffprobe, src, headers)
+    w, h = info.display_size
+    if not w or not h:
+        raise UnsupportedMedia("ffprobe could not read the video's dimensions")
+    duration = max(0.1, out_s - in_s)
+    final = os.path.join(out_dir, output_name(title, in_s, out_s, "gif"))
+    part = final + ".part"
+    for stale in glob.glob(os.path.join(glob.escape(out_dir), "*.part")):
+        _remove(stale)
+
+    size = 0
+    rungs = fc.GIF_LADDER
+    for n, (long_edge, gif_fps, colors) in enumerate(rungs):
+        cmd = fc.build_gif_cmd(settings.ffmpeg, src, part, in_s, out_s, w, h, long_edge=long_edge, gif_fps=gif_fps,
+                               colors=colors, aspect=aspect, position=position, flip=flip, headers=headers)
+        lo, hi = 0.9 * n / len(rungs), 0.9 * (n + 1) / len(rungs)
+        run_ffmpeg(cmd, output=part, duration_s=duration, progress_cb=progress_cb, should_cancel=should_cancel,
+                   progress_range=(lo, hi))
+        size = os.path.getsize(part)
+        if size <= target_bytes:
+            break
+        if n < len(rungs) - 1:
+            log.info(f"GIF is {size / 1048576:.1f} MB at {long_edge} px / {gif_fps} fps; trying a smaller setting")
+            _remove(part)
+    else:
+        long_edge, gif_fps, colors = rungs[-1]
+        if size > limit_bytes:
+            _remove(part)
+            raise GifTooLarge(size, limit_bytes, fit_seconds=max(1.0, duration * limit_bytes * 0.9 / size))
+    final_path = finalise_part(part)
+    thumb: str | None = os.path.join(out_dir, "thumb.jpg")
+    try:
+        run_ffmpeg(fc.build_thumb_cmd(settings.ffmpeg, final_path, thumb, min(1.0, duration / 2)),
+                   output=thumb, should_cancel=should_cancel, timeout=120)
+    except FfmpegError as e:  # best-effort
+        log.warning(f"thumbnail failed: {e}")
+        thumb = None
+    if progress_cb:
+        progress_cb(1.0)
+    ow, oh = _output_dims(w, h, aspect, position, long_edge)
+    return ExportResult(final_path, size, ow, oh, False, thumb, gif_note(size, long_edge, gif_fps))
 
 
 def grab_frame(

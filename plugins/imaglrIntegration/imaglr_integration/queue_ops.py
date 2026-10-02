@@ -163,8 +163,8 @@ def _file_view(ctx: Context, config, member: dict[str, Any]):
     else:
         card = services.image_card(member, source, None)
         card["image"] = services.relative_url(source.image_url) if source else None
-    card.update({k: member[k] for k in ("crop", "in_s", "out_s", "mute", "flip", "stash_marker_id", "stash_scene_id",
-                                        "stash_image_id")})
+    card.update({k: member[k] for k in ("crop", "in_s", "out_s", "mute", "flip", "format", "output_note",
+                                        "stash_marker_id", "stash_scene_id", "stash_image_id")})
     card["prepared"] = services.prepared_url(member["id"], member["output_path"]) if member["output_path"] else None
     return card, sugg
 
@@ -185,12 +185,13 @@ def op_item_detail(ctx: Context) -> dict[str, Any]:
     return {
         "item": {k: item[k] for k in ("id", "kind", "status", "tags", "caption", "blog_id", "action", "crop",
                                       "error_code", "error_detail", "progress", "source_title", "in_s", "out_s",
-                                      "mute", "flip", "hdr_warning", "tags_auto")},
+                                      "mute", "flip", "format", "output_note", "hdr_warning", "tags_auto")},
         "files": [card for card, _ in views],
         "suggestions": suggestions.to_dict(),
         "blogs": [blogs.public(b) for b in blogs.list_blogs(ctx.db)],
         "lowercase_tags": not config.keep_tag_case,
         "queue_tag": config.queue_tag,
+        "gif_target_mb": config.gif_target_mb,
     }
 
 

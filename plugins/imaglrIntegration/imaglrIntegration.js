@@ -270,6 +270,21 @@
     return { inS: Math.round(a * 1e3) / 1e3, outS: Math.round(b * 1e3) / 1e3 };
   }
 
+  // src/ui/lib/gif.ts
+  var LONG_GIF_SECONDS = 15;
+  var MB_PER_SECOND = { low: 1, high: 2.5 };
+  function estimateGifMb(seconds) {
+    const s = Math.max(0, seconds);
+    return [s * MB_PER_SECOND.low, s * MB_PER_SECOND.high];
+  }
+  function roundMb(n) {
+    return n < 10 ? Math.round(n) : Math.round(n / 5) * 5;
+  }
+  function describeGifEstimate(seconds) {
+    const [lo, hi] = estimateGifMb(seconds).map(roundMb);
+    return lo === hi ? `roughly ${lo} MB` : `roughly ${lo}\u2013${hi} MB`;
+  }
+
   // src/ui/lib/format.ts
   function fmtTime(s, decimals = 1) {
     if (s == null || !isFinite(s)) return "\u2013";
@@ -346,7 +361,7 @@
       }
     ), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-time-buttons" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onNudge(-1), "aria-label": `${label} back 1 second` }, "\u22121s"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onNudge(-0.1), "aria-label": `${label} back a tenth` }, "\u22120.1"), /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", disabled, onClick: onSet }, "Set here"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onNudge(0.1), "aria-label": `${label} forward a tenth` }, "+0.1"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onNudge(1), "aria-label": `${label} forward 1 second` }, "+1s")));
   }
-  function ClipPanel({ sceneId, imageId, value, disabled, onChange, onSaveStill }) {
+  function ClipPanel({ sceneId, imageId, value, disabled, gifTargetMb, onChange, onSaveStill }) {
     const { Button, ButtonGroup, Form } = PluginApi.libraries.Bootstrap;
     const video = react_default.useRef(null);
     const box = react_default.useRef(null);
@@ -446,7 +461,16 @@
         className: "mt-2",
         onChange: (e) => onChange({ ...value, crop: { ...value.crop, position: Number(e.target.value) } })
       }
-    ) : null), /* @__PURE__ */ react_default.createElement(
+    ) : null), /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Format"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, ["video", "gif"].map((f) => /* @__PURE__ */ react_default.createElement(
+      Button,
+      {
+        key: f,
+        variant: value.format === f ? "primary" : "secondary",
+        disabled,
+        onClick: () => onChange({ ...value, format: f })
+      },
+      f === "video" ? "Video" : "GIF"
+    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "GIFs play straight away in feeds, with no tap, which tends to get more engagement. Videos are sharper, much smaller and can keep their sound."), value.format === "gif" ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "This will be a GIF of ", describeGifEstimate(value.outS - value.inS), ". GIFs over about ", gifTargetMb, " MB are slow to load, so the plugin will automatically lower the quality if it has to."), value.outS - value.inS > LONG_GIF_SECONDS ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning mt-1" }, "Long GIFs may need lower frame-rates and resolutions. Clips below ", LONG_GIF_SECONDS, " seconds work best.") : null) : null), value.format === "gif" ? null : /* @__PURE__ */ react_default.createElement(
       Form.Check,
       {
         id: "imaglr-mute",
@@ -623,7 +647,9 @@
     const [tags, setTags] = react_default.useState([]);
     const [caption, setCaption] = react_default.useState("");
     const [crop, setCrop] = react_default.useState({ aspect: "original", position: 0.5 });
-    const [trim, setTrim] = react_default.useState({ inS: 0, outS: 0, mute: false, flip: false });
+    const [trim, setTrim] = react_default.useState(
+      { inS: 0, outS: 0, mute: false, flip: false, format: "video" }
+    );
     const [blogId, setBlogId] = react_default.useState(null);
     const [action, setAction] = react_default.useState(null);
     const [confirmPublish, setConfirmPublish] = react_default.useState(false);
@@ -641,7 +667,7 @@
         setResetTags(false);
         setCaption(d.item.caption);
         setCrop(d.item.crop);
-        setTrim({ inS: d.item.in_s ?? 0, outS: d.item.out_s ?? 0, mute: d.item.mute, flip: d.item.flip });
+        setTrim({ inS: d.item.in_s ?? 0, outS: d.item.out_s ?? 0, mute: d.item.mute, flip: d.item.flip, format: d.item.format });
         setBlogId(d.item.blog_id);
         setAction(d.item.action);
         setDirty(false);
@@ -683,7 +709,7 @@
           blog_id: blogId,
           action,
           ...resetTags ? { tags_auto: true } : {},
-          ...isClip ? { in_s: trim.inS, out_s: trim.outS, mute: trim.mute, flip: trim.flip } : {}
+          ...isClip ? { in_s: trim.inS, out_s: trim.outS, mute: trim.mute, flip: trim.flip, format: trim.format } : {}
         }
       });
       setDirty(false);
@@ -768,8 +794,9 @@
           imageId: files[0].stash_marker_id ? null : files[0].stash_image_id,
           value: { ...trim, crop },
           disabled: locked,
+          gifTargetMb: detail.gif_target_mb,
           onChange: (v) => {
-            edit(setTrim)({ inS: v.inS, outS: v.outS, mute: v.mute, flip: v.flip });
+            edit(setTrim)({ inS: v.inS, outS: v.outS, mute: v.mute, flip: v.flip, format: v.format });
             setCrop(v.crop);
           },
           onSaveStill: saveStill
@@ -1184,6 +1211,10 @@
   }
 
   // src/ui/lib/sendAll.ts
+  function gifCounts(plan) {
+    const live = plan.filter((e) => !e.skip);
+    return { gifs: live.filter((e) => e.gif).length, long: live.filter((e) => e.long_gif).length };
+  }
   var ACTION_WORDS = { draft: "as drafts", queue: "to the queue" };
   function summarisePlan(plan, fallback) {
     const sending = /* @__PURE__ */ new Map();
@@ -1218,6 +1249,8 @@
     const [plan, setPlan] = react_default.useState(null);
     const [blogs, setBlogs] = react_default.useState([]);
     const [fallbackBlog, setFallbackBlog] = react_default.useState(null);
+    const [longAsVideo, setLongAsVideo] = react_default.useState(true);
+    const [gifFallback, setGifFallback] = react_default.useState(true);
     const [busy, setBusy] = react_default.useState(false);
     const preview = react_default.useCallback(() => {
       runOperation("send_all", { item_ids: itemIds, dry_run: true }).then((r) => setPlan(r.plan), (e) => {
@@ -1236,13 +1269,18 @@
     const noBlog = plan.filter((e) => e.skip === "no_blog");
     const fallback = blogs.find((b) => b.id === fallbackBlog) ?? null;
     const { sending, skipped, downgraded, total: ready } = summarisePlan(plan, fallback);
+    const gifs = gifCounts(plan);
     async function send() {
       setBusy(true);
       try {
         if (fallbackBlog) {
           await Promise.all(noBlog.map((e) => runOperation("item_update", { item_id: e.id, changes: { blog_id: fallbackBlog } })));
         }
-        const r = await runOperation("send_all", { item_ids: itemIds });
+        const r = await runOperation("send_all", {
+          item_ids: itemIds,
+          long_gifs_as_video: longAsVideo,
+          gif_fallback: gifFallback
+        });
         const started = r.plan.filter((e) => !e.skip).length;
         Toast.success(`Sending ${started} ${started === 1 ? "item" : "items"}. Progress shows on each card.`);
         onClose(true);
@@ -1251,7 +1289,25 @@
         setBusy(false);
       }
     }
-    return /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: () => void 0, keyboard: false }, /* @__PURE__ */ react_default.createElement(Modal.Header, null, /* @__PURE__ */ react_default.createElement(Modal.Title, null, selected ? "Send selected" : "Send all")), /* @__PURE__ */ react_default.createElement(Modal.Body, null, sending.length ? /* @__PURE__ */ react_default.createElement("ul", { className: "imaglr-plan" }, sending.map(([what, n]) => /* @__PURE__ */ react_default.createElement("li", { key: what }, /* @__PURE__ */ react_default.createElement("strong", null, n), " to ", what))) : /* @__PURE__ */ react_default.createElement("p", null, "Nothing can be sent yet."), downgraded ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info" }, downgraded, " ", downgraded === 1 ? "item is" : "items are", " set to Publish now and will be saved as drafts instead. Send all never publishes straight away; publish from the editor or on imaglr.") : null, noBlog.length && blogs.length ? /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, noBlog.length, " ", noBlog.length === 1 ? "item has" : "items have", " no blog chosen. Send ", noBlog.length === 1 ? "it" : "them", " to:"), /* @__PURE__ */ react_default.createElement(
+    return /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: () => void 0, keyboard: false }, /* @__PURE__ */ react_default.createElement(Modal.Header, null, /* @__PURE__ */ react_default.createElement(Modal.Title, null, selected ? "Send selected" : "Send all")), /* @__PURE__ */ react_default.createElement(Modal.Body, null, sending.length ? /* @__PURE__ */ react_default.createElement("ul", { className: "imaglr-plan" }, sending.map(([what, n]) => /* @__PURE__ */ react_default.createElement("li", { key: what }, /* @__PURE__ */ react_default.createElement("strong", null, n), " to ", what))) : /* @__PURE__ */ react_default.createElement("p", null, "Nothing can be sent yet."), downgraded ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info" }, downgraded, " ", downgraded === 1 ? "item is" : "items are", " set to Publish now and will be saved as drafts instead. Send all never publishes straight away; publish from the editor or on imaglr.") : null, gifs.gifs ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-plan-gifs" }, /* @__PURE__ */ react_default.createElement("div", null, gifs.gifs, " ", gifs.gifs === 1 ? "clip will be a GIF" : "clips will be GIFs", ".", gifs.long ? ` ${gifs.long} ${gifs.long === 1 ? "is" : "are"} longer than ${LONG_GIF_SECONDS} seconds \u2014 send ${gifs.long === 1 ? "it" : "them"} as a video instead?` : null), gifs.long ? /* @__PURE__ */ react_default.createElement(
+      Form.Check,
+      {
+        id: "imaglr-long-gifs",
+        type: "checkbox",
+        checked: longAsVideo,
+        label: `Send the ${gifs.long === 1 ? "long clip" : "long clips"} as ${gifs.long === 1 ? "a video" : "videos"}`,
+        onChange: (e) => setLongAsVideo(e.target.checked)
+      }
+    ) : null, /* @__PURE__ */ react_default.createElement(
+      Form.Check,
+      {
+        id: "imaglr-gif-fallback",
+        type: "checkbox",
+        checked: gifFallback,
+        label: "If a GIF can't be made small enough, send it as a video.",
+        onChange: (e) => setGifFallback(e.target.checked)
+      }
+    )) : null, noBlog.length && blogs.length ? /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, noBlog.length, " ", noBlog.length === 1 ? "item has" : "items have", " no blog chosen. Send ", noBlog.length === 1 ? "it" : "them", " to:"), /* @__PURE__ */ react_default.createElement(
       Form.Control,
       {
         as: "select",
@@ -1450,7 +1506,8 @@
     const count = card.members?.length ?? 0;
     if (count) return `${count} files in one post`;
     if (card.kind === "clip") {
-      return [`${(card.duration ?? 0).toFixed(1)} s`, fmtDims(card.width, card.height)].filter(Boolean).join(" \xB7 ");
+      if (card.output_note) return card.output_note;
+      return [`${(card.duration ?? 0).toFixed(1)} s`, fmtDims(card.width, card.height), card.send_format === "gif" ? "GIF" : null].filter(Boolean).join(" \xB7 ");
     }
     return [card.format?.toUpperCase(), fmtDims(card.width, card.height), card.animated ? "animated" : null].filter(Boolean).join(" \xB7 ");
   }
@@ -1663,7 +1720,7 @@
         const to = stashLink(f);
         const img = f.thumb ? /* @__PURE__ */ react_default.createElement("img", { src: baseUrl() + f.thumb, alt: "" }) : null;
         return /* @__PURE__ */ react_default.createElement("li", { key: f.id, className: "imaglr-strip-item", title: f.title }, to ? /* @__PURE__ */ react_default.createElement(Link, { to, title: `${f.title} in Stash` }, img) : img);
-      })), /* @__PURE__ */ react_default.createElement("dl", { className: "row imaglr-sent-facts" }, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, item.kind === "set" ? "Files" : item.kind === "clip" ? "Clip" : item.kind === "still" ? "Still" : "Image"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, item.kind === "set" ? `${item.files.length} files in one post` : stashLink(item.files[0] ?? {}) ? /* @__PURE__ */ react_default.createElement(Link, { to: stashLink(item.files[0]), title: "Open in Stash" }, item.title) : item.title), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Sent as"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, /* @__PURE__ */ react_default.createElement(Badge, { variant: item.sent_as === "publish" ? "success" : "primary" }, SENT_AS_LABELS[item.sent_as]), " ", item.blog ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, "on ", /* @__PURE__ */ react_default.createElement("strong", null, item.blog)) : null), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "When"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, fmtDate(item.sent_at)), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "On imaglr"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, /* @__PURE__ */ react_default.createElement("a", { href: imaglrLink(item.sent_as, item.post_url), target: "_blank", rel: "noreferrer" }, item.sent_as === "draft" ? "Open imaglr drafts" : "Open the post")), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Tags"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, item.tags.length ? item.tags.map((t) => /* @__PURE__ */ react_default.createElement(Badge, { key: t, variant: "secondary", className: "tag-item" }, t)) : /* @__PURE__ */ react_default.createElement("span", { className: "text-muted" }, "None")), item.dropped_tags.length ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Dropped by imaglr"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, (item.dropped ?? item.dropped_tags.map((tag) => ({ tag, from: null }))).map(({ tag, from }) => /* @__PURE__ */ react_default.createElement("span", { key: tag, className: "imaglr-dropped" }, /* @__PURE__ */ react_default.createElement(Badge, { variant: "secondary", className: "tag-item" }, tag), from ? /* @__PURE__ */ react_default.createElement(
+      })), /* @__PURE__ */ react_default.createElement("dl", { className: "row imaglr-sent-facts" }, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, item.kind === "set" ? "Files" : item.kind === "clip" ? "Clip" : item.kind === "still" ? "Still" : "Image"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, item.kind === "set" ? `${item.files.length} files in one post` : stashLink(item.files[0] ?? {}) ? /* @__PURE__ */ react_default.createElement(Link, { to: stashLink(item.files[0]), title: "Open in Stash" }, item.title) : item.title), item.output_note ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "File"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, item.output_note)) : null, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Sent as"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, /* @__PURE__ */ react_default.createElement(Badge, { variant: item.sent_as === "publish" ? "success" : "primary" }, SENT_AS_LABELS[item.sent_as]), " ", item.blog ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, "on ", /* @__PURE__ */ react_default.createElement("strong", null, item.blog)) : null), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "When"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, fmtDate(item.sent_at)), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "On imaglr"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, /* @__PURE__ */ react_default.createElement("a", { href: imaglrLink(item.sent_as, item.post_url), target: "_blank", rel: "noreferrer" }, item.sent_as === "draft" ? "Open imaglr drafts" : "Open the post")), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Tags"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, item.tags.length ? item.tags.map((t) => /* @__PURE__ */ react_default.createElement(Badge, { key: t, variant: "secondary", className: "tag-item" }, t)) : /* @__PURE__ */ react_default.createElement("span", { className: "text-muted" }, "None")), item.dropped_tags.length ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Dropped by imaglr"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, (item.dropped ?? item.dropped_tags.map((tag) => ({ tag, from: null }))).map(({ tag, from }) => /* @__PURE__ */ react_default.createElement("span", { key: tag, className: "imaglr-dropped" }, /* @__PURE__ */ react_default.createElement(Badge, { variant: "secondary", className: "tag-item" }, tag), from ? /* @__PURE__ */ react_default.createElement(
         Button,
         {
           variant: "link",

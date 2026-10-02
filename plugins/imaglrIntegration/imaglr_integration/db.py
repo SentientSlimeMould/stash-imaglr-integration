@@ -134,6 +134,11 @@ MIGRATIONS = [
     """
     ALTER TABLE items ADD COLUMN flip INTEGER NOT NULL DEFAULT 0;
     """,
+    # v7: a clip is sent as a video or an animated GIF; output_note says what the prepared file turned out to be
+    """
+    ALTER TABLE items ADD COLUMN format TEXT NOT NULL DEFAULT 'video';
+    ALTER TABLE items ADD COLUMN output_note TEXT;
+    """,
 ]
 
 

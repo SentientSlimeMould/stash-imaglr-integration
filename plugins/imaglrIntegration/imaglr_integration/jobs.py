@@ -27,7 +27,7 @@ from .media.image_plan import plan_image
 from .media.image_process import ImageTooLarge, process_image
 from .media.metadata_strip import StripError
 from .media.naming import slugify
-from .media.video_export import UnsupportedMedia, VideoSettings, export_clip, gif_to_mp4, grab_frame
+from .media.video_export import GifTooLarge, UnsupportedMedia, VideoSettings, export_clip, export_gif, gif_to_mp4, grab_frame
 from .stash import HttpStream, LocalFile, StashError, api
 from .stash.paths import image_source, scene_source
 from .tags.caption import caption_to_html
@@ -181,11 +181,44 @@ def clip_source(ctx: Context, item: dict[str, Any]) -> tuple[str, dict[str, str]
     raise JobFailed("source_missing", f"Stash has no video file for {item['source_title']}.")
 
 
+GIF_FALLBACK_NOTE = "Sent as a video - the GIF would have been over imaglr's limit."
+
+
 def prepare_clip(ctx: Context, member: dict[str, Any], tools: tuple[str, str], should_cancel, progress,
-                 bitrate_scale: float | None = None, previous_bytes: int | None = None) -> dict[str, Any]:
+                 bitrate_scale: float | None = None, previous_bytes: int | None = None,
+                 config: plugin_settings.Settings | None = None, gif_fallback: bool = False) -> dict[str, Any]:
     ffmpeg, ffprobe = tools
     src, headers = clip_source(ctx, member)
     crop = member["crop"] or {}
+    if member["format"] == "gif":
+        config = config or plugin_settings.Settings()
+        try:
+            result = export_gif(
+                src, _fresh_dir(ctx, member["id"]), title=member["source_title"] or "clip",
+                in_s=float(member["in_s"] or 0), out_s=float(member["out_s"] or 0),
+                settings=VideoSettings(ffmpeg, ffprobe), headers=headers,
+                target_bytes=int(config.gif_target_mb * 1024 * 1024),
+                limit_bytes=int(plugin_settings.GIF_HARD_LIMIT_MB * 1024 * 1024 * SAFETY),
+                aspect=crop.get("aspect") or "original", position=float(crop.get("position", 0.5)),
+                flip=bool(member["flip"]), progress_cb=progress, should_cancel=should_cancel,
+            )
+        except GifTooLarge as e:
+            if not gif_fallback:
+                raise JobFailed(
+                    "gif_too_large",
+                    f"This GIF is too big even at its smallest ({e.size / 1048576:.0f} MB; the limit is "
+                    f"{plugin_settings.GIF_HARD_LIMIT_MB}). Trim it to about {e.fit_seconds:.0f} seconds, or send it as a video.",
+                ) from None
+            log.info(f"{member['source_title']}: GIF would be {e.size / 1048576:.0f} MB; sending as a video instead")
+            member = repo.update_item(ctx.db, member["id"], format="video") or member  # type: ignore[assignment]
+            return prepare_clip(ctx, member, tools, should_cancel, progress, config=config) | {"gif_fallback": True}
+        except (UnsupportedMedia, ValueError) as e:
+            raise JobFailed("unsupported_video", f"{member['source_title']}: {e}") from None
+        except FfmpegError as e:
+            raise JobFailed("ffmpeg_failed", f"{member['source_title']}: {e}") from None
+        return repo.update_item(ctx.db, member["id"], output_path=result.path, output_bytes=result.bytes,
+                                output_mime="image/gif", output_note=result.note, hdr_warning=False,
+                                error_code=None, error_detail=None)  # type: ignore[return-value]
     try:
         result = export_clip(
             src, _fresh_dir(ctx, member["id"]), title=member["source_title"] or "clip",
@@ -202,7 +235,7 @@ def prepare_clip(ctx: Context, member: dict[str, Any], tools: tuple[str, str], s
     if result.hdr:
         log.warning(f"{member['source_title']}: HDR source; colours may look washed out (tone mapping isn't supported)")
     return repo.update_item(ctx.db, member["id"], output_path=result.path, output_bytes=result.bytes,
-                            output_mime="video/mp4", hdr_warning=result.hdr, error_code=None,
+                            output_mime="video/mp4", output_note=None, hdr_warning=result.hdr, error_code=None,
                             error_detail=None)  # type: ignore[return-value]
 
 
@@ -220,6 +253,10 @@ def grab_still(ctx: Context, clip: dict[str, Any], t: float, still_id: str) -> s
 
 def _is_prepared(member: dict[str, Any]) -> bool:
     path = member["output_path"]
+    if member["kind"] == "clip":  # a prepared GIF is no use when the clip is to go as a video, and vice versa
+        wanted = "image/gif" if member["format"] == "gif" else "video/mp4"
+        if member["output_mime"] != wanted:
+            return False
     return bool(path and os.path.isfile(path) and os.path.getsize(path) == member["output_bytes"])
 
 
@@ -279,7 +316,7 @@ def _upload_error(ctx: Context, blog: dict[str, Any], e: ImaglrError) -> JobFail
 def _shrink_videos(ctx: Context, members: list[dict[str, Any]], should_cancel) -> bool:
     """imaglr rejected the upload as too large: re-encode each clip once at 90 % of the target bitrate.
     Returns False when there is nothing left to shrink (images are already sized under imaglr's limit)."""
-    clips = [n for n, m in enumerate(members) if m["kind"] == "clip" and not m["size_guard_retried"]]
+    clips = [n for n, m in enumerate(members) if m["kind"] == "clip" and m["format"] == "video" and not m["size_guard_retried"]]
     if not clips:
         return False
     tools = media_tools(ctx)
@@ -294,14 +331,19 @@ def _follow_up(client, action: str, draft_id: str) -> dict[str, Any]:
     return client.publish_draft(draft_id) if action == "publish" else client.queue_draft(draft_id)
 
 
-def run_send(ctx: Context, item_id: str, action: str | None = None) -> None:
+def run_send(ctx: Context, item_id: str, action: str | None = None, gif_fallback: bool = False,
+             format_override: str | None = None) -> None:
     """The task. `action` is what the send operation decided (Send all downgrades publish to draft without
-    changing the item's own setting); otherwise the item's or the blog's default applies."""
+    changing the item's own setting); otherwise the item's or the blog's default applies. With `gif_fallback`
+    a GIF that can't be made small enough is sent as a video instead of failing; `format_override` sends every
+    clip in the post as that format this time, without changing the clips' own settings."""
     item = repo.get_item(ctx.db, item_id)
     if item is None or item["status"] != "exporting":  # only what send/send_all just queued; never twice
         return
     should_cancel = _cancel_check(ctx, item_id)
     members = repo.set_members(ctx.db, item_id) if item["kind"] == "set" else [item]
+    if format_override in ("video", "gif"):
+        members = [{**m, "format": format_override} if m["kind"] == "clip" else m for m in members]
     try:
         if not members:
             raise JobFailed("post_empty", "This post has no files.")
@@ -321,6 +363,7 @@ def run_send(ctx: Context, item_id: str, action: str | None = None) -> None:
         # 1. prepare (0-40 %)
         repo.update_item(ctx.db, item_id, status="exporting", progress=0, error_code=None, error_detail=None)
         tools = None
+        fell_back: list[str] = []  # clips sent as video because their GIF wouldn't fit
         for n, member in enumerate(members):
             if should_cancel():
                 raise Cancelled()
@@ -330,7 +373,10 @@ def run_send(ctx: Context, item_id: str, action: str | None = None) -> None:
                     def clip_progress(fraction: float, n: int = n) -> None:
                         log.progress(0.4 * (n + fraction) / len(members))
 
-                    members[n] = prepare_clip(ctx, member, tools, should_cancel, clip_progress)
+                    members[n] = prepare_clip(ctx, member, tools, should_cancel, clip_progress, config=config,
+                                              gif_fallback=gif_fallback)
+                    if members[n].pop("gif_fallback", False):
+                        fell_back.append(members[n]["id"])
                 elif member["kind"] == "still":
                     members[n] = prepare_still(ctx, member, tools, should_cancel)
                 else:
@@ -395,6 +441,8 @@ def run_send(ctx: Context, item_id: str, action: str | None = None) -> None:
             except ImaglrError as e:
                 record.update(followup_failed=True, error_code=e.code,
                               error_detail=f"Saved as a draft, but {FOLLOW_UP_LABELS[action]} failed: {e.detail or e.code}")
+        if fell_back:
+            record["output_note"] = GIF_FALLBACK_NOTE
         repo.update_item(ctx.db, item_id, **record)
         for m in members if item["kind"] == "set" else []:
             repo.update_item(ctx.db, m["id"], status="sent", draft_id=draft.id, post_url=draft.url,

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Clips can be sent as **animated GIFs** instead of videos (a **Format** choice in the editor; a plugin setting
+  makes GIF the default for new clips). GIFs play straight away in feeds. imaglr's limit for a GIF is 40 MB, so
+  the plugin makes a GIF smaller or slower, step by step, until it is under the **GIF size target** setting
+  (20 MB unless changed); the editor estimates the size as you trim and warns on long clips, and the card shows
+  what you got (e.g. "GIF · 9.4 MB · 480 px · 10 fps"). A GIF that can't fit even at its smallest fails with
+  advice on how much to trim; **Send all** offers to send long clips as videos and, by default, falls back to a
+  video for any GIF that won't fit.
+
 ## 0.1.14 — 2026-10-02
 
 - Clips can be **flipped horizontally** (a switch next to *Remove sound* in the editor). The crop is applied to

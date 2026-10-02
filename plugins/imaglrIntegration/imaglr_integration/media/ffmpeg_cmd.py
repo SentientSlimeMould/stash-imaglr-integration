@@ -84,6 +84,47 @@ def build_filter_chain(width: int, height: int, aspect: str, position: float, ma
     return ",".join(parts)
 
 
+# GIF quality ladder, best first: (long edge px, frames per second, palette colours). The export tries each rung
+# until the file is under the target; a lower rung is roughly 60-70 % of the size of the one above.
+GIF_LADDER: tuple[tuple[int, int, int], ...] = (
+    (640, 15, 256),
+    (540, 12, 256),
+    (480, 12, 128),
+    (400, 10, 128),
+    (320, 8, 64),
+)
+
+
+def build_gif_cmd(
+    ffmpeg: str,
+    src: str,
+    out: str,
+    in_s: float,
+    out_s: float,
+    width: int,
+    height: int,
+    *,
+    long_edge: int,
+    gif_fps: int,
+    colors: int,
+    aspect: str = "original",
+    position: float = 0.5,
+    flip: bool = False,
+    headers: dict[str, str] | None = None,
+) -> list[str]:
+    """One-pass animated GIF: frame-rate cap, crop, scale and flip, then a palette made from the clip itself
+    (stats_mode=diff favours what moves) and ordered dithering with per-frame rectangles of change."""
+    duration = max(0.1, out_s - in_s)
+    chain = build_filter_chain(width, height, aspect, position, long_edge, 0, flip)
+    vf = f"fps={gif_fps}" + ("," + chain if chain else "")
+    vf += (f",split[a][b];[a]palettegen=max_colors={colors}:stats_mode=diff[p];"
+           f"[b][p]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle")
+    cmd = _base(ffmpeg)
+    cmd += _headers_arg(headers)
+    cmd += ["-ss", f"{in_s:.3f}", "-i", src, "-t", f"{duration:.3f}", "-an", "-filter_complex", vf, "-loop", "0", "-f", "gif", out]
+    return cmd
+
+
 def _headers_arg(headers: dict[str, str] | None) -> list[str]:
     if not headers:
         return []
