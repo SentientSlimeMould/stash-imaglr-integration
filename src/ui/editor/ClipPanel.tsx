@@ -49,6 +49,7 @@ export interface ClipState {
   inS: number;
   outS: number;
   mute: boolean;
+  flip: boolean; // mirror left-to-right
   crop: { aspect: Aspect; position: number };
 }
 
@@ -201,6 +202,11 @@ export function ClipPanel({ sceneId, imageId, value, disabled, onChange, onSaveS
       </Form.Group>
       <Form.Check id="imaglr-mute" type="switch" label="Remove sound" checked={value.mute} disabled={disabled}
         onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange({ ...value, mute: e.target.checked })} />
+      <Form.Check id="imaglr-flip" type="switch" label="Flip horizontally" checked={value.flip} disabled={disabled}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange({ ...value, flip: e.target.checked })} />
+      {value.flip ? (
+        <div className="small text-muted">The sent clip is mirrored left-to-right; the preview above isn't.</div>
+      ) : null}
     </div>
   );
 }

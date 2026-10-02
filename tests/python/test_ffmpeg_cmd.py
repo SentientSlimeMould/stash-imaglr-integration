@@ -40,6 +40,13 @@ class CropScaleTest(unittest.TestCase):
         self.assertEqual(parts[1:], ["scale=1920:1920:flags=lanczos", "fps=60"])
         self.assertEqual(fc.build_filter_chain(1920, 1080, "original", 0.5, 1920, 30), "")
 
+    def test_flip_comes_last_so_the_crop_matches_what_was_shown(self):
+        self.assertEqual(fc.build_filter_chain(1920, 1080, "original", 0.5, 1920, 30, flip=True), "hflip")
+        parts = fc.build_filter_chain(3840, 2160, "1:1", 0.2, 1920, 120, flip=True).split(",")
+        self.assertTrue(parts[0].startswith("crop=") and parts[-1] == "hflip")
+        cmd = fc.build_clip_cmd(FF, "/in", "/o", 0, 5, 1920, 1080, 30, flip=True)
+        self.assertEqual(cmd[cmd.index("-vf") + 1], "hflip")
+
 
 class ClipCmdTest(unittest.TestCase):
     def test_clip_cmd_structure(self):

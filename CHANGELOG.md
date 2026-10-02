@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.14 — 2026-10-02
+
+- Clips can be **flipped horizontally** (a switch next to *Remove sound* in the editor). The crop is applied to
+  the picture as you see it, then the result is mirrored.
+
 ## 0.1.13 — 2026-09-30
 
 Interface polish (third batch from the code review).

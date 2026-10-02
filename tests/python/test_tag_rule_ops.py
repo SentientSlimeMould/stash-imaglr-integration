@@ -110,6 +110,21 @@ class AutomaticTagsTest(unittest.TestCase):
         self.assertFalse(out["tags_auto"])
         self.assertEqual(services.refresh_tags(self.db, out, ["sunset", "beach"])["tags"], ["sunset", "mine"])
 
+    def test_flipping_a_clip_means_exporting_again(self):
+        from imaglr_integration import items
+
+        clip = items.create_item(self.db, kind="clip", stash_image_id="9", in_s=0.0, out_s=5.0,
+                                 output_path="/tmp/x.mp4", output_bytes=1, output_mime="video/mp4", status="ready")
+        out = self.run_op("item_update", item_id=clip["id"], changes={"flip": True})["item"]
+        self.assertTrue(out["flip"])
+        self.assertEqual((out["output_path"], out["status"]), (None, "pending"))
+        # the same value again changes nothing
+        again = self.run_op("item_update", item_id=clip["id"], changes={"flip": True, "mute": False})["item"]
+        self.assertTrue(again["flip"])
+        with self.assertRaises(UserError):
+            image = items.create_item(self.db, kind="image", stash_image_id="10")
+            self.run_op("item_update", item_id=image["id"], changes={"flip": True})
+
     def test_post_tags_merge_members(self):
         from imaglr_integration import services
 

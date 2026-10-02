@@ -192,7 +192,7 @@ def prepare_clip(ctx: Context, member: dict[str, Any], tools: tuple[str, str], s
             in_s=float(member["in_s"] or 0), out_s=float(member["out_s"] or 0),
             settings=VideoSettings(ffmpeg, ffprobe), headers=headers,
             aspect=crop.get("aspect") or "original", position=float(crop.get("position", 0.5)),
-            mute=bool(member["mute"]), progress_cb=progress, should_cancel=should_cancel,
+            mute=bool(member["mute"]), flip=bool(member["flip"]), progress_cb=progress, should_cancel=should_cancel,
             bitrate_scale=bitrate_scale, previous_bytes=previous_bytes,
         )
     except (UnsupportedMedia, ValueError) as e:

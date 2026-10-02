@@ -24,7 +24,7 @@ from .settings import PLUGIN_ID
 from .tags.pipeline import MAX_TAG_LEN, MAX_TAGS
 
 IN_FLIGHT = ("exporting", "sending")
-EDITABLE = {"tags", "caption", "blog_id", "action", "crop", "in_s", "out_s", "mute"}
+EDITABLE = {"tags", "caption", "blog_id", "action", "crop", "in_s", "out_s", "mute", "flip"}
 MAX_CLIP_SECONDS = 600
 ASPECTS = ("original", "9:16", "4:5", "1:1")
 
@@ -95,9 +95,9 @@ def op_item_update(ctx: Context) -> dict[str, Any]:
         changes["crop"] = {"aspect": crop["aspect"], "position": min(max(float(crop.get("position", 0.5)), 0.0), 1.0)}
         if changes["crop"] != item["crop"]:
             changes.update(output_path=None, output_bytes=None, output_mime=None)  # prepare again
-    if {"in_s", "out_s", "mute"} & set(changes):
+    if {"in_s", "out_s", "mute", "flip"} & set(changes):
         if item["kind"] != "clip":
-            raise UserError("Only clips can be trimmed or muted.")
+            raise UserError("Only clips can be trimmed, muted or flipped.")
         in_s = round(float(changes["in_s"]), 3) if "in_s" in changes else float(item["in_s"] or 0)
         out_s = round(float(changes["out_s"]), 3) if "out_s" in changes else float(item["out_s"] or 0)
         if not (math.isfinite(in_s) and math.isfinite(out_s)):
@@ -106,9 +106,10 @@ def op_item_update(ctx: Context) -> dict[str, Any]:
             raise UserError("The clip must end after it starts.")
         if out_s - in_s > MAX_CLIP_SECONDS:
             raise UserError(f"Clips can be at most {MAX_CLIP_SECONDS // 60} minutes long.")
-        changes.update(in_s=in_s, out_s=out_s, mute=bool(changes.get("mute", item["mute"])))
-        if (changes["in_s"], changes["out_s"], changes["mute"]) != (item["in_s"], item["out_s"], item["mute"]):
-            changes.update(output_path=None, output_bytes=None, output_mime=None)  # export again
+        changes.update(in_s=in_s, out_s=out_s, mute=bool(changes.get("mute", item["mute"])),
+                       flip=bool(changes.get("flip", item["flip"])))
+        if (changes["in_s"], changes["out_s"], changes["mute"], changes["flip"]) != (item["in_s"], item["out_s"], item["mute"], item["flip"]):
+            changes.update(output_path=None, output_bytes=None, output_mime=None, size_guard_retried=False)  # export again
         if item["stash_marker_id"] and (changes["in_s"], changes["out_s"]) != (item["in_s"], item["out_s"]):
             marker = api.find_marker(ctx.stash, item["stash_marker_id"])
             if marker:  # keep Stash's marker in step with the trimmed clip

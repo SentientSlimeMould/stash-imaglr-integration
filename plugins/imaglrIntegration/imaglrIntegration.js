@@ -456,7 +456,17 @@
         disabled,
         onChange: (e) => onChange({ ...value, mute: e.target.checked })
       }
-    ));
+    ), /* @__PURE__ */ react_default.createElement(
+      Form.Check,
+      {
+        id: "imaglr-flip",
+        type: "switch",
+        label: "Flip horizontally",
+        checked: value.flip,
+        disabled,
+        onChange: (e) => onChange({ ...value, flip: e.target.checked })
+      }
+    ), value.flip ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted" }, "The sent clip is mirrored left-to-right; the preview above isn't.") : null);
   }
 
   // src/ui/lib/tags.ts
@@ -613,7 +623,7 @@
     const [tags, setTags] = react_default.useState([]);
     const [caption, setCaption] = react_default.useState("");
     const [crop, setCrop] = react_default.useState({ aspect: "original", position: 0.5 });
-    const [trim, setTrim] = react_default.useState({ inS: 0, outS: 0, mute: false });
+    const [trim, setTrim] = react_default.useState({ inS: 0, outS: 0, mute: false, flip: false });
     const [blogId, setBlogId] = react_default.useState(null);
     const [action, setAction] = react_default.useState(null);
     const [confirmPublish, setConfirmPublish] = react_default.useState(false);
@@ -631,7 +641,7 @@
         setResetTags(false);
         setCaption(d.item.caption);
         setCrop(d.item.crop);
-        setTrim({ inS: d.item.in_s ?? 0, outS: d.item.out_s ?? 0, mute: d.item.mute });
+        setTrim({ inS: d.item.in_s ?? 0, outS: d.item.out_s ?? 0, mute: d.item.mute, flip: d.item.flip });
         setBlogId(d.item.blog_id);
         setAction(d.item.action);
         setDirty(false);
@@ -673,7 +683,7 @@
           blog_id: blogId,
           action,
           ...resetTags ? { tags_auto: true } : {},
-          ...isClip ? { in_s: trim.inS, out_s: trim.outS, mute: trim.mute } : {}
+          ...isClip ? { in_s: trim.inS, out_s: trim.outS, mute: trim.mute, flip: trim.flip } : {}
         }
       });
       setDirty(false);
@@ -759,7 +769,7 @@
           value: { ...trim, crop },
           disabled: locked,
           onChange: (v) => {
-            edit(setTrim)({ inS: v.inS, outS: v.outS, mute: v.mute });
+            edit(setTrim)({ inS: v.inS, outS: v.outS, mute: v.mute, flip: v.flip });
             setCrop(v.crop);
           },
           onSaveStill: saveStill

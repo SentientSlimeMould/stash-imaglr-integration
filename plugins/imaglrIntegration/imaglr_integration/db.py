@@ -130,6 +130,10 @@ MIGRATIONS = [
     """
     ALTER TABLE items ADD COLUMN tags_pending INTEGER NOT NULL DEFAULT 0;
     """,
+    # v6: mirror a clip left-to-right
+    """
+    ALTER TABLE items ADD COLUMN flip INTEGER NOT NULL DEFAULT 0;
+    """,
 ]
 
 

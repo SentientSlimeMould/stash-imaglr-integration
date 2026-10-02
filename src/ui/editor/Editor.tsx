@@ -93,7 +93,7 @@ export function Editor({ itemId, onClose }: Props) {
   const [tags, setTags] = React.useState<string[]>([]);
   const [caption, setCaption] = React.useState("");
   const [crop, setCrop] = React.useState<{ aspect: Aspect; position: number }>({ aspect: "original", position: 0.5 });
-  const [trim, setTrim] = React.useState({ inS: 0, outS: 0, mute: false });
+  const [trim, setTrim] = React.useState({ inS: 0, outS: 0, mute: false, flip: false });
   const [blogId, setBlogId] = React.useState<number | null>(null);
   const [action, setAction] = React.useState<SendAction | null>(null);
   const [confirmPublish, setConfirmPublish] = React.useState(false);
@@ -112,7 +112,7 @@ export function Editor({ itemId, onClose }: Props) {
       setResetTags(false);
       setCaption(d.item.caption);
       setCrop(d.item.crop);
-      setTrim({ inS: d.item.in_s ?? 0, outS: d.item.out_s ?? 0, mute: d.item.mute });
+      setTrim({ inS: d.item.in_s ?? 0, outS: d.item.out_s ?? 0, mute: d.item.mute, flip: d.item.flip });
       setBlogId(d.item.blog_id);
       setAction(d.item.action);
       setDirty(false);
@@ -156,7 +156,7 @@ export function Editor({ itemId, onClose }: Props) {
       changes: {
         tags, caption, crop, blog_id: blogId, action,
         ...(resetTags ? { tags_auto: true } : {}),
-        ...(isClip ? { in_s: trim.inS, out_s: trim.outS, mute: trim.mute } : {}),
+        ...(isClip ? { in_s: trim.inS, out_s: trim.outS, mute: trim.mute, flip: trim.flip } : {}),
       },
     });
     setDirty(false);
@@ -282,7 +282,7 @@ export function Editor({ itemId, onClose }: Props) {
             value={{ ...trim, crop }}
             disabled={locked}
             onChange={(v: ClipState) => {
-              edit(setTrim)({ inS: v.inS, outS: v.outS, mute: v.mute });
+              edit(setTrim)({ inS: v.inS, outS: v.outS, mute: v.mute, flip: v.flip });
               setCrop(v.crop);
             }}
             onSaveStill={saveStill}

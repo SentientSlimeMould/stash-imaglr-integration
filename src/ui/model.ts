@@ -83,6 +83,7 @@ export interface FileCard extends Card {
   in_s: number | null;
   out_s: number | null;
   mute: boolean;
+  flip: boolean;
   stash_marker_id: string | null;
   stash_scene_id: string | null;
   stash_image_id: string | null;
@@ -106,6 +107,7 @@ export interface ItemDetail {
     in_s: number | null;
     out_s: number | null;
     mute: boolean;
+    flip: boolean;
     hdr_warning: boolean;
     tags_auto: boolean; // tags still follow Stash and the tag rules (never edited)
   };

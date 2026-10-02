@@ -34,6 +34,15 @@ def ff(*args):
     subprocess.run([FFMPEG, "-hide_banner", "-loglevel", "error", "-y", *args], check=True, stderr=subprocess.PIPE)
 
 
+def has_encoder(name):
+    """Some ffmpeg builds (Homebrew's, for one) lack libwebp; Stash's image has it."""
+    try:
+        out = subprocess.run([FFMPEG, "-hide_banner", "-encoders"], capture_output=True, text=True).stdout
+    except OSError:
+        return False
+    return f" {name} " in out
+
+
 def ffprobe(path, *entries):
     args = list(entries) or ["-show_streams", "-show_format"]
     out = subprocess.run([FFPROBE, "-v", "error", "-print_format", "json", *args, path], check=True,
@@ -206,6 +215,7 @@ class ImageTest(RealMediaTest):
             pages = subprocess.run(["vipsheader", "-f", "n-pages", res.path], check=True, capture_output=True)
             self.assertEqual(int(pages.stdout), 10)
 
+    @unittest.skipUnless(has_encoder("libwebp"), "this ffmpeg can't encode WebP fixtures")
     def test_still_webp_strip_and_reencode(self):
         src = self.path("s.webp")
         ff("-f", "lavfi", "-i", "testsrc2=size=320x240,format=rgba,colorchannelmixer=aa=0.5", "-frames:v", "1",

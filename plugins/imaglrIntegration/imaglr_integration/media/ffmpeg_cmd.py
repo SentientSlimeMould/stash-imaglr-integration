@@ -66,7 +66,8 @@ def compute_scale(width: int, height: int, max_long_edge: int) -> tuple[int, int
     return None
 
 
-def build_filter_chain(width: int, height: int, aspect: str, position: float, max_long_edge: int, fps: float) -> str:
+def build_filter_chain(width: int, height: int, aspect: str, position: float, max_long_edge: int, fps: float,
+                       flip: bool = False) -> str:
     parts: list[str] = []
     crop = compute_crop(width, height, aspect, position)
     w, h = width, height
@@ -78,6 +79,8 @@ def build_filter_chain(width: int, height: int, aspect: str, position: float, ma
         parts.append(f"scale={scale[0]}:{scale[1]}:flags=lanczos")
     if fps and fps > MAX_FPS:
         parts.append(f"fps={int(MAX_FPS)}")
+    if flip:
+        parts.append("hflip")  # last: the crop was chosen on the unflipped picture
     return ",".join(parts)
 
 
@@ -107,6 +110,7 @@ def build_clip_cmd(
     aspect: str = "original",
     position: float = 0.5,
     mute: bool = False,
+    flip: bool = False,
     has_audio: bool = True,
     preset: str = "medium",
     crf: int = 20,
@@ -122,7 +126,7 @@ def build_clip_cmd(
     include_audio = has_audio and not mute
     if include_audio:
         cmd += ["-map", "0:a:0?"]
-    vf = build_filter_chain(width, height, aspect, position, max_long_edge, fps)
+    vf = build_filter_chain(width, height, aspect, position, max_long_edge, fps, flip)
     if vf:
         cmd += ["-vf", vf]
     cmd += ["-c:v", "libx264", "-profile:v", "high", "-preset", preset, "-pix_fmt", "yuv420p"]
