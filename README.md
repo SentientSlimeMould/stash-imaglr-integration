@@ -18,18 +18,25 @@ your [imaglr](https://imaglr.com) blogs.
 
 Performed on a demo library of public-domain films and NASA images.
 
-**Tag media & send it to Imaglr**
+### 1 · Tag media & send it to Imaglr
+
 Select an image from Stash's library, click **⋯ → Add to imaglr**, then in the imaglr tab, you can make your final edits before sending to your blog.
 
 https://github.com/user-attachments/assets/2c2d1845-b4b8-4f8f-981d-3dab37551908
 
-**Clips created from markers - no video editing knowledge, bit-rate or codec tweaking is needed to fit within Imaglr's upload limits**
+---
+
+### 2 · Clips created from markers - no video editing knowledge, bit-rate or codec tweaking is needed to fit within Imaglr's upload limits
+
 Make a marker on a scene the same way you bookmark your favourite bits, tag the marker `imaglr`, trim the in and out points in the editor
 if necessary and send to Imaglr.
 
 https://github.com/user-attachments/assets/5a98b1db-fe1a-4b8b-a2da-eb19c941e514
 
-**Create posts from several images**
+---
+
+### 3 · Create posts from several images
+
 Select a few images, **Add to imaglr as one post**, put them in order, select the blog and publish. 
 
 https://github.com/user-attachments/assets/4a9fb196-368e-48a4-86b4-b03ec7e26b87
