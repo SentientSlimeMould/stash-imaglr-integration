@@ -10,6 +10,15 @@ Instructions for AI coding agents (and a reminder for humans). The owner is the 
 - Anything published: releases (`version:` in `plugins/imaglrIntegration/imaglrIntegration.yml`, tags), posts on
   the owner's real imaglr blogs, and anything sent to third parties.
 
+## Branches and releases
+
+- `main` is always releasable. Small fixes and documentation may go straight to it.
+- Every enhancement is built on its own short-lived branch (`feature/<name>`), one feature at a time, and is
+  merged into `main` only after the owner has signed it off (open a pull request; CI and the privacy scan run on
+  it). No long-lived `dev` branch. Delete the branch after merging.
+- A release is a version bump in `plugins/imaglrIntegration/imaglrIntegration.yml` plus a CHANGELOG entry and a
+  `vX.Y.Z` tag on `main`; publishing happens automatically once the tests pass.
+
 ## Always
 
 - Run the privacy gate before every commit (`git config core.hooksPath .githooks` installs it as hooks). The
