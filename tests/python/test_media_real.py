@@ -35,7 +35,9 @@ def ff(*args):
 
 
 def has_encoder(name):
-    """Some ffmpeg builds (Homebrew's, for one) lack libwebp; Stash's image has it."""
+    """Some ffmpeg builds (Homebrew's, for one) lack libwebp; Stash's image has it. False without ffmpeg."""
+    if not FFMPEG:
+        return False
     try:
         out = subprocess.run([FFMPEG, "-hide_banner", "-encoders"], capture_output=True, text=True).stdout
     except OSError:
