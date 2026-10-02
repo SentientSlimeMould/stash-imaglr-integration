@@ -3,44 +3,34 @@
 A [Stash](https://github.com/stashapp/stash) plugin for sharing your favourite images and clips from Stash to
 your [imaglr](https://imaglr.com) blogs.
 
-- **Images:** tag them `imaglr` in Stash (or tick them in any image list and choose **⋯ → Add to imaglr**),
-  crop if you like, and send.
-- **Clips:** create a scene marker in Stash as usual and tag it `imaglr`. Fine-tune the edit if needed, and send.
-- **Tags:** Tags on your imaglr posts are suggested from your Stash tags (performers, studio and galleries). All editable before you send.
-- **Tag Mapping:** Set up rules on your Stash tags to convert them to one or many corresponding Imaglr tags. 
-- **Draft, Queue or Publish immediately:** Set a default for each blog. You can change it each time you send.
-- **Privacy:** location, camera and other metadata are stripped from every file before upload.
+- **Share Images:** add the tag `imaglr` to an image, or multi-select them in any image list and choose **⋯ → Add to imaglr**. 
+- **Share Clips:** create a scene marker in Stash and tag it `imaglr`. You can fine-tune the edit if needed before sending.
+- **Tags:** Tags for your imaglr posts are suggested from your Stash tags (including performers, studio and galleries). These can be edited before sending.
+- **Tag Mapping:** Set up rules on your Stash tags to automatically translate them to one or many corresponding Imaglr tags. 
+- **Draft, Queue or Publish immediately:** You can set a default upload action for each blog you want to send to and alter that if needed any time you send.
+- **Privacy:** location, camera and other metadata are removed from every file before upload.
 
 > **Status: early release (0.1.x).** It works end to end and is tested on Stash v0.31.1 and the development
 > build, but it hasn't been used widely yet. Please report problems on the
 > [issue tracker](https://github.com/SentientSlimeMould/stash-imaglr-integration/issues).
 
-## See it work
+## Demos
 
-Demos performed on a demo library of public-domain films and NASA images.
+Performed on a demo library of public-domain films and NASA images.
 
-### 1 · Tag media & send it to Imaglr
-
-One image: tick it in Stash's Images list, **⋯ → Add to imaglr**, open the card, **Save draft** — then over on
-imaglr to **Publish**.
+**Tag media & send it to Imaglr**
+Select an image from Stash's library, click **⋯ → Add to imaglr**, then in the imaglr tab, you can make your final edits before sending to your blog.
 
 https://github.com/user-attachments/assets/2c2d1845-b4b8-4f8f-981d-3dab37551908
 
----
-
-### 2 · Clips created from markers - no video editing knowledge needed
-
+**Clips created from markers - no video editing knowledge, bit-rate or codec tweaking is needed to fit within Imaglr's upload limits**
 Make a marker on a scene the same way you bookmark your favourite bits, tag the marker `imaglr`, trim the in and out points in the editor
 if necessary and send to Imaglr.
 
 https://github.com/user-attachments/assets/5a98b1db-fe1a-4b8b-a2da-eb19c941e514
 
----
-
-### 3 · Create posts from several images
-
-Select a few images, **Add to imaglr as one post**, put them in order, choose the blog and **Published** —
-it goes straight to the blog.
+**Create posts from several images**
+Select a few images, **Add to imaglr as one post**, put them in order, select the blog and publish. 
 
 https://github.com/user-attachments/assets/4a9fb196-368e-48a4-86b4-b03ec7e26b87
 
@@ -66,13 +56,12 @@ a day; saving a draft doesn't use one, publishing does (including when imaglr pu
 
 ## Install
 
-1. **Back up Stash first:** Settings → Tasks → **Backup** (use **Download backup** to keep a copy elsewhere).
-2. In Stash, go to **Settings → Plugins → Available Plugins → Add Source** and enter:
+1. In Stash, go to **Settings → Plugins → Available Plugins → Add Source** and enter:
    - **Name:** `Imaglr Integration`
    - **Source URL:** `https://sentientslimemould.github.io/stash-imaglr-integration/stable/index.yml`
    - **Local path:** `imaglr`
-3. Expand the new source, tick **Imaglr Integration** and choose **Install**.
-4. Reload the Stash page. A new **imaglr** entry appears in the main menu.
+2. Expand the new source, tick **Imaglr Integration** and choose **Install**.
+3. Reload the Stash page. A new **imaglr** entry appears in the main menu.
 
 ## Set up
 
@@ -81,9 +70,7 @@ a day; saving a draft doesn't use one, publishing does (including when imaglr pu
    **Draft**, **Queued** or **Published**. The plugin checks the key with imaglr before saving it.
    Repeat for each blog.
 3. Optional: under **Tag rules**, choose Stash tags that should always be sent as different imaglr tags (one Stash
-   tag can become several tags for your Imaglr post), or block tags from being suggested. e.g. a Stash tag of "Ham" can be configured to always automatically convert to the Imaglr tags "Ham", "Meat", "Deli Meat".
-
-![The plugin's Settings dialog: two blogs with their status and posts left today, Add a blog, Tag rules, and Delete all plugin data](docs/media/settings.png)
+   tag can become several tags for your Imaglr post) e.g. a Stash tag of "Ham" can be configured to always automatically convert to the Imaglr tags "Ham", "Meat", "Deli Meat".
 
 A few more options live in Stash under **Settings → Plugins → Imaglr Integration**: the queue tag (default
 `imaglr`), the tag applied after sending (default `imaglr-sent`), tags never suggested (default `^AI_`), keeping
