@@ -5,6 +5,7 @@ your [imaglr](https://imaglr.com) blogs.
 
 - **Share Images:** add the tag `imaglr` to an image, or multi-select them in any image list and choose **⋯ → Add to imaglr**. 
 - **Share Clips:** create a scene marker in Stash and tag it `imaglr`. You can fine-tune the edit if needed before sending.
+- **GIF or video:** each clip can go out as an animated GIF, which plays straight away in feeds, or as a video. The plugin shrinks a GIF step by step until it fits imaglr's limit.
 - **Tags:** Tags for your imaglr posts are suggested from your Stash tags (including performers, studio and galleries). These can be edited before sending.
 - **Tag Mapping:** Set up rules on your Stash tags to automatically translate them to one or many corresponding Imaglr tags. 
 - **Draft, Queue or Publish immediately:** You can set a default upload action for each blog you want to send to and alter that if needed any time you send.
@@ -81,7 +82,8 @@ a day; saving a draft doesn't use one, publishing does (including when imaglr pu
 
 A few more options live in Stash under **Settings → Plugins → Imaglr Integration**: the queue tag (default
 `imaglr`), the tag applied after sending (default `imaglr-sent`), tags never suggested (default `^AI_`), keeping
-tag capitals, the default clip length, and how long prepared files are kept.
+tag capitals, the default clip length, whether new clips start as GIFs, the GIF size target, and how long prepared
+files are kept.
 
 ## Use
 
@@ -90,9 +92,9 @@ tag capitals, the default clip length, and how long prepared files are kept.
   up to 10 images in a single post.
 - **Open imaglr → Clips or Images.** Search, filter, sort and select items. Select several
   cards and choose **Make one post** to combine clips and images into one post.
-- **Tap a card to edit it:** crop; for clips, set in and out points (written back to the Stash marker), remove
-  the sound or save a still; edit tags and caption; choose the blog and what happens when sent. Then press the
-  send button.
+- **Tap a card to edit it:** crop; for clips, set in and out points (written back to the Stash marker), output as
+  GIF or video, remove the sound or save a still; edit tags and caption; choose the blog and what happens when
+  sent. Then press the send button.
 - **Send all** sends every item shown (or the ticked ones) using each item's settings. It never publishes
   straight away: items set to Publish now are saved as drafts instead.
 - **Sent** lists where each post went, which tags imaglr dropped, and lets you retry queueing or publishing if
@@ -131,6 +133,9 @@ your Stash library, other files or your machine.
 - Stash runs one task at a time in a queue, so clip exports and uploads can be held up by Stash's own tasks such
   as scans and vice versa.
 - HDR videos are not tone-mapped; colours may look flat.
+- imaglr accepts GIFs up to 40 MB. A long clip, or one with a lot of movement, may only fit as a GIF at a low frame
+  rate and resolution; the editor estimates the size as you trim, and Send all can fall back to a video for any GIF
+  that won't fit.
 - Animated WebP images can be sent as they are, but not cropped or converted to video (Stash's ffmpeg can't read
   them).
 - If you stop a send from Stash's Tasks page on macOS or Windows, the ffmpeg process may continue to run on until 
