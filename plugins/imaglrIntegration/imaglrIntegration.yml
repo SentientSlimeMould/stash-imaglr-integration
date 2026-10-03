@@ -34,9 +34,17 @@ settings:
     displayName: Tags never suggested
     description: Comma-separated regular expressions; matching Stash tags are not suggested for imaglr. Leave empty for "^AI_".
     type: STRING
+  videoClipsAsGif:
+    displayName: Clips as GIF by default
+    description: New clips are sent as animated GIFs (they play instantly in feeds) instead of videos. Each clip can still be switched in the editor.
+    type: BOOLEAN
   videoDefaultClipSeconds:
     displayName: Default clip length (seconds)
     description: Used when a marker has no end time. Leave empty for 15.
+    type: STRING
+  videoGifTargetMb:
+    displayName: GIF size target (MB)
+    description: GIFs are made smaller or slower until they are under this. Leave empty for 20. imaglr refuses anything over 40.
     type: STRING
   workingFilesKeepDays:
     displayName: Keep prepared files (days)

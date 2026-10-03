@@ -16,6 +16,8 @@ export interface Card {
   blog_id: number | null;
   action: SendAction | null;
   tag_count: number;
+  send_format?: "video" | "gif"; // clips: how it will be sent
+  output_note?: string | null; // after preparing: e.g. "GIF · 9.4 MB · 480 px · 10 fps"
   thumb: string | null; // relative to Stash's base URL
   width?: number | null;
   height?: number | null;
@@ -84,6 +86,8 @@ export interface FileCard extends Card {
   out_s: number | null;
   mute: boolean;
   flip: boolean;
+  format: "video" | "gif";
+  output_note: string | null; // what the prepared file turned out to be, e.g. "GIF · 9.4 MB · 480 px · 10 fps"
   stash_marker_id: string | null;
   stash_scene_id: string | null;
   stash_image_id: string | null;
@@ -108,6 +112,8 @@ export interface ItemDetail {
     out_s: number | null;
     mute: boolean;
     flip: boolean;
+    format: "video" | "gif";
+    output_note: string | null;
     hdr_warning: boolean;
     tags_auto: boolean; // tags still follow Stash and the tag rules (never edited)
   };
@@ -116,6 +122,7 @@ export interface ItemDetail {
   blogs: Blog[];
   lowercase_tags: boolean;
   queue_tag: string;
+  gif_target_mb: number;
 }
 
 export interface SentFile {
@@ -147,6 +154,7 @@ export interface SentItem {
   caption: string;
   dropped_tags: string[];
   dropped?: { tag: string; from: string | null }[]; // detail only: the Stash name each dropped tag came from
+  output_note?: string | null; // e.g. "GIF · 9.4 MB · 480 px · 10 fps", or why a GIF went as a video
   followup_failed: boolean;
   action: SendAction | null;
   error_code: string | null;

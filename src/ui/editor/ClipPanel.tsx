@@ -4,6 +4,7 @@ import React from "react";
 import { gql } from "../api.ts";
 import { clampTrim, pickStream, sameOrigin, type SceneStream, type VideoInfo } from "../lib/clip.ts";
 import { ASPECTS, overlayRect } from "../lib/crop.ts";
+import { describeGifEstimate, LONG_GIF_SECONDS } from "../lib/gif.ts";
 import { fmtTime, parseTime } from "../lib/format.ts";
 import type { Aspect } from "../lib/types.ts";
 
@@ -45,11 +46,14 @@ async function loadPlayback(sceneId: string | null, imageId: string | null): Pro
   };
 }
 
+export type ClipFormat = "video" | "gif";
+
 export interface ClipState {
   inS: number;
   outS: number;
   mute: boolean;
   flip: boolean; // mirror left-to-right
+  format: ClipFormat; // sent as a video, or as an animated GIF
   crop: { aspect: Aspect; position: number };
 }
 
@@ -58,6 +62,7 @@ interface Props {
   imageId: string | null;
   value: ClipState;
   disabled: boolean;
+  gifTargetMb: number; // from the plugin's settings
   onChange: (value: ClipState) => void;
   onSaveStill: (t: number) => void;
 }
@@ -94,7 +99,7 @@ function TimeRow({ label, value, disabled, onSet, onNudge, onType }: {
   );
 }
 
-export function ClipPanel({ sceneId, imageId, value, disabled, onChange, onSaveStill }: Props) {
+export function ClipPanel({ sceneId, imageId, value, disabled, gifTargetMb, onChange, onSaveStill }: Props) {
   const { Button, ButtonGroup, Form } = PluginApi.libraries.Bootstrap;
   const video = React.useRef<HTMLVideoElement>(null);
   const box = React.useRef<HTMLDivElement>(null);
@@ -200,8 +205,40 @@ export function ClipPanel({ sceneId, imageId, value, disabled, onChange, onSaveS
               onChange({ ...value, crop: { ...value.crop, position: Number(e.target.value) } })} />
         ) : null}
       </Form.Group>
-      <Form.Check id="imaglr-mute" type="switch" label="Remove sound" checked={value.mute} disabled={disabled}
-        onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange({ ...value, mute: e.target.checked })} />
+      <Form.Group className="mt-2">
+        <Form.Label>Format</Form.Label>
+        <div>
+          <ButtonGroup className="imaglr-segmented">
+            {(["video", "gif"] as ClipFormat[]).map((f) => (
+              <Button key={f} variant={value.format === f ? "primary" : "secondary"} disabled={disabled}
+                onClick={() => onChange({ ...value, format: f })}>
+                {f === "video" ? "Video" : "GIF"}
+              </Button>
+            ))}
+          </ButtonGroup>
+        </div>
+        <div className="small text-muted mt-1">
+          GIFs play automatically in feeds. Videos are higher quality, are quicker to load and have sound, but
+          require the user to click play.
+        </div>
+        {value.format === "gif" ? (
+          <>
+            <div className="small text-muted mt-1">
+              This will be a GIF of {describeGifEstimate(value.outS - value.inS)}. GIFs over about {gifTargetMb} MB are slow to
+              load, so the plugin will automatically lower the quality if it has to.
+            </div>
+            {value.outS - value.inS > LONG_GIF_SECONDS ? (
+              <div className="small text-warning mt-1">
+                Long GIFs may need lower frame-rates and resolutions. Clips below {LONG_GIF_SECONDS} seconds work best.
+              </div>
+            ) : null}
+          </>
+        ) : null}
+      </Form.Group>
+      {value.format === "gif" ? null : (
+        <Form.Check id="imaglr-mute" type="switch" label="Remove sound" checked={value.mute} disabled={disabled}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange({ ...value, mute: e.target.checked })} />
+      )}
       <Form.Check id="imaglr-flip" type="switch" label="Flip horizontally" checked={value.flip} disabled={disabled}
         onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange({ ...value, flip: e.target.checked })} />
       {value.flip ? (

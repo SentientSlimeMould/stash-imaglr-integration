@@ -23,6 +23,8 @@ class Settings:
     keep_tag_case: bool = False
     default_clip_seconds: float = 15.0
     prepared_retention_days: int = 14
+    clips_as_gif: bool = False  # new clips start as animated GIFs instead of videos
+    gif_target_mb: float = 20.0  # the GIF export aims under this; imaglr's hard limit is 40 MB
 
 
 # Stash setting name -> (field, converter). Keep in step with `settings:` in imaglrIntegration.yml.
@@ -31,9 +33,13 @@ _FIELDS = {
     "tagSent": ("done_tag", str),
     "tagsKeepCapitals": ("keep_tag_case", bool),
     "tagsNeverSuggested": ("exclude_patterns", str),
+    "videoClipsAsGif": ("clips_as_gif", bool),
     "videoDefaultClipSeconds": ("default_clip_seconds", float),
+    "videoGifTargetMb": ("gif_target_mb", float),
     "workingFilesKeepDays": ("prepared_retention_days", int),
 }
+
+GIF_HARD_LIMIT_MB = 40  # imaglr's ceiling for an image upload, which a GIF is
 
 
 class SettingsError(ValueError):
@@ -56,6 +62,8 @@ def parse(raw: dict[str, Any] | None) -> Settings:
         values.pop("default_clip_seconds")
     if values.get("prepared_retention_days", 1) < 1:
         values.pop("prepared_retention_days")
+    if not (1 <= values.get("gif_target_mb", 20) <= GIF_HARD_LIMIT_MB) or values.get("gif_target_mb", 20) != values.get("gif_target_mb", 20):
+        values.pop("gif_target_mb", None)
     settings = Settings(**values)
     if settings.queue_tag.casefold() == settings.done_tag.casefold():
         raise SettingsError(
