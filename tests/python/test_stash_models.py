@@ -11,7 +11,7 @@ def sample_marker(**over):
         "seconds": 10.0,
         "end_seconds": 22.5,
         "screenshot": "http://stash.test/scene/7/scene_marker/501/screenshot",
-        "preview": "http://stash.test/scene/7/scene_marker/501/preview",
+        "stream": "http://stash.test/scene/7/scene_marker/501/stream",
         "primary_tag": {"id": "10", "name": "imaglr"},
         "tags": [{"id": "20", "name": "Slow Motion"}, {"id": "21", "name": "AI_face"}],
         "scene": {
@@ -75,6 +75,7 @@ class MarkerTest(unittest.TestCase):
         self.assertEqual(m.scene.duration, 600.0)
         self.assertEqual(m.scene.performers, ["Alex Doe"])
         self.assertEqual(m.scene.studio, "Studio X")
+        self.assertEqual(m.stream_url, "http://stash.test/scene/7/scene_marker/501/stream")
 
     def test_display_title_falls_back(self):
         self.assertEqual(Marker.parse(sample_marker(title="")).display_title, "imaglr")

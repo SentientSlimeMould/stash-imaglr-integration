@@ -10,6 +10,7 @@ export interface GridItem {
   title: string;
   url: string; // where the card links (its editor / details)
   thumb: string | null; // relative to Stash's base URL
+  thumbFallback?: string | null; // shown if the thumbnail can't load (e.g. a sent clip whose marker is gone)
   preview?: string | null; // plays on hover (desktop) if set
   portrait?: boolean;
   detail: string;
@@ -42,6 +43,17 @@ function useContainerWidth(): [number, (el: HTMLDivElement | null) => void] {
   return [width, attach];
 }
 
+/** An image that falls back, then disappears, rather than showing the browser's broken-image icon. */
+export function ThumbImg({ src, fallback, className }: { src: string | null; fallback?: string | null; className?: string }) {
+  const [current, setCurrent] = React.useState(src);
+  React.useEffect(() => setCurrent(src), [src, fallback]);
+  if (!current) return null;
+  return (
+    <img className={className} src={baseUrl() + current} alt="" loading="lazy"
+      onError={() => setCurrent(fallback && current !== fallback ? fallback : null)} />
+  );
+}
+
 /** Thumbnail; plays the preview while hovered on devices with a mouse. */
 export function CardImage({ item }: { item: GridItem }) {
   const [hover, setHover] = React.useState(false);
@@ -52,9 +64,9 @@ export function CardImage({ item }: { item: GridItem }) {
       onMouseLeave={() => setHover(false)}>
       {hover && item.preview ? (
         <video className="image-card-preview-image" src={baseUrl() + item.preview} autoPlay muted loop playsInline />
-      ) : item.thumb ? (
-        <img className="image-card-preview-image" src={baseUrl() + item.thumb} alt="" loading="lazy" />
-      ) : null}
+      ) : (
+        <ThumbImg className="image-card-preview-image" src={item.thumb} fallback={item.thumbFallback} />
+      )}
     </div>
   );
 }

@@ -282,20 +282,31 @@ def _thumb(member: dict[str, Any]) -> str | None:
     return None
 
 
+def _thumb_fallback(member: dict[str, Any]) -> str | None:
+    """What to show if the thumbnail can't be loaded: a clip's marker may have been deleted since it was
+    sent, but its scene's screenshot is still there. Images have nothing to fall back to."""
+    if member["stash_marker_id"] and member["stash_scene_id"] and not member["stash_image_id"]:
+        return f"scene/{member['stash_scene_id']}/screenshot"
+    return None
+
+
 def _sent_view(ctx: Context, item: dict[str, Any], blog_names: dict[int, str]) -> dict[str, Any]:
     """A sent post as the Sent tab's card and detail dialog need it."""
     members = repo.set_members(ctx.db, item["id"]) if item["kind"] == "set" else [item]
     files = [{
         "id": m["id"], "kind": m["kind"], "title": m["source_title"], "thumb": _thumb(m),
+        "thumb_fallback": _thumb_fallback(m),
         "stash_image_id": m["stash_image_id"], "stash_scene_id": m["stash_scene_id"],
         "stash_marker_id": m["stash_marker_id"], "in_s": m["in_s"],
     } for m in members]
+    first = next((f for f in files if f["thumb"]), None)
     return {
         "id": item["id"],
         "kind": item["kind"],
         "title": files[0]["title"] if files else item["source_title"],
         "files": files,
-        "thumb": next((f["thumb"] for f in files if f["thumb"]), None),
+        "thumb": first["thumb"] if first else None,
+        "thumb_fallback": first["thumb_fallback"] if first else None,
         "blog_id": item["blog_id"],
         "blog": blog_names.get(item["blog_id"]) if item["blog_id"] else None,
         "sent_as": item["sent_as"],

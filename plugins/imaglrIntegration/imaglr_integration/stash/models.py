@@ -136,7 +136,7 @@ class Marker:
     primary_tag: Tag | None
     tags: list[Tag]
     screenshot_url: str | None
-    preview_url: str | None
+    stream_url: str | None  # the marker's preview video; Stash's "preview" is a WebP image
     scene: Scene | None
     created_at: str | None = None
     updated_at: str | None = None
@@ -166,7 +166,7 @@ class Marker:
             primary_tag=Tag.parse(d.get("primary_tag")),
             tags=_tags(d.get("tags")),
             screenshot_url=d.get("screenshot"),
-            preview_url=d.get("preview"),
+            stream_url=d.get("stream"),
             scene=Scene.parse(d["scene"]) if d.get("scene") else None,
             created_at=d.get("created_at"),
             updated_at=d.get("updated_at"),

@@ -46,7 +46,7 @@ SCENE_FIELDS = """
 
 MARKER_FIELDS = (
     """
-  id title seconds end_seconds screenshot preview created_at updated_at
+  id title seconds end_seconds screenshot stream created_at updated_at
   primary_tag { id name }
   tags { id name }
   scene { """

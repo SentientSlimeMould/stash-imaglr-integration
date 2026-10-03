@@ -246,7 +246,7 @@ def clip_card(item: dict[str, Any], marker: Marker | None, first_seen: str | Non
         "stash_marker_id": item["stash_marker_id"],
         "stash_scene_id": item["stash_scene_id"],
         "thumb": relative_url(marker.screenshot_url) if marker else None,
-        "preview": relative_url(marker.preview_url) if marker else None,
+        "preview": relative_url(marker.stream_url) if marker else None,  # played on hover
         "width": f.width if f else None,
         "height": f.height if f else None,
         "duration": (item["out_s"] or 0) - (item["in_s"] or 0),

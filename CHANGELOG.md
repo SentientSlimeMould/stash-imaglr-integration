@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Hovering a clip card now plays Stash's marker preview: the plugin was pointing the player at the marker's
+  still preview image, so nothing played.
+- A sent clip whose Stash marker has since been deleted shows its scene's picture on the Sent tab instead of a
+  broken image.
+
 ## 0.1.14 — 2026-10-02
 
 - Clips can be **flipped horizontally** (a switch next to *Remove sound* in the editor). The crop is applied to

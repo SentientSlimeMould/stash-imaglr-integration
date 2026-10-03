@@ -3,7 +3,8 @@
 // the queue tabs: where it went, the tags imaglr kept and dropped, the caption, and a retry when
 // queueing or publishing failed after the upload.
 import React from "react";
-import { baseUrl, runOperation } from "../api.ts";
+import { runOperation } from "../api.ts";
+import { ThumbImg } from "../queue/CardGrid.tsx";
 import { fmtDate } from "../lib/format.ts";
 import { imaglrLink, SENT_AS_LABELS, stashLink } from "../lib/send.ts";
 import type { SentItem } from "../model.ts";
@@ -71,7 +72,7 @@ export function SentDialog({ itemId, onClose }: Props) {
         <ol className="imaglr-strip">
           {item.files.map((f) => {
             const to = stashLink(f);
-            const img = f.thumb ? <img src={baseUrl() + f.thumb} alt="" /> : null;
+            const img = <ThumbImg src={f.thumb} fallback={f.thumb_fallback} />;
             return (
               <li key={f.id} className="imaglr-strip-item" title={f.title}>
                 {to ? <Link to={to} title={`${f.title} in Stash`}>{img}</Link> : img}
