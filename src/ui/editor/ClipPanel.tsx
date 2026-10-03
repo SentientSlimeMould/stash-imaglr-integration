@@ -218,8 +218,8 @@ export function ClipPanel({ sceneId, imageId, value, disabled, gifTargetMb, onCh
           </ButtonGroup>
         </div>
         <div className="small text-muted mt-1">
-          GIFs play straight away in feeds, with no tap, which tends to get more engagement. Videos are sharper,
-          much smaller and can keep their sound.
+          GIFs play automatically in feeds. Videos are higher quality, are quicker to load and have sound, but
+          require the user to click play.
         </div>
         {value.format === "gif" ? (
           <>
