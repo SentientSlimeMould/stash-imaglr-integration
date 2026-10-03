@@ -130,6 +130,7 @@ export interface SentFile {
   kind: Kind;
   title: string;
   thumb: string | null;
+  thumb_fallback: string | null; // shown if the thumbnail can't load: a clip's scene screenshot (its marker may be gone)
   in_s: number | null;
   stash_image_id: string | null;
   stash_scene_id: string | null;
@@ -142,6 +143,7 @@ export interface SentItem {
   title: string;
   files: SentFile[];
   thumb: string | null;
+  thumb_fallback: string | null;
   blog_id: number | null;
   blog: string | null;
   sent_as: SendAction;

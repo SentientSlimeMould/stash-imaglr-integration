@@ -75,6 +75,7 @@ export function SentTab({ openId }: { openId: string | null }) {
       title: item.title,
       url: `${ROUTE}?tab=sent&open=${item.id}`,
       thumb: item.thumb,
+      thumbFallback: item.thumb_fallback,
       detail: cardDetail(item),
       badge: item.followup_failed
         ? { text: item.action === "publish" ? "Publish failed" : "Queue failed", variant: "danger" }

@@ -1082,6 +1082,21 @@
     react_default.useEffect(() => () => observer.current?.disconnect(), []);
     return [width, attach];
   }
+  function ThumbImg({ src, fallback, className }) {
+    const [current, setCurrent] = react_default.useState(src);
+    react_default.useEffect(() => setCurrent(src), [src, fallback]);
+    if (!current) return null;
+    return /* @__PURE__ */ react_default.createElement(
+      "img",
+      {
+        className,
+        src: baseUrl() + current,
+        alt: "",
+        loading: "lazy",
+        onError: () => setCurrent(fallback && current !== fallback ? fallback : null)
+      }
+    );
+  }
   function CardImage({ item }) {
     const [hover, setHover] = react_default.useState(false);
     const canHover = window.matchMedia?.("(hover: hover)").matches;
@@ -1092,7 +1107,7 @@
         onMouseEnter: () => canHover && item.preview && setHover(true),
         onMouseLeave: () => setHover(false)
       },
-      hover && item.preview ? /* @__PURE__ */ react_default.createElement("video", { className: "image-card-preview-image", src: baseUrl() + item.preview, autoPlay: true, muted: true, loop: true, playsInline: true }) : item.thumb ? /* @__PURE__ */ react_default.createElement("img", { className: "image-card-preview-image", src: baseUrl() + item.thumb, alt: "", loading: "lazy" }) : null
+      hover && item.preview ? /* @__PURE__ */ react_default.createElement("video", { className: "image-card-preview-image", src: baseUrl() + item.preview, autoPlay: true, muted: true, loop: true, playsInline: true }) : /* @__PURE__ */ react_default.createElement(ThumbImg, { className: "image-card-preview-image", src: item.thumb, fallback: item.thumbFallback })
     );
   }
   function Overlays({ item }) {
@@ -1718,7 +1733,7 @@
     } else {
       body = /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, item.followup_failed ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, item.error_detail, " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0 align-baseline imaglr-touch", disabled: busy, onClick: retry }, item.action === "publish" ? "Retry publishing" : "Retry adding to queue")) : item.error_detail ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, item.error_detail) : null, /* @__PURE__ */ react_default.createElement("ol", { className: "imaglr-strip" }, item.files.map((f) => {
         const to = stashLink(f);
-        const img = f.thumb ? /* @__PURE__ */ react_default.createElement("img", { src: baseUrl() + f.thumb, alt: "" }) : null;
+        const img = /* @__PURE__ */ react_default.createElement(ThumbImg, { src: f.thumb, fallback: f.thumb_fallback });
         return /* @__PURE__ */ react_default.createElement("li", { key: f.id, className: "imaglr-strip-item", title: f.title }, to ? /* @__PURE__ */ react_default.createElement(Link, { to, title: `${f.title} in Stash` }, img) : img);
       })), /* @__PURE__ */ react_default.createElement("dl", { className: "row imaglr-sent-facts" }, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, item.kind === "set" ? "Files" : item.kind === "clip" ? "Clip" : item.kind === "still" ? "Still" : "Image"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, item.kind === "set" ? `${item.files.length} files in one post` : stashLink(item.files[0] ?? {}) ? /* @__PURE__ */ react_default.createElement(Link, { to: stashLink(item.files[0]), title: "Open in Stash" }, item.title) : item.title), item.output_note ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "File"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, item.output_note)) : null, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Sent as"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, /* @__PURE__ */ react_default.createElement(Badge, { variant: item.sent_as === "publish" ? "success" : "primary" }, SENT_AS_LABELS[item.sent_as]), " ", item.blog ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, "on ", /* @__PURE__ */ react_default.createElement("strong", null, item.blog)) : null), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "When"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, fmtDate(item.sent_at)), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "On imaglr"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, /* @__PURE__ */ react_default.createElement("a", { href: imaglrLink(item.sent_as, item.post_url), target: "_blank", rel: "noreferrer" }, item.sent_as === "draft" ? "Open imaglr drafts" : "Open the post")), /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Tags"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, item.tags.length ? item.tags.map((t) => /* @__PURE__ */ react_default.createElement(Badge, { key: t, variant: "secondary", className: "tag-item" }, t)) : /* @__PURE__ */ react_default.createElement("span", { className: "text-muted" }, "None")), item.dropped_tags.length ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("dt", { className: "col-4 col-sm-3" }, "Dropped by imaglr"), /* @__PURE__ */ react_default.createElement("dd", { className: "col-8 col-sm-9" }, (item.dropped ?? item.dropped_tags.map((tag) => ({ tag, from: null }))).map(({ tag, from }) => /* @__PURE__ */ react_default.createElement("span", { key: tag, className: "imaglr-dropped" }, /* @__PURE__ */ react_default.createElement(Badge, { variant: "secondary", className: "tag-item" }, tag), from ? /* @__PURE__ */ react_default.createElement(
         Button,
@@ -1789,6 +1804,7 @@
         title: item.title,
         url: `${ROUTE}?tab=sent&open=${item.id}`,
         thumb: item.thumb,
+        thumbFallback: item.thumb_fallback,
         detail: cardDetail2(item),
         badge: item.followup_failed ? { text: item.action === "publish" ? "Publish failed" : "Queue failed", variant: "danger" } : { text: SENT_AS_LABELS[item.sent_as], variant: item.sent_as === "publish" ? "success" : "primary" },
         count: item.files.length > 1 ? item.files.length : void 0
