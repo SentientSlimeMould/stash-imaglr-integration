@@ -85,7 +85,7 @@ export function SendAllDialog({ itemIds, selected, onClose }: {
           <div className="imaglr-plan-gifs">
             <div>
               {gifs.gifs} {gifs.gifs === 1 ? "clip will be a GIF" : "clips will be GIFs"}.
-              {gifs.long ? ` ${gifs.long} ${gifs.long === 1 ? "is" : "are"} longer than ${LONG_GIF_SECONDS} seconds — send ${gifs.long === 1 ? "it" : "them"} as a video instead?` : null}
+              {gifs.long ? ` ${gifs.long} ${gifs.long === 1 ? "is" : "are"} longer than ${LONG_GIF_SECONDS} seconds. Send ${gifs.long === 1 ? "it" : "them"} as a video instead?` : null}
             </div>
             {gifs.long ? (
               <Form.Check id="imaglr-long-gifs" type="checkbox" checked={longAsVideo}
