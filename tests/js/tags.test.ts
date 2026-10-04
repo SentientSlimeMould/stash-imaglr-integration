@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { checkNewTag, normalise, spareSuggestions } from "../../src/ui/lib/tags.ts";
+import { addOptionFirst, checkNewTag, normalise, spareSuggestions } from "../../src/ui/lib/tags.ts";
 
 test("normalise trims, collapses spaces and optionally lowercases", () => {
   assert.equal(normalise("  Beach   Day ", true), "beach day");
@@ -26,4 +26,11 @@ test("spare suggestions exclude tags already on the post and split out over-long
     ],
   };
   assert.deepEqual(spareSuggestions(s, ["Sunset"]), { addable: ["beach"], tooLong: ["Very long tag"] });
+});
+
+test("what you typed is offered first unless a suggestion starts with it", () => {
+  assert.equal(addOptionFirst("humping", ["dry humping"]), true); // contains it, but you typed something else
+  assert.equal(addOptionFirst("vint", ["vintage", "retro"]), false); // completing "vintage"
+  assert.equal(addOptionFirst("Vint", ["vintage"]), false);
+  assert.equal(addOptionFirst("new", []), true);
 });

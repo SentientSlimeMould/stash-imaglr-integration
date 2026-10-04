@@ -508,6 +508,10 @@
     if (tags.length >= MAX_TAGS) return { ok: false, error: `imaglr allows ${MAX_TAGS} tags per post` };
     return { ok: true, tag };
   }
+  function addOptionFirst(typed, suggestions) {
+    const q = typed.toLowerCase();
+    return !suggestions.some((s) => s.toLowerCase().startsWith(q));
+  }
   function spareSuggestions(s, tags) {
     const taken = new Set(tags.map((t) => t.toLowerCase()));
     const all = [...s?.active ?? [], ...s?.greyed ?? []].filter((t) => !taken.has(t.tag.toLowerCase()));
@@ -546,7 +550,9 @@
     const options = names.filter((t, i) => !taken.has(t.toLowerCase()) && names.findIndex((o) => o.toLowerCase() === t.toLowerCase()) === i).map(toOption);
     const typed = checkNewTag(tags, input, lowercase);
     if (input.trim() && typed.ok && !options.some((o) => o.value.toLowerCase() === typed.tag.toLowerCase())) {
-      options.push({ value: typed.tag, label: `Add "${typed.tag}"`, isNew: true });
+      const add = { value: typed.tag, label: `Add "${typed.tag}"`, isNew: true };
+      if (addOptionFirst(typed.tag, options.map((o) => o.value))) options.unshift(add);
+      else options.push(add);
     }
     function change(selected) {
       const next = (selected ?? []).map((o) => o.value);

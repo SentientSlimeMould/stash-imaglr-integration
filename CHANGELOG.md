@@ -9,6 +9,8 @@
   what you got (e.g. "GIF · 9.4 MB · 480 px · 10 fps"). A GIF that can't fit even at its smallest fails with
   advice on how much to trim; **Send all** offers to send long clips as videos and, by default, falls back to a
   video for any GIF that won't fit.
+- In the tag field, what you typed is offered first (so Enter adds it) unless a suggestion starts with it:
+  typing "humping" no longer leaves you with only "dry humping" to pick.
 - Hovering a clip card now plays Stash's marker preview: the plugin was pointing the player at the marker's
   still preview image, so nothing played.
 - A sent clip whose Stash marker has since been deleted shows its scene's picture on the Sent tab instead of a
