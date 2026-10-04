@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.15 — 2026-10-04
 
 - Clips can be sent as **animated GIFs** instead of videos (a **Format** choice in the editor; a plugin setting
   makes GIF the default for new clips). GIFs play straight away in feeds. imaglr's limit for a GIF is 40 MB, so
