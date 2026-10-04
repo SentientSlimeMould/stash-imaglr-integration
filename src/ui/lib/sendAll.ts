@@ -7,8 +7,16 @@ export interface PlanEntry {
   blog_id?: number;
   action?: "draft" | "queue";
   downgraded?: boolean;
+  gif?: boolean; // contains at least one clip going as a GIF
+  long_gif?: boolean; // ... and one of those is over the comfortable GIF length
   skip?: string;
   reason?: string;
+}
+
+/** How many sendable items go as GIFs, and how many of those are long. */
+export function gifCounts(plan: PlanEntry[]): { gifs: number; long: number } {
+  const live = plan.filter((e) => !e.skip);
+  return { gifs: live.filter((e) => e.gif).length, long: live.filter((e) => e.long_gif).length };
 }
 
 export interface FallbackBlog {

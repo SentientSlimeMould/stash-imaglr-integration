@@ -21,7 +21,9 @@ function cardDetail(card: Card): string {
   const count = card.members?.length ?? 0;
   if (count) return `${count} files in one post`;
   if (card.kind === "clip") {
-    return [`${(card.duration ?? 0).toFixed(1)} s`, fmtDims(card.width, card.height)].filter(Boolean).join(" · ");
+    if (card.output_note) return card.output_note; // e.g. "GIF · 9.4 MB · 480 px · 10 fps"
+    return [`${(card.duration ?? 0).toFixed(1)} s`, fmtDims(card.width, card.height), card.send_format === "gif" ? "GIF" : null]
+      .filter(Boolean).join(" · ");
   }
   return [card.format?.toUpperCase(), fmtDims(card.width, card.height), card.animated ? "animated" : null]
     .filter(Boolean)

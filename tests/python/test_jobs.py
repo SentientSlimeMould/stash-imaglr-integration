@@ -50,7 +50,9 @@ class FakeImaglr:
         return {}
 
 
-class SendTest(unittest.TestCase):
+class SendHarness(unittest.TestCase):
+    """A send task against a fake Stash and a fake imaglr; subclasses hold the cases."""
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -97,6 +99,9 @@ class SendTest(unittest.TestCase):
             jobs.run_send(self.ctx, item_id, action)
         return items.get_item(self.db, item_id), client
 
+
+
+class SendTest(SendHarness):
     # ---- the happy paths ------------------------------------------------------------------------
 
     def test_draft_is_saved_and_the_stash_tags_swapped(self):
@@ -300,3 +305,184 @@ class RedactionTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GifTest(unittest.TestCase):
+    """The GIF ladder (export_gif) with a fake ffmpeg that writes files of chosen sizes, and the send task's
+    handling of a GIF that won't fit."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def fake_ffmpeg(self, sizes):
+        """run_ffmpeg stand-in: each call writes the next size from `sizes` to the command's output file."""
+        from imaglr_integration.media import video_export
+        sizes = list(sizes)
+        calls = []
+
+        def run(cmd, output=None, **kw):
+            calls.append(cmd)
+            if output.endswith("thumb.jpg"):
+                with open(output, "wb") as f:
+                    f.write(b"j")
+                return
+            with open(output, "wb") as f:
+                f.write(b"x" * sizes.pop(0))
+
+        from imaglr_integration.media.probe import ProbeInfo
+        info = mock.Mock(spec=ProbeInfo)
+        info.display_size = (1920, 1080)
+        return mock.patch.object(video_export, "run_ffmpeg", run), mock.patch.object(video_export, "probe", lambda *a: info), calls
+
+    def test_ladder_stops_at_the_first_rung_under_target(self):
+        from imaglr_integration.media.video_export import VideoSettings, export_gif
+
+        run_patch, probe_patch, calls = self.fake_ffmpeg([5000, 3000, 1500])
+        with run_patch, probe_patch:
+            r = export_gif("/src.mp4", self.tmp.name, title="t", in_s=0, out_s=8, settings=VideoSettings("ff", "fp"),
+                           target_bytes=2000, limit_bytes=10000)
+        self.assertEqual(r.bytes, 1500)
+        self.assertEqual(r.note, "GIF · 0.0 MB · 480 px · 12 fps")
+        self.assertEqual(len([c for c in calls if "-loop" in c]), 3)
+        self.assertTrue(r.path.endswith(".gif"))
+
+    def test_bottom_rung_is_accepted_up_to_the_hard_limit(self):
+        from imaglr_integration.media.video_export import VideoSettings, export_gif
+
+        run_patch, probe_patch, calls = self.fake_ffmpeg([9000, 8000, 7000, 6000, 5000])
+        with run_patch, probe_patch:
+            r = export_gif("/src.mp4", self.tmp.name, title="t", in_s=0, out_s=8, settings=VideoSettings("ff", "fp"),
+                           target_bytes=2000, limit_bytes=5500)
+        self.assertEqual((r.bytes, r.note), (5000, "GIF · 0.0 MB · 320 px · 8 fps"))
+
+    def test_too_large_even_at_the_bottom_says_how_short_it_must_be(self):
+        from imaglr_integration.media.video_export import GifTooLarge, VideoSettings, export_gif
+
+        run_patch, probe_patch, _ = self.fake_ffmpeg([9000, 8000, 7000, 6000, 5000])
+        with run_patch, probe_patch, self.assertRaises(GifTooLarge) as cm:
+            export_gif("/src.mp4", self.tmp.name, title="t", in_s=0, out_s=10, settings=VideoSettings("ff", "fp"),
+                       target_bytes=2000, limit_bytes=2500)
+        self.assertEqual(cm.exception.size, 5000)
+        self.assertAlmostEqual(cm.exception.fit_seconds, 10 * 2500 * 0.9 / 5000, places=3)
+        self.assertEqual(glob_parts(self.tmp.name), [])
+
+    def test_gif_command_shape(self):
+        from imaglr_integration.media import ffmpeg_cmd as fc
+
+        cmd = fc.build_gif_cmd("ff", "/in.mp4", "/o.gif.part", 2, 6, 1920, 1080, long_edge=480, gif_fps=10, colors=64, flip=True)
+        vf = cmd[cmd.index("-filter_complex") + 1]
+        self.assertTrue(vf.startswith("fps=10,"))
+        self.assertIn("scale=480:270", vf)
+        self.assertIn("hflip,split", vf)
+        self.assertIn("max_colors=64", vf)
+        self.assertIn("-an", cmd)
+        self.assertEqual(cmd[-3:], ["-f", "gif", "/o.gif.part"])
+
+
+def glob_parts(folder):
+    import glob
+    return glob.glob(os.path.join(folder, "*.part"))
+
+
+class GifSendTest(SendHarness):
+    """run_send with a GIF clip: the ladder's result, the fallback to video, and Send all's override."""
+
+    def clip_item(self, fmt="gif"):
+        return items.create_item(self.db, kind="clip", stash_image_id="801", source_title="Clip", in_s=0.0, out_s=5.0, format=fmt)
+
+    def send_clip(self, item_id, gif_result=None, gif_error=None, **kw):
+        from imaglr_integration.media.video_export import ExportResult
+
+        def fake_export_gif(src, out_dir, **a):
+            if gif_error:
+                raise gif_error
+            os.makedirs(out_dir, exist_ok=True)
+            path = os.path.join(out_dir, "c.gif")
+            with open(path, "wb") as f:
+                f.write(b"g" * 100)
+            return gif_result or ExportResult(path, 100, 480, 270, False, None, "GIF · 0.0 MB · 480 px · 12 fps")
+
+        def fake_export_clip(src, out_dir, **a):
+            os.makedirs(out_dir, exist_ok=True)
+            path = os.path.join(out_dir, "c.mp4")
+            with open(path, "wb") as f:
+                f.write(b"v" * 100)
+            return ExportResult(path, 100, 1920, 1080, False, None)
+
+        with mock.patch.object(jobs, "export_gif", fake_export_gif), mock.patch.object(jobs, "export_clip", fake_export_clip), \
+             mock.patch.object(jobs, "clip_source", lambda c, m: ("/src.mp4", None)):
+            return self.send(item_id, **kw)
+
+    def test_gif_clip_is_uploaded_as_a_gif_with_its_note(self):
+        item = self.clip_item()
+        item, client = self.send_clip(item["id"])
+        self.assertEqual(item["status"], "sent")
+        self.assertEqual(client.calls[0][1], ["c.gif"])
+        self.assertEqual(item["output_note"], "GIF · 0.0 MB · 480 px · 12 fps")
+        self.assertEqual(item["output_mime"], "image/gif")
+
+    def test_gif_that_cannot_fit_fails_with_advice(self):
+        from imaglr_integration.media.video_export import GifTooLarge
+
+        item = self.clip_item()
+        item, client = self.send_clip(item["id"], gif_error=GifTooLarge(52 * 1048576, 38 * 1048576, 11.2))
+        self.assertEqual((item["status"], item["error_code"]), ("failed", "gif_too_large"))
+        self.assertEqual(item["error_detail"], "This GIF is too big even at its smallest (52 MB; the limit is 40). Trim it to about 11 seconds, or send it as a video.")
+        self.assertEqual(client.calls, [])
+
+    def test_gif_fallback_sends_a_video_and_says_so(self):
+        from imaglr_integration.media.video_export import GifTooLarge
+
+        item = self.clip_item()
+        with mock.patch.object(jobs, "run_send", wraps=jobs.run_send) as _:
+            pass
+        item, client = self.send_clip(item["id"], gif_error=GifTooLarge(52 * 1048576, 38 * 1048576, 11.2), action=None)
+        self.assertEqual(item["status"], "failed")  # without the fallback flag
+        item2 = self.clip_item()
+
+        def fake_gif_fallback(*a, **kw):
+            raise GifTooLarge(52 * 1048576, 38 * 1048576, 11.2)
+
+        from imaglr_integration.media.video_export import ExportResult
+        with mock.patch.object(jobs, "export_gif", fake_gif_fallback), \
+             mock.patch.object(jobs, "export_clip", lambda src, out_dir, **a: self._video(out_dir)), \
+             mock.patch.object(jobs, "clip_source", lambda c, m: ("/src.mp4", None)):
+            items.update_item(self.db, item2["id"], status="exporting")
+            with mock.patch.object(jobs.plugin_settings, "load", lambda s: Settings()), \
+                 mock.patch.object(jobs.api, "workflow_tags", lambda s, q, d: (QUEUE, DONE)), \
+                 mock.patch.object(jobs, "media_tools", lambda c: ("ff", "fp")), \
+                 mock.patch.object(jobs.api, "image_swap_tags", lambda *a: None), \
+                 mock.patch.object(services.api, "find_image", lambda s, i: self.image()), \
+                 mock.patch.object(Context, "imaglr", lambda self_, b: FakeImaglr()), \
+                 redirect_stderr(self.stderr):
+                jobs.run_send(self.ctx, item2["id"], None, gif_fallback=True)
+        sent = items.get_item(self.db, item2["id"])
+        self.assertEqual((sent["status"], sent["format"], sent["output_mime"]), ("sent", "video", "video/mp4"))
+        self.assertEqual(sent["output_note"], jobs.GIF_FALLBACK_NOTE)
+
+    def _video(self, out_dir):
+        from imaglr_integration.media.video_export import ExportResult
+        os.makedirs(out_dir, exist_ok=True)
+        path = os.path.join(out_dir, "c.mp4")
+        with open(path, "wb") as f:
+            f.write(b"v" * 100)
+        return ExportResult(path, 100, 1920, 1080, False, None)
+
+    def test_format_override_sends_a_gif_clip_as_video_without_changing_it(self):
+        item = self.clip_item()
+        from imaglr_integration.media.video_export import ExportResult
+        with mock.patch.object(jobs, "export_gif", lambda *a, **k: self.fail("GIF export must not run")), \
+             mock.patch.object(jobs, "export_clip", lambda src, out_dir, **a: self._video(out_dir)), \
+             mock.patch.object(jobs, "clip_source", lambda c, m: ("/src.mp4", None)):
+            items.update_item(self.db, item["id"], status="exporting")
+            with mock.patch.object(jobs.plugin_settings, "load", lambda s: Settings()), \
+                 mock.patch.object(jobs.api, "workflow_tags", lambda s, q, d: (QUEUE, DONE)), \
+                 mock.patch.object(jobs, "media_tools", lambda c: ("ff", "fp")), \
+                 mock.patch.object(jobs.api, "image_swap_tags", lambda *a: None), \
+                 mock.patch.object(services.api, "find_image", lambda s, i: self.image()), \
+                 mock.patch.object(Context, "imaglr", lambda self_, b: FakeImaglr()), \
+                 redirect_stderr(self.stderr):
+                jobs.run_send(self.ctx, item["id"], None, format_override="video")
+        sent = items.get_item(self.db, item["id"])
+        self.assertEqual((sent["status"], sent["format"], sent["output_mime"]), ("sent", "gif", "video/mp4"))
