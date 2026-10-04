@@ -25,6 +25,14 @@ export function checkNewTag(tags: string[], raw: string, lowercase: boolean): Ta
   return { ok: true, tag };
 }
 
+/** Where "Add <what you typed>" goes among the suggestions. First, so Enter adds exactly what you typed,
+ *  unless a suggestion starts with it: then you are probably completing that one ("vint" → "vintage"), and
+ *  it stays first. A suggestion that merely contains the text ("dry humping" for "humping") doesn't count. */
+export function addOptionFirst(typed: string, suggestions: string[]): boolean {
+  const q = typed.toLowerCase();
+  return !suggestions.some((s) => s.toLowerCase().startsWith(q));
+}
+
 /** Suggested tags not currently on the post, split into ones that can be added and ones that can't. */
 export function spareSuggestions(s: Suggestions | undefined, tags: string[]) {
   const taken = new Set(tags.map((t) => t.toLowerCase()));

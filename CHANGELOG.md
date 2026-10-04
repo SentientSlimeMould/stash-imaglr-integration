@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- In the tag field, what you typed is offered first (so Enter adds it) unless a suggestion starts with it:
+  typing "humping" no longer leaves you with only "dry humping" to pick.
 - Hovering a clip card now plays Stash's marker preview: the plugin was pointing the player at the marker's
   still preview image, so nothing played.
 - A sent clip whose Stash marker has since been deleted shows its scene's picture on the Sent tab instead of a

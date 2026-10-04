@@ -5,7 +5,7 @@
 // so it never creates a tag in Stash.
 import React from "react";
 import { runOperation } from "../api.ts";
-import { checkNewTag, MAX_TAGS, normalise, spareSuggestions } from "../lib/tags.ts";
+import { addOptionFirst, checkNewTag, MAX_TAGS, normalise, spareSuggestions } from "../lib/tags.ts";
 import type { Suggestions } from "../lib/types.ts";
 
 interface Option {
@@ -73,7 +73,10 @@ export function TagInput({ tags, extra = [], lowercase, disabled, inputId, place
     .map(toOption);
   const typed = checkNewTag(tags, input, lowercase);
   if (input.trim() && typed.ok && !options.some((o) => o.value.toLowerCase() === typed.tag.toLowerCase())) {
-    options.push({ value: typed.tag, label: `Add "${typed.tag}"`, isNew: true }); // last, as in Stash
+    // Enter picks the first option, so what you typed goes first unless you're completing a suggestion.
+    const add: Option = { value: typed.tag, label: `Add "${typed.tag}"`, isNew: true };
+    if (addOptionFirst(typed.tag, options.map((o) => o.value))) options.unshift(add);
+    else options.push(add);
   }
 
   function change(selected: readonly Option[] | null) {
