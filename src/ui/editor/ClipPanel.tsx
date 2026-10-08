@@ -63,8 +63,11 @@ export interface ClipState {
   loop: GifLoop; // GIFs: forward, or forward then back
   gifWidth: number | null; // GIFs: picture width; null = the feed width (698 px)
   gifFps: number | null; // GIFs and WebPs: frame rate; null = the ladder's own
+  coverT: number | null; // videos: source time of the frame the clip opens on, as its cover; null = none
   crop: Crop;
 }
+
+export const COVER_HOLD_SECONDS = 1.5; // the backend holds the cover this long, past the second imaglr samples
 
 /** The trade-offs of the format chosen, for the line under the Format buttons. */
 const FORMAT_HINTS: Record<ClipFormat, string> = {
@@ -132,7 +135,8 @@ export function formatHeader(v: ClipState, estimate: { short: string; warn: bool
     return { text: `${FORMAT_LABELS[v.format]}${loop}${size}${fps} · ${describeGifEstimate(v.outS - v.inS, v.loop, v.gifWidth, v.format, v.gifFps)}`,
       warn: gifSeconds(v.outS - v.inS, v.loop) > LONG_GIF_SECONDS };
   }
-  const parts = ["Video", CODEC_LABELS[v.codec], edgeLabel(edge), v.mute ? "no sound" : "", estimate.short];
+  const parts = ["Video", CODEC_LABELS[v.codec], edgeLabel(edge), v.mute ? "no sound" : "",
+    v.coverT !== null ? `cover at ${fmtTime(v.coverT)}` : "", estimate.short];
   return { text: parts.filter(Boolean).join(" · "), warn: estimate.warn };
 }
 
@@ -266,6 +270,12 @@ export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTarget
           </div>
           <div className="small text-muted mt-1">{FORMAT_HINTS[value.format]}</div>
         </Form.Group>
+        {value.format === "video" ? (
+          <Form.Group className="mt-2 mb-2">
+            <Form.Check id="imaglr-mute" type="switch" label="Remove sound" checked={value.mute} disabled={disabled}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange({ ...value, mute: e.target.checked })} />
+          </Form.Group>
+        ) : null}
         {value.format !== "video" ? (
           <>
             <Form.Group className="mt-2 mb-2">
@@ -368,8 +378,30 @@ export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTarget
                 </div>
               </Form.Group>
             ) : null}
-            <Form.Check id="imaglr-mute" type="switch" label="Remove sound" checked={value.mute} disabled={disabled}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange({ ...value, mute: e.target.checked })} />
+            <Form.Group className="mt-2 mb-2">
+              <Form.Label>Cover</Form.Label>
+              <div className="small text-muted mb-2">
+                imaglr takes the picture shown before a video plays from about one second in. With a cover, that
+                moment is the frame you chose: the clip opens on it for {COVER_HOLD_SECONDS} seconds, then plays.
+                Pause the clip on the frame you want, then press the button.
+              </div>
+              <div className="imaglr-cover-row">
+                {value.coverT === null ? (
+                  <Button variant="secondary" disabled={disabled} onClick={() => onChange({ ...value, coverT: Math.round(now() * 1000) / 1000 })}>
+                    Use this frame as the cover
+                  </Button>
+                ) : (
+                  <>
+                    <span>The frame at <strong>{fmtTime(value.coverT)}</strong>, shown for {COVER_HOLD_SECONDS} s before the clip</span>
+                    <span className="imaglr-clip-actions">
+                      <Button variant="secondary" onClick={() => { if (video.current) { video.current.pause(); video.current.currentTime = value.coverT ?? 0; } }}>Show</Button>
+                      <Button variant="secondary" disabled={disabled} onClick={() => onChange({ ...value, coverT: Math.round(now() * 1000) / 1000 })}>Use this frame</Button>
+                      <Button variant="secondary" disabled={disabled} onClick={() => onChange({ ...value, coverT: null })}>Clear</Button>
+                    </span>
+                  </>
+                )}
+              </div>
+            </Form.Group>
             <div className={`small mt-1 ${estimate.warn ? "text-warning" : "text-muted"}`}>{estimate.text}</div>
           </>
         )}

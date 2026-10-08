@@ -94,8 +94,8 @@ export function Editor({ itemId, onClose }: Props) {
   const [tags, setTags] = React.useState<string[]>([]);
   const [caption, setCaption] = React.useState("");
   const [crop, setCrop] = React.useState<Crop>({ aspect: "original", position: 0.5 });
-  const [trim, setTrim] = React.useState<{ inS: number; outS: number; mute: boolean; flip: boolean; format: "video" | "gif" | "webp"; codec: "h264" | "hevc"; maxEdge: number | null; loop: "forward" | "boomerang"; gifWidth: number | null; gifFps: number | null }>(
-    { inS: 0, outS: 0, mute: false, flip: false, format: "video", codec: "h264", maxEdge: null, loop: "forward", gifWidth: null, gifFps: null });
+  const [trim, setTrim] = React.useState<{ inS: number; outS: number; mute: boolean; flip: boolean; format: "video" | "gif" | "webp"; codec: "h264" | "hevc"; maxEdge: number | null; loop: "forward" | "boomerang"; gifWidth: number | null; gifFps: number | null; coverT: number | null }>(
+    { inS: 0, outS: 0, mute: false, flip: false, format: "video", codec: "h264", maxEdge: null, loop: "forward", gifWidth: null, gifFps: null, coverT: null });
   const [blogId, setBlogId] = React.useState<number | null>(null);
   const [action, setAction] = React.useState<SendAction | null>(null);
   const [confirmPublish, setConfirmPublish] = React.useState(false);
@@ -117,7 +117,7 @@ export function Editor({ itemId, onClose }: Props) {
       setCrop(d.item.crop);
       setTrim({ inS: d.item.in_s ?? 0, outS: d.item.out_s ?? 0, mute: d.item.mute, flip: d.item.flip, format: d.item.format,
         codec: d.item.codec ?? "h264", maxEdge: d.item.max_edge ?? null, loop: d.item.loop ?? "forward", gifWidth: d.item.gif_width ?? null,
-        gifFps: d.item.gif_fps ?? null });
+        gifFps: d.item.gif_fps ?? null, coverT: d.item.cover_t ?? null });
       setBlogId(d.item.blog_id);
       setAction(d.item.action);
       setDirty(false);
@@ -162,7 +162,8 @@ export function Editor({ itemId, onClose }: Props) {
         tags, caption, crop, blog_id: blogId, action,
         ...(resetTags ? { tags_auto: true } : {}),
         ...(isClip ? { in_s: trim.inS, out_s: trim.outS, mute: trim.mute, flip: trim.flip, format: trim.format,
-          codec: trim.codec, max_edge: trim.maxEdge, loop: trim.loop, gif_width: trim.gifWidth, gif_fps: trim.gifFps } : {}),
+          codec: trim.codec, max_edge: trim.maxEdge, loop: trim.loop, gif_width: trim.gifWidth, gif_fps: trim.gifFps,
+          cover_t: trim.coverT } : {}),
       },
     });
     setDirty(false);
@@ -310,7 +311,7 @@ export function Editor({ itemId, onClose }: Props) {
             makingGif={makingGif}
             onPreviewGif={previewGif}
             onChange={(v: ClipState) => {
-              edit(setTrim)({ inS: v.inS, outS: v.outS, mute: v.mute, flip: v.flip, format: v.format, codec: v.codec, maxEdge: v.maxEdge, loop: v.loop, gifWidth: v.gifWidth, gifFps: v.gifFps });
+              edit(setTrim)({ inS: v.inS, outS: v.outS, mute: v.mute, flip: v.flip, format: v.format, codec: v.codec, maxEdge: v.maxEdge, loop: v.loop, gifWidth: v.gifWidth, gifFps: v.gifFps, coverT: v.coverT });
               setCrop(v.crop);
             }}
             onSaveStill={saveStill}

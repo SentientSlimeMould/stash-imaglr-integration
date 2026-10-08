@@ -259,7 +259,7 @@ def prepare_clip(ctx: Context, member: dict[str, Any], tools: tuple[str, str], s
             settings=video_settings, headers=headers,
             aspect=crop.get("aspect") or "original", position=float(crop.get("position", 0.5)),
             mute=bool(member["mute"]), flip=bool(member["flip"]), progress_cb=progress, should_cancel=should_cancel,
-            bitrate_scale=bitrate_scale, previous_bytes=previous_bytes, edges=edges,
+            bitrate_scale=bitrate_scale, previous_bytes=previous_bytes, edges=edges, cover_t=member.get("cover_t"),
         )
     except (UnsupportedMedia, ValueError) as e:
         raise JobFailed("unsupported_video", f"{member['source_title']}: {e}") from None

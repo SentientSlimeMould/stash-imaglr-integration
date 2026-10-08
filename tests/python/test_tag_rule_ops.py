@@ -125,8 +125,17 @@ class AutomaticTagsTest(unittest.TestCase):
             image = items.create_item(self.db, kind="image", stash_image_id="10")
             self.run_op("item_update", item_id=image["id"], changes={"flip": True})
 
+    def test_cover_time_is_kept_or_cleared(self):
+        clip = items.create_item(self.db, kind="clip", stash_image_id="9",
+                                 in_s=0.0, out_s=5.0)
+        out = self.run_op("item_update", item_id=clip["id"], changes={"cover_t": "12.3456"})["item"]
+        self.assertEqual(out["cover_t"], 12.346)
+        self.assertIsNone(self.run_op("item_update", item_id=clip["id"], changes={"cover_t": None})["item"]["cover_t"])
+        with self.assertRaises(UserError):
+            self.run_op("item_update", item_id=clip["id"], changes={"cover_t": -1})
+
     def test_edge_trims_are_cleaned_and_only_kept_when_set(self):
-        clip = items.create_item(self.db, kind="clip", stash_marker_id="7", stash_scene_id="1", source_title="c",
+        clip = items.create_item(self.db, kind="clip", stash_image_id="9",
                                  in_s=0.0, out_s=5.0)
         out = self.run_op("item_update", item_id=clip["id"],
                           changes={"crop": {"aspect": "1:1", "position": 0.5, "edges": {"top": "0.1", "left": 2, "junk": 9}}})["item"]

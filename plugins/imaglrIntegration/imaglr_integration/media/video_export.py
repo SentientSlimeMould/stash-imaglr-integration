@@ -94,6 +94,7 @@ def export_clip(
     probe_info: ProbeInfo | None = None,
     previous_bytes: int | None = None,
     edges: dict[str, float] | None = None,
+    cover_t: float | None = None,
 ) -> ExportResult:
     """Cut [in_s, out_s] of src to an MP4 in out_dir with the codec and picture size in `settings`, under
     settings.max_video_mb. A clip that fits at the usual quality (CRF) is one encode; otherwise it is encoded
@@ -109,7 +110,7 @@ def export_clip(
     hdr = is_hdr(info)
     if hdr:
         log.warning("source is HDR; output will be 8-bit yuv420p without tone mapping")
-    duration = max(0.1, out_s - in_s)
+    duration = max(0.1, out_s - in_s) + (fc.COVER_HOLD_SECONDS if cover_t is not None else 0)  # what comes out
     final = os.path.join(out_dir, output_name(title, in_s, out_s))
     part = final + ".part"
     for stale in glob.glob(os.path.join(glob.escape(out_dir), "*.part")):
@@ -135,6 +136,7 @@ def export_clip(
         headers=headers,
         edges=edges,
         codec=settings.codec,
+        cover_t=cover_t,
     )
     run = dict(output=part, duration_s=duration, progress_cb=progress_cb, should_cancel=should_cancel)
     limit_bytes = int(settings.max_video_mb * 1024 * 1024 * 0.95)
@@ -168,10 +170,10 @@ def export_clip(
                 _remove(f)
     final_path = finalise_part(part)
     size = os.path.getsize(final_path)
-    note = video_note(settings.codec, size, max(ow, oh))
+    note = video_note(settings.codec, size, max(ow, oh), cover=cover_t is not None)
     thumb: str | None = os.path.join(out_dir, "thumb.jpg")
-    try:
-        cmd = fc.build_thumb_cmd(settings.ffmpeg, final_path, thumb, min(1.0, duration / 2))
+    try:  # the card's picture: the cover when there is one
+        cmd = fc.build_thumb_cmd(settings.ffmpeg, final_path, thumb, 0.2 if cover_t is not None else min(1.0, duration / 2))
         run_ffmpeg(cmd, output=thumb, should_cancel=should_cancel, timeout=120)
     except FfmpegError as e:  # the thumbnail is best-effort
         log.warning(f"thumbnail failed: {e}")
@@ -181,9 +183,10 @@ def export_clip(
     return ExportResult(final_path, size, ow, oh, hdr, thumb, note)
 
 
-def video_note(codec: str, size: int, long_edge: int) -> str:
-    """What the clip turned out to be, e.g. "H.265 · 92.1 MB · 1280 px"."""
-    return f"{fc.CODEC_LABELS.get(codec, codec)} · {size / 1048576:.1f} MB · {long_edge} px"
+def video_note(codec: str, size: int, long_edge: int, cover: bool = False) -> str:
+    """What the clip turned out to be, e.g. "H.265 · 92.1 MB · 1280 px · with cover"."""
+    note = f"{fc.CODEC_LABELS.get(codec, codec)} · {size / 1048576:.1f} MB · {long_edge} px"
+    return note + " · with cover" if cover else note
 
 
 def gif_note(size: int, width: int, fps: int, loop: str = "forward", fmt: str = "gif") -> str:

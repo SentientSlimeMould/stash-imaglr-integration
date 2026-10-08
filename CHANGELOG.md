@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **A cover for a video.** imaglr shows a frame from about one second in as a video's picture in the feed (it
+  has no way to set one). In the clip editor, **Use this frame as the cover** takes the frame at the playhead;
+  the sent clip opens on it for a second and a half, so that is the picture imaglr shows, then plays as
+  trimmed. Show, change or clear it under Format options.
+
 ## 0.1.19 — 2026-10-08
 
 - **Large files upload again.** imaglr's edge refuses any single request over 100 MB, which is what stopped long

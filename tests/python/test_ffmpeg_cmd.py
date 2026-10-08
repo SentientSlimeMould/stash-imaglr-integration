@@ -108,6 +108,30 @@ class ClipCmdTest(unittest.TestCase):
             self.assertIn(part, s)
 
 
+class CoverTest(unittest.TestCase):
+    def test_cover_opens_the_clip_through_the_same_chain_with_delayed_sound(self):
+        cmd = fc.build_clip_cmd(FF, "/in.mp4", "/o.part", 10.0, 22.5, 1920, 1080, 29.97, aspect="1:1", cover_t=15.25)
+        s = " ".join(cmd)
+        self.assertIn("-ss 10.000 -t 12.500 -i /in.mp4", s)  # the clip, cut on the input side
+        self.assertIn("-ss 15.250 -t 0.5 -i /in.mp4", s)  # a moment at the cover
+        graph = cmd[cmd.index("-filter_complex") + 1]
+        self.assertIn("[1:v]crop=1080:1080:420:0,fps=29.97,format=yuv420p,trim=end_frame=1,tpad=stop_mode=clone:stop_duration=1.5,setpts=PTS-STARTPTS[c]", graph)
+        self.assertIn("[0:v]crop=1080:1080:420:0,fps=29.97,format=yuv420p,setpts=PTS-STARTPTS[v0];[c][v0]concat=n=2:v=1:a=0[v]", graph)
+        self.assertIn("[0:a]adelay=delays=1500:all=1[a]", graph)
+        self.assertIn("-map [v] -map [a]", s)
+        self.assertNotIn("-vf", cmd)
+        muted = fc.build_clip_cmd(FF, "/in.mp4", "/o.part", 0, 5, 1920, 1080, 30, cover_t=1.0, mute=True)
+        self.assertNotIn("adelay", " ".join(muted))
+        self.assertNotIn("-map [a]", " ".join(muted))
+        first, second = fc.build_two_pass_cmds(2000, "/tmp/log", ffmpeg=FF, src="/in", out="/o.part", in_s=0, out_s=5,
+                                               width=1920, height=1080, fps=30, cover_t=2.0)
+        self.assertIn("-filter_complex", first)
+        self.assertEqual(first[-3:], ["-f", "null", os.devnull])
+        self.assertIn("-map [v]", " ".join(second))
+        plain = fc.build_clip_cmd(FF, "/in.mp4", "/o.part", 0, 5, 1920, 1080, 30)
+        self.assertNotIn("-filter_complex", plain)  # without a cover, nothing changes
+
+
 class ImageCmdTest(unittest.TestCase):
     def test_frame_grab(self):
         g = fc.build_frame_grab_cmd(FF, "/in.mp4", "/f.jpg.part", 3.25, {"ApiKey": "k"})
