@@ -10,7 +10,7 @@
   documentation's 500 MB per video cannot be reached), so a long clip used to encode to several hundred MB and
   then fail. A clip is now encoded to fit 100 MB and the files of a multi-file post share that limit.
 - Each clip has a **Codec** (H.264 or H.265) and a **Picture size** (Original, 720p or 480p) under a collapsed
-  **More options** in the editor, where *Flip horizontally* now lives too. The plugin never changes these for
+  **More options** in the editor; only sizes smaller than the source are offered. The plugin never changes these for
   you: the editor estimates the size as you trim and warns when a long clip would look poor with the choices
   made. Two settings give new clips their defaults (**Clips as H.265 by default**, **Clip picture size by
   default**). The card shows what came out, e.g. "H.265 · 92.1 MB · 1280 px".

@@ -11,6 +11,11 @@ export const CODEC_LABELS: Record<Codec, string> = { h264: "H.264", hevc: "H.265
 export const SIZE_OPTIONS: { label: string; value: number | null }[] = [
   { label: "Original", value: null }, { label: "720p", value: 1280 }, { label: "480p", value: 854 },
 ];
+/** The picture sizes worth offering: Original, plus only the sizes smaller than the source (never upscaled). */
+export function sizeChoicesFor(sourceEdge: number | null): typeof SIZE_OPTIONS {
+  return SIZE_OPTIONS.filter((o) => o.value === null || !sourceEdge || o.value < sourceEdge);
+}
+
 const TYPICAL_KBPS: [number, number][] = [[1920, 6000], [1280, 3000], [854, 1500], [640, 900]];
 const FLOOR_KBPS: [number, number][] = [[1920, 4000], [1280, 2000], [854, 1000], [640, 600]];
 const HEVC_FACTOR = 0.6;

@@ -160,6 +160,9 @@
     { label: "720p", value: 1280 },
     { label: "480p", value: 854 }
   ];
+  function sizeChoicesFor(sourceEdge) {
+    return SIZE_OPTIONS.filter((o) => o.value === null || !sourceEdge || o.value < sourceEdge);
+  }
   var TYPICAL_KBPS = [[1920, 6e3], [1280, 3e3], [854, 1500], [640, 900]];
   var FLOOR_KBPS = [[1920, 4e3], [1280, 2e3], [854, 1e3], [640, 600]];
   var HEVC_FACTOR = 0.6;
@@ -537,9 +540,8 @@
   }
   function moreSummary(v) {
     const parts = [];
-    if (v.format !== "gif" && v.codec === "hevc") parts.push(CODEC_LABELS.hevc);
-    if (v.format !== "gif" && v.maxEdge) parts.push(edgeLabel(v.maxEdge));
-    if (v.flip) parts.push("flipped");
+    if (v.codec === "hevc") parts.push(CODEC_LABELS.hevc);
+    if (v.maxEdge) parts.push(edgeLabel(v.maxEdge));
     return parts.join(" \xB7 ");
   }
   function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTargetMb, onChange, onSaveStill }) {
@@ -580,6 +582,8 @@
       setLooping(true);
       v.play().catch(() => void 0);
     }
+    const sourceEdge = Math.max(size.vw, size.vh) || null;
+    const sizeChoices = sizeChoicesFor(sourceEdge);
     const rect = overlayRect(size.w, size.h, size.vw, size.vh, value.crop.aspect, value.crop.position, value.crop.edges);
     return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-clip" }, error ? /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-danger" }, "Can't play this video: ", error) : null, /* @__PURE__ */ react_default.createElement("div", { ref: box, className: "imaglr-preview imaglr-video" }, playback ? /* @__PURE__ */ react_default.createElement(
       "video",
@@ -631,7 +635,7 @@
       },
       f === "video" ? "Video" : "GIF"
     )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "GIFs play automatically in feeds. Videos are higher quality, are quicker to load and have sound, but require the user to click play."), value.format === "gif" ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "This will be a GIF of ", describeGifEstimate(value.outS - value.inS), ". GIFs over about ", gifTargetMb, " MB are slow to load, so the plugin will automatically lower the quality if it has to."), value.outS - value.inS > LONG_GIF_SECONDS ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning mt-1" }, "Long GIFs may need lower frame-rates and resolutions. Clips below ", LONG_GIF_SECONDS, " seconds work best.") : null) : (() => {
-      const edge = outputEdge(Math.max(size.vw, size.vh) || null, value.maxEdge);
+      const edge = outputEdge(sourceEdge, value.maxEdge);
       const est = videoEstimate(value.outS - value.inS, value.codec, edge, value.mute);
       return /* @__PURE__ */ react_default.createElement("div", { className: `small mt-1 ${est.warn ? "text-warning" : "text-muted"}` }, est.text);
     })()), value.format === "gif" ? null : /* @__PURE__ */ react_default.createElement(
@@ -644,7 +648,17 @@
         disabled,
         onChange: (e) => onChange({ ...value, mute: e.target.checked })
       }
-    ), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-more" }, /* @__PURE__ */ react_default.createElement(
+    ), /* @__PURE__ */ react_default.createElement(
+      Form.Check,
+      {
+        id: "imaglr-flip",
+        type: "switch",
+        label: "Flip horizontally",
+        checked: value.flip,
+        disabled,
+        onChange: (e) => onChange({ ...value, flip: e.target.checked })
+      }
+    ), value.flip ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted" }, "The sent clip is mirrored left-to-right; the preview above isn't.") : null, value.format === "gif" ? null : /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-more" }, /* @__PURE__ */ react_default.createElement(
       Button,
       {
         variant: "link",
@@ -659,7 +673,7 @@
       moreOpen ? "\u25BE" : "\u25B8",
       " More options",
       !moreOpen && moreSummary(value) ? /* @__PURE__ */ react_default.createElement("span", { className: "text-muted" }, " \xB7 ", moreSummary(value)) : null
-    ), /* @__PURE__ */ react_default.createElement(Collapse, { in: moreOpen }, /* @__PURE__ */ react_default.createElement("div", { id: "imaglr-clip-more" }, value.format === "gif" ? null : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2 mb-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Codec"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(CODEC_LABELS).map((c) => /* @__PURE__ */ react_default.createElement(
+    ), /* @__PURE__ */ react_default.createElement(Collapse, { in: moreOpen }, /* @__PURE__ */ react_default.createElement("div", { id: "imaglr-clip-more" }, /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2 mb-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Codec"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(CODEC_LABELS).map((c) => /* @__PURE__ */ react_default.createElement(
       Button,
       {
         key: c,
@@ -668,7 +682,7 @@
         onClick: () => onChange({ ...value, codec: c })
       },
       CODEC_LABELS[c]
-    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "H.265 is about 40 % smaller at the same quality and slower to encode. It plays in Safari, Chrome and Edge, but not every browser; H.264 plays everywhere.")), /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mb-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Picture size"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, SIZE_OPTIONS.map((o) => /* @__PURE__ */ react_default.createElement(
+    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "H.265 is about 40 % smaller at the same quality and slower to encode. It plays in Safari, Chrome and Edge, but not every browser; H.264 plays everywhere.")), sizeChoices.length > 1 ? /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mb-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Picture size"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, sizeChoices.map((o) => /* @__PURE__ */ react_default.createElement(
       Button,
       {
         key: o.label,
@@ -677,17 +691,7 @@
         onClick: () => onChange({ ...value, maxEdge: o.value })
       },
       o.label
-    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "Smaller pictures make smaller files and encode faster. Original keeps the source's size, up to 1080p."))), /* @__PURE__ */ react_default.createElement(
-      Form.Check,
-      {
-        id: "imaglr-flip",
-        type: "switch",
-        label: "Flip horizontally",
-        checked: value.flip,
-        disabled,
-        onChange: (e) => onChange({ ...value, flip: e.target.checked })
-      }
-    ), value.flip ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted" }, "The sent clip is mirrored left-to-right; the preview above isn't.") : null))));
+    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "Smaller pictures make smaller files and encode faster. Original keeps the source's size, up to 1080p.")) : null))));
   }
 
   // src/ui/lib/tags.ts
