@@ -69,7 +69,7 @@ export interface ClipState {
 /** The trade-offs of the format chosen, for the line under the Format buttons. */
 const FORMAT_HINTS: Record<ClipFormat, string> = {
   video: "Best quality, keeps the sound, and the smallest file for anything long. The viewer has to click play.",
-  gif: "Plays automatically in the feed and works everywhere. No sound, limited to 256 colours, and the largest file of the three, so short clips only.",
+  gif: "Plays automatically in the feed. No sound, limited to 256 colours, and the largest file of the three, so short clips only.",
   webp: "Plays automatically in the feed. Full colour and a third to a half of a GIF's size, so it loads faster and can be longer. No sound.",
 };
 
