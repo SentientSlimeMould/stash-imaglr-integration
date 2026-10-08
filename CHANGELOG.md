@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.17 — 2026-10-08
 
 - The menu icon is redrawn to the proportions of imaglr's own favicon: a narrower ring, a wider gap and a large
   highlight, all still visible at the smallest size.
