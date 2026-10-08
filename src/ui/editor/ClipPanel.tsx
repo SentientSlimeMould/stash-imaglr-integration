@@ -6,7 +6,7 @@ import { clampTrim, pickStream, sameOrigin, type SceneStream, type VideoInfo } f
 import { overlayRect } from "../lib/crop.ts";
 import { CropControls } from "./CropControls.tsx";
 import { Fold } from "./Fold.tsx";
-import { describeGifEstimate, type GifLoop, gifSeconds, gifSizeChoicesFor, LONG_GIF_SECONDS } from "../lib/gif.ts";
+import { describeGifEstimate, fpsChoicesFor, type GifLoop, gifSeconds, gifSizeChoicesFor, LONG_GIF_SECONDS } from "../lib/gif.ts";
 import { CODEC_LABELS, type Codec, edgeLabel, outputEdge, sizeChoicesFor, videoEstimate } from "../lib/video.ts";
 import { fmtTime, parseTime } from "../lib/format.ts";
 import type { Crop } from "../lib/types.ts";
@@ -62,8 +62,16 @@ export interface ClipState {
   maxEdge: number | null; // videos: picture size as a long edge; null = as the source (up to 1080p)
   loop: GifLoop; // GIFs: forward, or forward then back
   gifWidth: number | null; // GIFs: picture width; null = the feed width (698 px)
+  gifFps: number | null; // GIFs and WebPs: frame rate; null = the ladder's own
   crop: Crop;
 }
+
+/** The trade-offs of the format chosen, for the line under the Format buttons. */
+const FORMAT_HINTS: Record<ClipFormat, string> = {
+  video: "Best quality, keeps the sound, and the smallest file for anything long. The viewer has to click play.",
+  gif: "Plays automatically in the feed and works everywhere. No sound, 256 colours, and the largest file of the three, so short clips only.",
+  webp: "Plays automatically in the feed. Full colour and a third to a half of a GIF's size, so it loads faster and can be longer. No sound, and a few older apps can't show it.",
+};
 
 const LOOP_LABELS: Record<GifLoop, string> = { forward: "Forward", boomerang: "Boomerang" };
 
@@ -75,6 +83,7 @@ interface Props {
   value: ClipState;
   disabled: boolean;
   gifTargetMb: number; // from the plugin's settings
+  sourceFps: number | null; // the source video's frame rate, the ceiling for the Frame rate choice
   gifPreview: { url: string; note: string | null } | null; // the GIF as it would be sent, once made (null = none or stale)
   makingGif: boolean;
   onChange: (value: ClipState) => void;
@@ -119,14 +128,15 @@ export function formatHeader(v: ClipState, estimate: { short: string; warn: bool
   if (v.format !== "video") {
     const loop = v.loop === "boomerang" ? " · boomerang" : "";
     const size = v.gifWidth ? ` · ${v.gifWidth} px` : "";
-    return { text: `${FORMAT_LABELS[v.format]}${loop}${size} · ${describeGifEstimate(v.outS - v.inS, v.loop, v.gifWidth, v.format)}`,
+    const fps = v.gifFps ? ` · ${v.gifFps} fps` : "";
+    return { text: `${FORMAT_LABELS[v.format]}${loop}${size}${fps} · ${describeGifEstimate(v.outS - v.inS, v.loop, v.gifWidth, v.format, v.gifFps)}`,
       warn: gifSeconds(v.outS - v.inS, v.loop) > LONG_GIF_SECONDS };
   }
   const parts = ["Video", CODEC_LABELS[v.codec], edgeLabel(edge), v.mute ? "no sound" : "", estimate.short];
   return { text: parts.filter(Boolean).join(" · "), warn: estimate.warn };
 }
 
-export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTargetMb, gifPreview, makingGif, onChange, onSaveStill, onPreviewGif }: Props) {
+export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTargetMb, sourceFps, gifPreview, makingGif, onChange, onSaveStill, onPreviewGif }: Props) {
   const { Button, ButtonGroup, Form } = PluginApi.libraries.Bootstrap;
   const video = React.useRef<HTMLVideoElement>(null);
   const box = React.useRef<HTMLDivElement>(null);
@@ -174,6 +184,7 @@ export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTarget
   const sourceEdge = Math.max(size.vw, size.vh) || null;
   const sizeChoices = sizeChoicesFor(sourceEdge);
   const gifSizeChoices = gifSizeChoicesFor(size.vw || null);
+  const fpsChoices = fpsChoicesFor(sourceFps);
   const estimate = videoEstimate(value.outS - value.inS, value.codec, outputEdge(sourceEdge, value.maxEdge), value.mute);
   const header = formatHeader(value, estimate, outputEdge(sourceEdge, value.maxEdge));
   const rect = overlayRect(size.w, size.h, size.vw, size.vh, value.crop.aspect, value.crop.position, value.crop.edges);
@@ -253,11 +264,7 @@ export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTarget
               ))}
             </ButtonGroup>
           </div>
-          <div className="small text-muted mt-1">
-            GIFs and WebPs play automatically in the feed and have no sound. A WebP is smaller than a GIF of the same
-            clip, so it loads faster; a GIF plays in absolutely everything. Videos are higher quality and keep their
-            sound, but require the user to click play.
-          </div>
+          <div className="small text-muted mt-1">{FORMAT_HINTS[value.format]}</div>
         </Form.Group>
         {value.format !== "video" ? (
           <>
@@ -295,8 +302,27 @@ export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTarget
                 </div>
               </Form.Group>
             ) : null}
+            {fpsChoices.length > 1 ? (
+              <Form.Group className="mb-2">
+                <Form.Label>Frame rate</Form.Label>
+                <div>
+                  <ButtonGroup className="imaglr-segmented">
+                    {fpsChoices.map((o) => (
+                      <Button key={o.label} variant={(value.gifFps ?? null) === o.value ? "primary" : "secondary"} disabled={disabled}
+                        onClick={() => onChange({ ...value, gifFps: o.value })}>
+                        {o.label}
+                      </Button>
+                    ))}
+                  </ButtonGroup>
+                </div>
+                <div className="small text-muted mt-1">
+                  Auto starts at 15 fps and drops lower only if the file is too big. A higher rate is smoother and
+                  makes a proportionally bigger file; it can't go above the source's own rate.
+                </div>
+              </Form.Group>
+            ) : null}
             <div className="small text-muted mt-1">
-              This will be a {FORMAT_LABELS[value.format]} of {describeGifEstimate(value.outS - value.inS, value.loop, value.gifWidth, value.format)}.
+              This will be a {FORMAT_LABELS[value.format]} of {describeGifEstimate(value.outS - value.inS, value.loop, value.gifWidth, value.format, value.gifFps)}.
               Files over about {gifTargetMb} MB are slow to load, so the plugin will automatically lower the quality if it has to.
             </div>
             {gifSeconds(value.outS - value.inS, value.loop) > LONG_GIF_SECONDS ? (

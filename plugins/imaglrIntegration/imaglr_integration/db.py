@@ -152,6 +152,10 @@ MIGRATIONS = [
     """
     ALTER TABLE items ADD COLUMN gif_width INTEGER;
     """,
+    # v11: a GIF's or WebP's frame rate; NULL = the ladder's own (15 at the top)
+    """
+    ALTER TABLE items ADD COLUMN gif_fps INTEGER;
+    """,
 ]
 
 

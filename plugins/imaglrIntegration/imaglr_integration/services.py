@@ -266,6 +266,7 @@ def image_card(item: dict[str, Any], image: Image | None, first_seen: str | None
         "format": f.image_format if f else None,
         "animated": bool(f and f.is_animated),
         "duration": f.duration if f and f.is_video else None,
+        "fps": f.frame_rate if f and f.is_video else None,
         "created_at": image.created_at if image else item["created_at"],
         "date": image.date if image else None,
         "first_seen": first_seen,
@@ -289,6 +290,7 @@ def clip_card(item: dict[str, Any], marker: Marker | None, first_seen: str | Non
         "preview": relative_url(marker.stream_url if marker else scene.preview_url if scene else None),  # played on hover
         "width": f.width if f else None,
         "height": f.height if f else None,
+        "fps": f.frame_rate if f else None,
         "duration": (item["out_s"] or 0) - (item["in_s"] or 0),
         "in_s": item["in_s"],
         "out_s": item["out_s"],
@@ -316,7 +318,8 @@ def _state(item: dict[str, Any]) -> dict[str, Any]:
                                  "action")} | {"title": item["source_title"], "tag_count": len(item["tags"]),
                                               "send_format": item["format"], "send_codec": item["codec"],
                                               "max_edge": item["max_edge"], "loop": item["loop"],
-                                              "gif_width": item["gif_width"], "output_note": item["output_note"]}
+                                              "gif_width": item["gif_width"], "gif_fps": item["gif_fps"],
+                                              "output_note": item["output_note"]}
 
 
 def post_card(post: dict[str, Any], member_cards: list[dict[str, Any]]) -> dict[str, Any]:

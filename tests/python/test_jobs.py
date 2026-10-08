@@ -411,6 +411,18 @@ class GifTest(unittest.TestCase):
         self.assertTrue(r.path.endswith(".webp"))
         self.assertEqual(len([c for c in calls if "libwebp_anim" in c]), 2)
 
+    def test_a_chosen_frame_rate_is_used_at_every_rung(self):
+        from imaglr_integration.media.video_export import VideoSettings, export_gif
+
+        run_patch, probe_patch, calls = self.fake_ffmpeg([5000, 1500])
+        with run_patch, probe_patch:
+            r = export_gif("/src.mp4", self.tmp.name, title="t", in_s=0, out_s=8, settings=VideoSettings("ff", "fp"),
+                           target_bytes=2000, limit_bytes=10000, fps=30)
+        self.assertEqual(r.note, "GIF · 0.0 MB · 560 px wide · 30 fps")
+        for c in calls:
+            if "-filter_complex" in c:
+                self.assertTrue(c[c.index("-filter_complex") + 1].startswith("fps=30,"))
+
     def test_gif_rungs_are_widths_and_portrait_gets_the_taller_cap(self):
         from imaglr_integration.media import ffmpeg_cmd as fc
 

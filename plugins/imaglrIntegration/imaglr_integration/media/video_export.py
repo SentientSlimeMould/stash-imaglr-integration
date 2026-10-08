@@ -227,6 +227,7 @@ def export_animation(
     edges: dict[str, float] | None = None,
     loop: str = "forward",
     max_width: int | None = None,
+    fps: int | None = None,
 ) -> ExportResult:
     """Cut [in_s, out_s] of src to an animated GIF or WebP under target_bytes, going down the format's quality
     ladder until it fits (starting at max_width when given). The bottom rung is accepted up to limit_bytes
@@ -246,7 +247,10 @@ def export_animation(
     rungs = fc.WEBP_LADDER if fmt == "webp" else fc.GIF_LADDER
     if max_width:  # the user's picture size: the ladder starts at that rung
         rungs = tuple(r for r in rungs if r[0] <= max_width) or rungs[-1:]
+    wanted_fps = fps
     for n, (rung_width, fps, quality) in enumerate(rungs):
+        if wanted_fps:  # the user's frame rate, at every rung
+            fps = wanted_fps
         long_edge = fc.gif_long_edge_cap(w, h, aspect, position, rung_width, edges)
         common = dict(aspect=aspect, position=position, flip=flip, headers=headers, edges=edges, loop=loop)
         if fmt == "webp":
@@ -266,6 +270,7 @@ def export_animation(
             _remove(part)
     else:
         rung_width, fps, quality = rungs[-1]
+        fps = wanted_fps or fps
         long_edge = fc.gif_long_edge_cap(w, h, aspect, position, rung_width, edges)
         if size > limit_bytes:
             _remove(part)

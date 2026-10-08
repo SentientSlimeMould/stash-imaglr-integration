@@ -24,6 +24,19 @@ export function gifSizeChoicesFor(sourceWidth: number | null): typeof GIF_SIZE_O
   return GIF_SIZE_OPTIONS.filter((o) => o.value === null || !sourceWidth || o.value < sourceWidth);
 }
 
+export const LADDER_FPS = 15; // the top rung's frame rate, which the estimate is measured at
+
+/** The frame rates worth offering for a source at `sourceFps`: the source's own, then the usual steps below it.
+ *  Null (Auto) is always first and means the ladder's own rate. */
+export function fpsChoicesFor(sourceFps: number | null): { label: string; value: number | null }[] {
+  const out: { label: string; value: number | null }[] = [{ label: "Auto", value: null }];
+  if (!sourceFps || sourceFps <= 0) return out;
+  const source = Math.min(60, Math.round(sourceFps));
+  const steps = [source, 30, 24, 15, 10].filter((f, i, a) => f <= source && f >= 5 && a.indexOf(f) === i);
+  for (const f of steps) out.push({ label: f === source ? `${f} fps (source)` : `${f} fps`, value: f });
+  return out;
+}
+
 /** How a smaller picture scales the estimate: by area. */
 function widthFactor(width: number | null): number {
   const w = Math.min(width ?? GIF_FEED_WIDTH, GIF_FEED_WIDTH);
@@ -36,8 +49,9 @@ export function gifSeconds(seconds: number, loop: GifLoop = "forward"): number {
 }
 
 /** [low, high] MB for a clip of this length at the first rung it may use. */
-export function estimateGifMb(seconds: number, loop: GifLoop = "forward", width: number | null = null, format: AnimatedFormat = "gif"): [number, number] {
-  const s = gifSeconds(seconds, loop) * widthFactor(width) * (format === "webp" ? WEBP_FACTOR : 1);
+export function estimateGifMb(seconds: number, loop: GifLoop = "forward", width: number | null = null, format: AnimatedFormat = "gif",
+                              fps: number | null = null): [number, number] {
+  const s = gifSeconds(seconds, loop) * widthFactor(width) * (format === "webp" ? WEBP_FACTOR : 1) * ((fps ?? LADDER_FPS) / LADDER_FPS);
   return [s * MB_PER_SECOND.low, s * MB_PER_SECOND.high];
 }
 
@@ -46,7 +60,8 @@ function roundMb(n: number): number {
 }
 
 /** "roughly 15–25 MB" with the band rounded to friendly numbers. */
-export function describeGifEstimate(seconds: number, loop: GifLoop = "forward", width: number | null = null, format: AnimatedFormat = "gif"): string {
-  const [lo, hi] = estimateGifMb(seconds, loop, width, format).map(roundMb);
+export function describeGifEstimate(seconds: number, loop: GifLoop = "forward", width: number | null = null, format: AnimatedFormat = "gif",
+                                    fps: number | null = null): string {
+  const [lo, hi] = estimateGifMb(seconds, loop, width, format, fps).map(roundMb);
   return lo === hi ? `roughly ${lo} MB` : `roughly ${lo}–${hi} MB`;
 }

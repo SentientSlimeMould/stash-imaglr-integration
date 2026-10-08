@@ -228,7 +228,7 @@ def prepare_clip(ctx: Context, member: dict[str, Any], tools: tuple[str, str], s
                 limit_bytes=int(plugin_settings.GIF_HARD_LIMIT_MB * 1024 * 1024 * SAFETY),
                 aspect=crop.get("aspect") or "original", position=float(crop.get("position", 0.5)),
                 flip=bool(member["flip"]), progress_cb=progress, should_cancel=should_cancel, edges=edges,
-                loop=member.get("loop") or "forward", max_width=member.get("gif_width"),
+                loop=member.get("loop") or "forward", max_width=member.get("gif_width"), fps=member.get("gif_fps"),
             )
         except GifTooLarge as e:
             if not gif_fallback:

@@ -44,3 +44,14 @@ test("a WebP of the same clip is estimated at about a third of the GIF", () => {
   assert.ok(Math.abs(wLo / gLo - 0.35) < 1e-9 && Math.abs(wHi / gHi - 0.35) < 1e-9);
   assert.equal(describeGifEstimate(10, "forward", null, "webp"), "roughly 4–10 MB");
 });
+
+test("frame rates are offered up to the source's own and scale the estimate", async () => {
+  const { fpsChoicesFor } = await import("../../src/ui/lib/gif.ts");
+  assert.deepEqual(fpsChoicesFor(29.97).map((o) => o.label), ["Auto", "30 fps (source)", "24 fps", "15 fps", "10 fps"]);
+  assert.deepEqual(fpsChoicesFor(24).map((o) => o.label), ["Auto", "24 fps (source)", "15 fps", "10 fps"]);
+  assert.deepEqual(fpsChoicesFor(12).map((o) => o.label), ["Auto", "12 fps (source)", "10 fps"]);
+  assert.deepEqual(fpsChoicesFor(null).map((o) => o.label), ["Auto"]);
+  const [lo15] = estimateGifMb(10);
+  const [lo30] = estimateGifMb(10, "forward", null, "gif", 30);
+  assert.ok(Math.abs(lo30 / lo15 - 2) < 1e-9);
+});

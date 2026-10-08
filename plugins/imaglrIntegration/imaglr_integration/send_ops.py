@@ -26,7 +26,8 @@ from .tags.pipeline import MAX_TAG_LEN, MAX_TAGS
 
 IN_FLIGHT = ("exporting", "sending")
 EDITABLE = {"tags", "caption", "blog_id", "action", "crop", "in_s", "out_s", "mute", "flip", "format", "codec", "max_edge", "loop",
-            "gif_width"}
+            "gif_width", "gif_fps"}
+MAX_ANIMATION_FPS = 60
 FORMATS = ("video", "gif", "webp")
 CODECS = ("h264", "hevc")
 LOOPS = ("forward", "boomerang")
@@ -118,7 +119,11 @@ def op_item_update(ctx: Context) -> dict[str, Any]:
         changes["gif_width"] = int(changes["gif_width"]) if changes["gif_width"] else None
         if changes["gif_width"] is not None and changes["gif_width"] not in {r[0] for r in fc.GIF_LADDER[1:]}:
             raise UserError("Unknown GIF size.")
-    if {"in_s", "out_s", "mute", "flip", "format", "codec", "max_edge", "loop", "gif_width"} & set(changes):
+    if "gif_fps" in changes:
+        changes["gif_fps"] = int(changes["gif_fps"]) if changes["gif_fps"] else None
+        if changes["gif_fps"] is not None and not (1 <= changes["gif_fps"] <= MAX_ANIMATION_FPS):
+            raise UserError("Unknown frame rate.")
+    if {"in_s", "out_s", "mute", "flip", "format", "codec", "max_edge", "loop", "gif_width", "gif_fps"} & set(changes):
         if item["kind"] != "clip":
             raise UserError("Only clips can be trimmed, muted, flipped or made into GIFs.")
         in_s = round(float(changes["in_s"]), 3) if "in_s" in changes else float(item["in_s"] or 0)
@@ -132,8 +137,9 @@ def op_item_update(ctx: Context) -> dict[str, Any]:
         changes.update(in_s=in_s, out_s=out_s, mute=bool(changes.get("mute", item["mute"])),
                        flip=bool(changes.get("flip", item["flip"])), format=changes.get("format", item["format"]),
                        codec=changes.get("codec", item["codec"]), max_edge=changes.get("max_edge", item["max_edge"]),
-                       loop=changes.get("loop", item["loop"]), gif_width=changes.get("gif_width", item["gif_width"]))
-        keys = ("in_s", "out_s", "mute", "flip", "format", "codec", "max_edge", "loop", "gif_width")
+                       loop=changes.get("loop", item["loop"]), gif_width=changes.get("gif_width", item["gif_width"]),
+                       gif_fps=changes.get("gif_fps", item["gif_fps"]))
+        keys = ("in_s", "out_s", "mute", "flip", "format", "codec", "max_edge", "loop", "gif_width", "gif_fps")
         if tuple(changes[k] for k in keys) != tuple(item[k] for k in keys):
             changes.update(output_path=None, output_bytes=None, output_mime=None, output_note=None,
                            size_guard_retried=False)  # export again
