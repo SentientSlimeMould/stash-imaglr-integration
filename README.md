@@ -136,9 +136,8 @@ your Stash library, other files or your machine.
 - Stash runs one task at a time in a queue, so clip exports and uploads can be held up by Stash's own tasks such
   as scans and vice versa.
 - HDR videos are not tone-mapped; colours may look flat.
-- imaglr's API refuses any upload over 100 MB, whatever its documentation says, so a video is encoded to fit that.
-  A long clip is encoded at a lower bitrate to fit; the editor estimates the size as you trim and warns when a
-  smaller picture or H.265 would look better.
+- imaglr accepts videos up to 500 MB. A long clip is encoded at a lower bitrate to fit; the editor estimates the
+  size as you trim and warns when a smaller picture or H.265 would look better.
 - imaglr accepts WebPs and GIFs up to 40 MB. A long clip, or one with a lot of movement, may only fit at a low frame
   rate and resolution; the editor estimates the size as you trim, and Send all can fall back to a video for any WebP
   or GIF that won't fit.
