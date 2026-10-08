@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The menu icon is redrawn to the proportions of imaglr's own favicon: a narrower ring, a wider gap and a large
+  highlight, all still visible at the smallest size.
 - **Share a whole scene** without making a marker: tag the scene `imaglr` (one scene from its page, or several
   at once with the scene list's Edit button). It appears on the Clips tab as a clip over the scene's full length (up to the
   10-minute limit), with the scene's tags, performers and studio suggested, and everything in the editor works
