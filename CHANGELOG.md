@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.16 — 2026-10-08
 
 - The clip editor is laid out in sections: the preview and trim, then **Picture** (crop, edge trims, flip) and
   **Format** (video or GIF, codec, picture size, sound, with the size estimate), each folded away with a
