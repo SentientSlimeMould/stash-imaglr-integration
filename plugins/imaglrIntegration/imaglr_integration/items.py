@@ -14,7 +14,7 @@ IN_FLIGHT_STATUSES = ("exporting", "sending")
 JSON_FIELDS = {"crop", "tags", "dropped_tags"}
 BOOL_FIELDS = ("mute", "flip", "hdr_warning", "cancel_requested", "followup_failed", "size_guard_retried",
                "tags_auto", "tags_pending")
-DEFAULT_CROP = {"aspect": "original", "position": 0.5}
+DEFAULT_CROP = {"aspect": "original", "position": 0.5}  # plus optional "edges": {top, right, bottom, left} as fractions
 MAX_SET_MEMBERS = 10
 
 

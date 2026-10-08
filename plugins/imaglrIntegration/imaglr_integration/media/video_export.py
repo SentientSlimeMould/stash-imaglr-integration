@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from .. import log
 from . import ffmpeg_cmd as fc
-from .ffmpeg_run import FfmpegError, encoders, finalise_part, run_ffmpeg
+from .ffmpeg_run import FfmpegError, encoders, finalise_part, run_capture, run_ffmpeg
 from .naming import output_name
 from .probe import ProbeInfo, is_hdr, probe
 
@@ -66,8 +66,9 @@ def _remove(path: str) -> None:
         pass
 
 
-def _output_dims(w: int, h: int, aspect: str, position: float, max_long_edge: int) -> tuple[int, int]:
-    crop = fc.compute_crop(w, h, aspect, position)
+def _output_dims(w: int, h: int, aspect: str, position: float, max_long_edge: int,
+                 edges: dict[str, float] | None = None) -> tuple[int, int]:
+    crop = fc.compute_crop(w, h, aspect, position, edges)
     if crop:
         w, h = crop.w, crop.h
     scale = fc.compute_scale(w, h, max_long_edge)
@@ -92,6 +93,7 @@ def export_clip(
     bitrate_scale: float | None = None,
     probe_info: ProbeInfo | None = None,
     previous_bytes: int | None = None,
+    edges: dict[str, float] | None = None,
 ) -> ExportResult:
     """Cut [in_s, out_s] of src to an MP4 in out_dir with the codec and picture size in `settings`, under
     settings.max_video_mb. A clip that fits at the usual quality (CRF) is one encode; otherwise it is encoded
@@ -131,11 +133,12 @@ def export_clip(
         crf=settings.crf,
         max_long_edge=settings.max_long_edge,
         headers=headers,
+        edges=edges,
         codec=settings.codec,
     )
     run = dict(output=part, duration_s=duration, progress_cb=progress_cb, should_cancel=should_cancel)
     limit_bytes = int(settings.max_video_mb * 1024 * 1024 * 0.95)
-    ow, oh = _output_dims(w, h, aspect, position, settings.max_long_edge)
+    ow, oh = _output_dims(w, h, aspect, position, settings.max_long_edge, edges)
 
     # The bitrate the limit allows for this length of clip. A clip that obviously can't fit at the usual
     # quality skips the first encode instead of wasting it to find out.
@@ -204,6 +207,7 @@ def export_gif(
     progress_cb=None,
     should_cancel=None,
     probe_info: ProbeInfo | None = None,
+    edges: dict[str, float] | None = None,
 ) -> ExportResult:
     """Cut [in_s, out_s] of src to an animated GIF under target_bytes, going down the quality ladder until it
     fits. The bottom rung is accepted up to limit_bytes (imaglr's ceiling); beyond that GifTooLarge says how
@@ -223,7 +227,8 @@ def export_gif(
     rungs = fc.GIF_LADDER
     for n, (long_edge, gif_fps, colors) in enumerate(rungs):
         cmd = fc.build_gif_cmd(settings.ffmpeg, src, part, in_s, out_s, w, h, long_edge=long_edge, gif_fps=gif_fps,
-                               colors=colors, aspect=aspect, position=position, flip=flip, headers=headers)
+                               colors=colors, aspect=aspect, position=position, flip=flip, headers=headers,
+                               edges=edges)
         lo, hi = 0.9 * n / len(rungs), 0.9 * (n + 1) / len(rungs)
         run_ffmpeg(cmd, output=part, duration_s=duration, progress_cb=progress_cb, should_cancel=should_cancel,
                    progress_range=(lo, hi))
@@ -248,8 +253,31 @@ def export_gif(
         thumb = None
     if progress_cb:
         progress_cb(1.0)
-    ow, oh = _output_dims(w, h, aspect, position, long_edge)
+    ow, oh = _output_dims(w, h, aspect, position, long_edge, edges)
     return ExportResult(final_path, size, ow, oh, False, thumb, gif_note(size, long_edge, gif_fps))
+
+
+def detect_edges(ffmpeg: str, src: str, width: int, height: int, times: list[float],
+                 headers: dict[str, str] | None = None) -> dict[str, float]:
+    """Edge trims that cut the black borders off a width×height picture, judged over a few frames at each of
+    `times` (seconds). The widest picture seen wins, so a dark frame can't shrink the result. All zero when no
+    border is found."""
+    rect: fc.CropRect | None = None
+    for t in times:
+        _, err, code = run_capture(fc.build_cropdetect_cmd(ffmpeg, src, t, headers=headers), timeout=120)
+        if code != 0:
+            raise FfmpegError(f"ffmpeg exit {code}", code, err.decode(errors="replace")[-500:])
+        found = fc.parse_cropdetect(err.decode(errors="replace"))
+        if found is None:
+            continue
+        if rect is None:
+            rect = found
+        else:  # the union of the two rectangles
+            x, y = min(rect.x, found.x), min(rect.y, found.y)
+            rect = fc.CropRect(max(rect.x + rect.w, found.x + found.w) - x, max(rect.y + rect.h, found.y + found.h) - y, x, y)
+    if rect is None:
+        return fc.clean_edges(None)
+    return fc.edges_from_rect(width, height, rect)
 
 
 def grab_frame(
@@ -281,6 +309,7 @@ def gif_to_mp4(
     position: float = 0.5,
     progress_cb=None,
     should_cancel=None,
+    edges: dict[str, float] | None = None,
 ) -> ExportResult:
     """Convert an animated GIF (or animated WebP, where ffmpeg can decode it) to a silent MP4."""
     os.makedirs(out_dir, exist_ok=True)
@@ -301,11 +330,12 @@ def gif_to_mp4(
         fps=info.fps or 15,
         aspect=aspect,
         position=position,
+        edges=edges,
         preset=settings.preset,
         crf=settings.crf,
         max_long_edge=settings.max_long_edge,
     )
     run_ffmpeg(cmd, output=part, duration_s=info.duration, progress_cb=progress_cb, should_cancel=should_cancel)
     path = finalise_part(part)
-    ow, oh = _output_dims(info.width, info.height, aspect, position, settings.max_long_edge)
+    ow, oh = _output_dims(info.width, info.height, aspect, position, settings.max_long_edge, edges)
     return ExportResult(path, os.path.getsize(path), ow, oh)

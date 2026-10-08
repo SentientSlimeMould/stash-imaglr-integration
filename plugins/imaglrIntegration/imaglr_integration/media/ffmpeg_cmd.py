@@ -8,6 +8,7 @@ Process priority (nice) is applied by ffmpeg_run, not here.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 
 ASPECTS: dict[str, float | None] = {"original": None, "9:16": 9 / 16, "4:5": 4 / 5, "1:1": 1.0}
@@ -48,15 +49,62 @@ class CropRect:
     y: int
 
 
-def compute_crop(width: int, height: int, aspect: str, position: float) -> CropRect | None:
-    """Crop to the aspect preset; position 0..1 slides along the cropped axis."""
+# Edge trims: fractions (0..1) of the picture cut off each side, e.g. {"top": 0.1, "bottom": 0.1} for black bars.
+EDGE_NAMES = ("top", "right", "bottom", "left")
+MAX_EDGE = 0.45  # no single side may take more than this ...
+MIN_KEPT = 0.1  # ... and at least this much of each dimension must remain
+
+
+def clean_edges(raw: object) -> dict[str, float]:
+    """Edge trims from the editor (or the database) as a complete, bounded dict; junk counts as no trim."""
+    out = {}
+    for name in EDGE_NAMES:
+        try:
+            v = float((raw or {}).get(name, 0)) if isinstance(raw, dict) else 0.0  # type: ignore[union-attr]
+        except (TypeError, ValueError):
+            v = 0.0
+        out[name] = round(min(MAX_EDGE, max(0.0, v if v == v else 0.0)), 4)
+    for a, b in (("left", "right"), ("top", "bottom")):
+        over = out[a] + out[b] - (1 - MIN_KEPT)
+        if over > 0:  # take the excess off both sides equally
+            out[a], out[b] = max(0.0, out[a] - over / 2), max(0.0, out[b] - over / 2)
+    return out
+
+
+def has_edges(edges: dict[str, float] | None) -> bool:
+    return bool(edges) and any(edges.get(n, 0) > 0 for n in EDGE_NAMES)  # type: ignore[union-attr]
+
+
+def edge_rect(width: int, height: int, edges: dict[str, float] | None) -> CropRect | None:
+    """The picture left after the edge trims, or None when nothing is trimmed."""
+    if not has_edges(edges) or width <= 0 or height <= 0:
+        return None
+    e = clean_edges(edges)
+    x = even(int(round(width * e["left"])))
+    y = even(int(round(height * e["top"])))
+    w = max(2, even(int(round(width * (1 - e["left"] - e["right"])))))
+    h = max(2, even(int(round(height * (1 - e["top"] - e["bottom"])))))
+    w, h = min(w, even(width) - x), min(h, even(height) - y)
+    if x == 0 and y == 0 and w == even(width) and h == even(height):
+        return None
+    return CropRect(w, h, x, y)
+
+
+def compute_crop(width: int, height: int, aspect: str, position: float,
+                 edges: dict[str, float] | None = None) -> CropRect | None:
+    """Edge trims first, then the aspect preset inside what is left; position 0..1 slides along the cropped
+    axis. None when the whole picture is kept."""
+    inset = edge_rect(width, height, edges)
+    ox, oy = (inset.x, inset.y) if inset else (0, 0)
+    if inset:
+        width, height = inset.w, inset.h
     ratio = ASPECTS.get(aspect)
     if ratio is None or width <= 0 or height <= 0:
-        return None
+        return inset
     position = min(1.0, max(0.0, float(position)))
     src_ratio = width / height
     if abs(src_ratio - ratio) < 1e-6:
-        return None
+        return inset
     if src_ratio > ratio:
         cw = max(2, even(int(height * ratio)))
         ch = even(height)
@@ -67,9 +115,41 @@ def compute_crop(width: int, height: int, aspect: str, position: float) -> CropR
         ch = max(2, even(int(width / ratio)))
         x = 0
         y = even(int(round((height - ch) * position)))
-    if cw == even(width) and ch == even(height) and x == 0 and y == 0 and width % 2 == 0 and height % 2 == 0:
+    if not inset and cw == even(width) and ch == even(height) and x == 0 and y == 0 and width % 2 == 0 and height % 2 == 0:
         return None
-    return CropRect(cw, ch, x, y)
+    return CropRect(cw, ch, ox + x, oy + y)
+
+
+def build_cropdetect_cmd(ffmpeg: str, src: str, t: float, frames: int = 12,
+                         headers: dict[str, str] | None = None) -> list[str]:
+    """Let ffmpeg find the picture inside black borders over a few frames from t; the result is on stderr as
+    `crop=w:h:x:y` lines (loglevel info). reset=0 keeps the widest picture seen across the frames."""
+    cmd = [ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "info", "-nostats"]
+    cmd += _headers_arg(headers)
+    cmd += ["-ss", f"{t:.3f}", "-i", src, "-frames:v", str(frames), "-an"]
+    cmd += ["-vf", "cropdetect=limit=24:round=2:reset=0", "-f", "null", os.devnull]
+    return cmd
+
+
+_CROPDETECT = re.compile(r"crop=(\d+):(\d+):(\d+):(\d+)")
+
+
+def parse_cropdetect(stderr: str) -> CropRect | None:
+    """The last crop rectangle cropdetect reported, or None when it found nothing."""
+    found = _CROPDETECT.findall(stderr)
+    if not found:
+        return None
+    w, h, x, y = (int(v) for v in found[-1])
+    return CropRect(w, h, x, y) if w > 0 and h > 0 else None
+
+
+def edges_from_rect(width: int, height: int, rect: CropRect) -> dict[str, float]:
+    """Edge trims that reproduce `rect` on a width×height picture, bounded like any edit."""
+    if width <= 0 or height <= 0:
+        return clean_edges(None)
+    raw = {"left": rect.x / width, "top": rect.y / height,
+           "right": (width - rect.x - rect.w) / width, "bottom": (height - rect.y - rect.h) / height}
+    return clean_edges({k: 0.0 if v < 0.005 else v for k, v in raw.items()})
 
 
 def compute_scale(width: int, height: int, max_long_edge: int) -> tuple[int, int] | None:
@@ -84,9 +164,9 @@ def compute_scale(width: int, height: int, max_long_edge: int) -> tuple[int, int
 
 
 def build_filter_chain(width: int, height: int, aspect: str, position: float, max_long_edge: int, fps: float,
-                       flip: bool = False) -> str:
+                       flip: bool = False, edges: dict[str, float] | None = None) -> str:
     parts: list[str] = []
-    crop = compute_crop(width, height, aspect, position)
+    crop = compute_crop(width, height, aspect, position, edges)
     w, h = width, height
     if crop:
         parts.append(f"crop={crop.w}:{crop.h}:{crop.x}:{crop.y}")
@@ -128,11 +208,12 @@ def build_gif_cmd(
     position: float = 0.5,
     flip: bool = False,
     headers: dict[str, str] | None = None,
+    edges: dict[str, float] | None = None,
 ) -> list[str]:
     """One-pass animated GIF: frame-rate cap, crop, scale and flip, then a palette made from the clip itself
     (stats_mode=diff favours what moves) and ordered dithering with per-frame rectangles of change."""
     duration = max(0.1, out_s - in_s)
-    chain = build_filter_chain(width, height, aspect, position, long_edge, 0, flip)
+    chain = build_filter_chain(width, height, aspect, position, long_edge, 0, flip, edges)
     vf = f"fps={gif_fps}" + ("," + chain if chain else "")
     vf += (f",split[a][b];[a]palettegen=max_colors={colors}:stats_mode=diff[p];"
            f"[b][p]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle")
@@ -177,6 +258,7 @@ def build_clip_cmd(
     two_pass: tuple[int, int] | None = None,  # (pass number, target kbps)
     passlog: str | None = None,
     codec: str = "h264",
+    edges: dict[str, float] | None = None,
 ) -> list[str]:
     duration = max(0.1, out_s - in_s)
     cmd = _base(ffmpeg)
@@ -185,7 +267,7 @@ def build_clip_cmd(
     include_audio = has_audio and not mute
     if include_audio:
         cmd += ["-map", "0:a:0?"]
-    vf = build_filter_chain(width, height, aspect, position, max_long_edge, fps, flip)
+    vf = build_filter_chain(width, height, aspect, position, max_long_edge, fps, flip, edges)
     if vf:
         cmd += ["-vf", vf]
     if codec == "hevc":
@@ -248,10 +330,11 @@ def build_gif_to_mp4_cmd(
     preset: str = "medium",
     crf: int = 20,
     max_long_edge: int = 1920,
+    edges: dict[str, float] | None = None,
 ) -> list[str]:
     cmd = _base(ffmpeg)
     cmd += ["-i", src]
-    vf = build_filter_chain(width, height, aspect, position, max_long_edge, fps)
+    vf = build_filter_chain(width, height, aspect, position, max_long_edge, fps, edges=edges)
     if not vf:
         vf = "scale=trunc(iw/2)*2:trunc(ih/2)*2"
     cmd += ["-vf", vf, "-c:v", "libx264", "-profile:v", "high", "-preset", preset, "-crf", str(crf)]

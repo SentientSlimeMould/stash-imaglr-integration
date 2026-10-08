@@ -362,6 +362,19 @@ class VideoTest(RealMediaTest):
         self.assertEqual(res.note, f"H.264 · {res.bytes / 1048576:.1f} MB · 1920 px")
         self.assertLessEqual(res.bytes, 0.35 * 1024 * 1024 * 1.1)
 
+    def test_detect_borders_finds_black_bars(self):
+        from imaglr_integration.media.video_export import detect_edges
+        src = self.path("bars.mp4")
+        # a 640x270 picture inside a 640x360 frame: 45 px of black above and below (12.5 % each)
+        ff("-f", "lavfi", "-i", "testsrc2=size=640x270:rate=30", "-t", "2", "-vf", "pad=640:360:0:45:black",
+           "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", src)
+        edges = detect_edges(FFMPEG, src, 640, 360, [0.2, 1.0, 1.8])
+        self.assertAlmostEqual(edges["top"], 0.125, delta=0.01)
+        self.assertAlmostEqual(edges["bottom"], 0.125, delta=0.01)
+        self.assertEqual((edges["left"], edges["right"]), (0.0, 0.0))
+        plain = self.make_source(self.path("plain.mp4"), seconds=1)
+        self.assertFalse(fc.has_edges(detect_edges(FFMPEG, plain, 640, 360, [0.5])))
+
     def test_failure_leaves_no_part(self):
         src = self.make_source(self.path("src.mp4"), seconds=2)
         info = probe(FFPROBE, src)

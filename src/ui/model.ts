@@ -83,7 +83,7 @@ export interface Blog {
 
 export interface FileCard extends Card {
   image?: string | null;
-  crop: { aspect: import("./lib/types.ts").Aspect; position: number };
+  crop: import("./lib/types.ts").Crop;
   in_s: number | null;
   out_s: number | null;
   mute: boolean;
@@ -107,7 +107,7 @@ export interface ItemDetail {
     caption: string;
     blog_id: number | null;
     action: SendAction | null;
-    crop: { aspect: import("./lib/types.ts").Aspect; position: number };
+    crop: import("./lib/types.ts").Crop;
     error_code: string | null;
     error_detail: string | null;
     progress: number;

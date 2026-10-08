@@ -3,11 +3,13 @@
 import React from "react";
 import { gql } from "../api.ts";
 import { clampTrim, pickStream, sameOrigin, type SceneStream, type VideoInfo } from "../lib/clip.ts";
-import { ASPECTS, overlayRect } from "../lib/crop.ts";
+import { overlayRect } from "../lib/crop.ts";
+import { CropControls } from "./CropControls.tsx";
+import { Fold } from "./Fold.tsx";
 import { describeGifEstimate, LONG_GIF_SECONDS } from "../lib/gif.ts";
 import { CODEC_LABELS, type Codec, edgeLabel, outputEdge, sizeChoicesFor, videoEstimate } from "../lib/video.ts";
 import { fmtTime, parseTime } from "../lib/format.ts";
-import type { Aspect } from "../lib/types.ts";
+import type { Crop } from "../lib/types.ts";
 
 const SCENE_PLAYBACK = `query($id: ID!) { findScene(id: $id) {
   paths { stream screenshot } sceneStreams { url mime_type label }
@@ -57,20 +59,12 @@ export interface ClipState {
   format: ClipFormat; // sent as a video, or as an animated GIF
   codec: Codec; // videos: H.264 or H.265
   maxEdge: number | null; // videos: picture size as a long edge; null = as the source (up to 1080p)
-  crop: { aspect: Aspect; position: number };
+  crop: Crop;
 }
 
-const MORE_KEY = "imaglr-clip-more-open";
-
-function loadMoreOpen(): boolean {
-  try { return localStorage.getItem(MORE_KEY) === "1"; } catch { return false; }
-}
-
-function saveMoreOpen(open: boolean): void {
-  try { localStorage.setItem(MORE_KEY, open ? "1" : "0"); } catch { /* ignore */ }
-}
 
 interface Props {
+  itemId: string;
   sceneId: string | null;
   imageId: string | null;
   value: ClipState;
@@ -112,19 +106,16 @@ function TimeRow({ label, value, disabled, onSet, onNudge, onType }: {
   );
 }
 
-/** What is set in More options while it is collapsed, e.g. "H.265 · 720p"; empty when all default. */
-export function moreSummary(v: ClipState): string {
-  const parts: string[] = [];
-  if (v.codec === "hevc") parts.push(CODEC_LABELS.hevc);
-  if (v.maxEdge) parts.push(edgeLabel(v.maxEdge));
-  return parts.join(" · ");
+/** The Format section's header while it is collapsed: what the clip will be sent as, and its likely size. */
+export function formatHeader(v: ClipState, estimate: { short: string; warn: boolean }, edge: number): { text: string; warn: boolean } {
+  if (v.format === "gif") return { text: `GIF · ${describeGifEstimate(v.outS - v.inS)}`, warn: v.outS - v.inS > LONG_GIF_SECONDS };
+  const parts = ["Video", CODEC_LABELS[v.codec], edgeLabel(edge), v.mute ? "no sound" : "", estimate.short];
+  return { text: parts.filter(Boolean).join(" · "), warn: estimate.warn };
 }
 
-
-export function ClipPanel({ sceneId, imageId, value, disabled, gifTargetMb, onChange, onSaveStill }: Props) {
-  const { Button, ButtonGroup, Collapse, Form } = PluginApi.libraries.Bootstrap;
+export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTargetMb, onChange, onSaveStill }: Props) {
+  const { Button, ButtonGroup, Form } = PluginApi.libraries.Bootstrap;
   const video = React.useRef<HTMLVideoElement>(null);
-  const [moreOpen, setMoreOpen] = React.useState(loadMoreOpen);
   const box = React.useRef<HTMLDivElement>(null);
   const [playback, setPlayback] = React.useState<Playback | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -168,7 +159,9 @@ export function ClipPanel({ sceneId, imageId, value, disabled, gifTargetMb, onCh
 
   const sourceEdge = Math.max(size.vw, size.vh) || null;
   const sizeChoices = sizeChoicesFor(sourceEdge);
-  const rect = overlayRect(size.w, size.h, size.vw, size.vh, value.crop.aspect, value.crop.position);
+  const estimate = videoEstimate(value.outS - value.inS, value.codec, outputEdge(sourceEdge, value.maxEdge), value.mute);
+  const header = formatHeader(value, estimate, outputEdge(sourceEdge, value.maxEdge));
+  const rect = overlayRect(size.w, size.h, size.vw, size.vh, value.crop.aspect, value.crop.position, value.crop.edges);
 
   return (
     <div className="imaglr-clip">
@@ -187,7 +180,7 @@ export function ClipPanel({ sceneId, imageId, value, disabled, gifTargetMb, onCh
             }}
             onPause={() => setLooping(false)} />
         ) : null}
-        {rect.axis !== "none" ? (
+        {rect.cropped ? (
           <div className="imaglr-crop" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />
         ) : null}
       </div>
@@ -211,41 +204,25 @@ export function ClipPanel({ sceneId, imageId, value, disabled, gifTargetMb, onCh
         onNudge={(d) => trim(value.inS, value.outS + d, "out")}
         onType={(t) => trim(value.inS, t, "out")} />
 
-      <Form.Group className="mt-2">
-        <Form.Label>Crop</Form.Label>
-        <div>
-          <ButtonGroup className="imaglr-segmented">
-            {(Object.keys(ASPECTS) as Aspect[]).map((a) => (
-              <Button key={a} variant={value.crop.aspect === a ? "primary" : "secondary"} disabled={disabled}
-                onClick={() => onChange({ ...value, crop: { ...value.crop, aspect: a } })}>
-                {a === "original" ? "Original" : a}
-              </Button>
-            ))}
-          </ButtonGroup>
-        </div>
-        {value.crop.aspect !== "original" ? (
-          <Form.Control type="range" min={0} max={1} step={0.01} value={value.crop.position} disabled={disabled}
-            aria-label="Crop position" className="mt-2"
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-              onChange({ ...value, crop: { ...value.crop, position: Number(e.target.value) } })} />
-        ) : null}
-      </Form.Group>
-      <Form.Group className="mt-2">
-        <Form.Label>Format</Form.Label>
-        <div>
-          <ButtonGroup className="imaglr-segmented">
-            {(["video", "gif"] as ClipFormat[]).map((f) => (
-              <Button key={f} variant={value.format === f ? "primary" : "secondary"} disabled={disabled}
-                onClick={() => onChange({ ...value, format: f })}>
-                {f === "video" ? "Video" : "GIF"}
-              </Button>
-            ))}
-          </ButtonGroup>
-        </div>
-        <div className="small text-muted mt-1">
-          GIFs play automatically in feeds. Videos are higher quality, are quicker to load and have sound, but
-          require the user to click play.
-        </div>
+      <CropControls crop={value.crop} disabled={disabled} itemId={itemId} onChange={(crop) => onChange({ ...value, crop })}
+        flip={value.flip} onFlip={(flip) => onChange({ ...value, flip })} />
+      <Fold id="format" label="Format" summary={header.text} tone={header.warn ? "warning" : "muted"}>
+        <Form.Group className="mt-2">
+          <div>
+            <ButtonGroup className="imaglr-segmented">
+              {(["video", "gif"] as ClipFormat[]).map((f) => (
+                <Button key={f} variant={value.format === f ? "primary" : "secondary"} disabled={disabled}
+                  onClick={() => onChange({ ...value, format: f })}>
+                  {f === "video" ? "Video" : "GIF"}
+                </Button>
+              ))}
+            </ButtonGroup>
+          </div>
+          <div className="small text-muted mt-1">
+            GIFs play automatically in feeds. Videos are higher quality, are quicker to load and have sound, but
+            require the user to click play.
+          </div>
+        </Form.Group>
         {value.format === "gif" ? (
           <>
             <div className="small text-muted mt-1">
@@ -258,69 +235,49 @@ export function ClipPanel({ sceneId, imageId, value, disabled, gifTargetMb, onCh
               </div>
             ) : null}
           </>
-        ) : (() => {
-          const edge = outputEdge(sourceEdge, value.maxEdge);
-          const est = videoEstimate(value.outS - value.inS, value.codec, edge, value.mute);
-          return <div className={`small mt-1 ${est.warn ? "text-warning" : "text-muted"}`}>{est.text}</div>;
-        })()}
-      </Form.Group>
-      {value.format === "gif" ? null : (
-        <Form.Check id="imaglr-mute" type="switch" label="Remove sound" checked={value.mute} disabled={disabled}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange({ ...value, mute: e.target.checked })} />
-      )}
-      <Form.Check id="imaglr-flip" type="switch" label="Flip horizontally" checked={value.flip} disabled={disabled}
-        onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange({ ...value, flip: e.target.checked })} />
-      {value.flip ? (
-        <div className="small text-muted">The sent clip is mirrored left-to-right; the preview above isn't.</div>
-      ) : null}
-      {value.format === "gif" ? null : (
-      <div className="imaglr-more">
-        <Button variant="link" className="p-0 imaglr-touch" aria-expanded={moreOpen} aria-controls="imaglr-clip-more"
-          onClick={() => { setMoreOpen(!moreOpen); saveMoreOpen(!moreOpen); }}>
-          {moreOpen ? "▾" : "▸"} More options
-          {!moreOpen && moreSummary(value) ? <span className="text-muted"> · {moreSummary(value)}</span> : null}
-        </Button>
-        <Collapse in={moreOpen}>
-          <div id="imaglr-clip-more">
-                <Form.Group className="mt-2 mb-2">
-                  <Form.Label>Codec</Form.Label>
-                  <div>
-                    <ButtonGroup className="imaglr-segmented">
-                      {(Object.keys(CODEC_LABELS) as Codec[]).map((c) => (
-                        <Button key={c} variant={value.codec === c ? "primary" : "secondary"} disabled={disabled}
-                          onClick={() => onChange({ ...value, codec: c })}>
-                          {CODEC_LABELS[c]}
-                        </Button>
-                      ))}
-                    </ButtonGroup>
-                  </div>
-                  <div className="small text-muted mt-1">
-                    H.265 is about 40 % smaller at the same quality and slower to encode. It plays in Safari, Chrome and
-                    Edge, but not every browser; H.264 plays everywhere.
-                  </div>
-                </Form.Group>
-                {sizeChoices.length > 1 ? (
-                <Form.Group className="mb-2">
-                  <Form.Label>Picture size</Form.Label>
-                  <div>
-                    <ButtonGroup className="imaglr-segmented">
-                      {sizeChoices.map((o) => (
-                        <Button key={o.label} variant={(value.maxEdge ?? null) === o.value ? "primary" : "secondary"} disabled={disabled}
-                          onClick={() => onChange({ ...value, maxEdge: o.value })}>
-                          {o.label}
-                        </Button>
-                      ))}
-                    </ButtonGroup>
-                  </div>
-                  <div className="small text-muted mt-1">
-                    Smaller pictures make smaller files and encode faster. Original keeps the source's size, up to 1080p.
-                  </div>
-                </Form.Group>
-                ) : null}
-          </div>
-        </Collapse>
-      </div>
-      )}
+        ) : (
+          <>
+            <Form.Group className="mt-2 mb-2">
+              <Form.Label>Codec</Form.Label>
+              <div>
+                <ButtonGroup className="imaglr-segmented">
+                  {(Object.keys(CODEC_LABELS) as Codec[]).map((c) => (
+                    <Button key={c} variant={value.codec === c ? "primary" : "secondary"} disabled={disabled}
+                      onClick={() => onChange({ ...value, codec: c })}>
+                      {CODEC_LABELS[c]}
+                    </Button>
+                  ))}
+                </ButtonGroup>
+              </div>
+              <div className="small text-muted mt-1">
+                H.265 is about 40 % smaller at the same quality and slower to encode. It plays in Safari, Chrome and
+                Edge, but not every browser; H.264 plays everywhere.
+              </div>
+            </Form.Group>
+            {sizeChoices.length > 1 ? (
+              <Form.Group className="mb-2">
+                <Form.Label>Picture size</Form.Label>
+                <div>
+                  <ButtonGroup className="imaglr-segmented">
+                    {sizeChoices.map((o) => (
+                      <Button key={o.label} variant={(value.maxEdge ?? null) === o.value ? "primary" : "secondary"} disabled={disabled}
+                        onClick={() => onChange({ ...value, maxEdge: o.value })}>
+                        {o.label}
+                      </Button>
+                    ))}
+                  </ButtonGroup>
+                </div>
+                <div className="small text-muted mt-1">
+                  Smaller pictures make smaller files and encode faster. Original keeps the source's size, up to 1080p.
+                </div>
+              </Form.Group>
+            ) : null}
+            <Form.Check id="imaglr-mute" type="switch" label="Remove sound" checked={value.mute} disabled={disabled}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange({ ...value, mute: e.target.checked })} />
+            <div className={`small mt-1 ${estimate.warn ? "text-warning" : "text-muted"}`}>{estimate.text}</div>
+          </>
+        )}
+      </Fold>
     </div>
   );
 }

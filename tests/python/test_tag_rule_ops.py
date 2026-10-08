@@ -3,7 +3,7 @@
 answers the plugin-settings query."""
 import unittest
 
-from imaglr_integration import send_ops
+from imaglr_integration import items, send_ops
 from imaglr_integration.context import Context, UserError
 from imaglr_integration.db import Database
 
@@ -124,6 +124,15 @@ class AutomaticTagsTest(unittest.TestCase):
         with self.assertRaises(UserError):
             image = items.create_item(self.db, kind="image", stash_image_id="10")
             self.run_op("item_update", item_id=image["id"], changes={"flip": True})
+
+    def test_edge_trims_are_cleaned_and_only_kept_when_set(self):
+        clip = items.create_item(self.db, kind="clip", stash_marker_id="7", stash_scene_id="1", source_title="c",
+                                 in_s=0.0, out_s=5.0)
+        out = self.run_op("item_update", item_id=clip["id"],
+                          changes={"crop": {"aspect": "1:1", "position": 0.5, "edges": {"top": "0.1", "left": 2, "junk": 9}}})["item"]
+        self.assertEqual(out["crop"]["edges"], {"top": 0.1, "right": 0.0, "bottom": 0.0, "left": 0.45})
+        out = self.run_op("item_update", item_id=clip["id"], changes={"crop": {"aspect": "1:1", "position": 0.5, "edges": {}}})["item"]
+        self.assertNotIn("edges", out["crop"])
 
     def test_post_tags_merge_members(self):
         from imaglr_integration import services

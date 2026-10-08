@@ -17,6 +17,7 @@ from . import blogs, jobs, services
 from . import settings as plugin_settings
 from . import items as repo
 from .cleanup import cleanup_prepared
+from .media import ffmpeg_cmd as fc
 from .context import Context, UserError
 from .db import now_iso
 from .stash import api
@@ -96,6 +97,9 @@ def op_item_update(ctx: Context) -> dict[str, Any]:
         if crop.get("aspect") not in ASPECTS:
             raise UserError("Unknown crop.")
         changes["crop"] = {"aspect": crop["aspect"], "position": min(max(float(crop.get("position", 0.5)), 0.0), 1.0)}
+        edges = fc.clean_edges(crop.get("edges"))
+        if fc.has_edges(edges):
+            changes["crop"]["edges"] = edges
         if changes["crop"] != item["crop"]:
             changes.update(output_path=None, output_bytes=None, output_mime=None, output_note=None)  # prepare again
     if "format" in changes and changes["format"] not in FORMATS:

@@ -2,11 +2,19 @@
 
 ## Unreleased
 
+- The clip editor is laid out in sections: the preview and trim, then **Picture** (crop, edge trims, flip) and
+  **Format** (video or GIF, codec, picture size, sound, with the size estimate), each folded away with a
+  header that says what is set, e.g. "Format · Video · H.264 · 1080p · about 45 MB". The image editor has the
+  same Picture section. Both remember whether you left them open.
+- The crop can now **trim the edges** of a clip or image, for black borders the aspect presets couldn't
+  remove: top, bottom, left and right in percent, with a **Detect borders** button that asks ffmpeg where
+  the picture is (sampled across a clip's range). The aspect preset and its position apply inside what is
+  left, the preview shows the result, and stills grabbed from a clip get the same controls.
 - Videos are now sized for imaglr's real upload limit. Its API refuses any request over 100 MB (the
   documentation's 500 MB per video cannot be reached), so a long clip used to encode to several hundred MB and
   then fail. A clip is now encoded to fit 100 MB and the files of a multi-file post share that limit.
-- Each clip has a **Codec** (H.264 or H.265) and a **Picture size** (Original, 720p or 480p) under a collapsed
-  **More options** in the editor; only sizes smaller than the source are offered. The plugin never changes these for
+- Each clip has a **Codec** (H.264 or H.265) and a **Picture size** (Original, 720p or 480p) in the editor's
+  **Format** section; only sizes smaller than the source are offered. The plugin never changes these for
   you: the editor estimates the size as you trim and warns when a long clip would look poor with the choices
   made. Two settings give new clips their defaults (**Clips as H.265 by default**, **Clip picture size by
   default**). The card shows what came out, e.g. "H.265 · 92.1 MB · 1280 px".

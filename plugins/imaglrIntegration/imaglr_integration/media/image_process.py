@@ -61,6 +61,7 @@ def reencode(
     *,
     ffmpeg: str,
     should_cancel=None,
+    crop_edges: dict[str, float] | None = None,
 ) -> ImageResult:
     os.makedirs(out_dir, exist_ok=True)
     norm = part = None
@@ -77,7 +78,7 @@ def reencode(
             metadata_strip.strip_file(src, norm)
             src = norm
         width, height = info.display_size
-        crop = compute_crop(width, height, crop_aspect or "original", crop_position)
+        crop = compute_crop(width, height, crop_aspect or "original", crop_position, crop_edges)
         if crop:
             width, height = crop.w, crop.h
         fmt = plan.out_format
@@ -128,6 +129,7 @@ def process_image(
     *,
     ffmpeg: str,
     should_cancel=None,
+    crop_edges: dict[str, float] | None = None,
 ) -> ImageResult:
     """Handles 'strip', 'reencode' and 'convert'. For 'to_video' use video_export.gif_to_mp4."""
     if plan.action == "to_video":
@@ -151,4 +153,4 @@ def process_image(
                 raise ImageTooLarge("animated image over limit after strip")
         plan = ImagePlan("reencode", plan.out_format)
     args = (src, out_dir, base_name, plan, info, crop_aspect, crop_position, limit_bytes)
-    return reencode(*args, ffmpeg=ffmpeg, should_cancel=should_cancel)
+    return reencode(*args, ffmpeg=ffmpeg, should_cancel=should_cancel, crop_edges=crop_edges)

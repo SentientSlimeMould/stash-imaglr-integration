@@ -4,8 +4,9 @@
 // later), the send button saves and sends, Cancel discards them.
 import React from "react";
 import { baseUrl, runOperation } from "../api.ts";
-import { ASPECTS, overlayRect } from "../lib/crop.ts";
-import type { Aspect } from "../lib/types.ts";
+import { overlayRect } from "../lib/crop.ts";
+import { CropControls } from "./CropControls.tsx";
+import type { Crop } from "../lib/types.ts";
 import { ACTION_LABELS, blogProblem, effectiveAction, pickBlog, sendButtonLabel, stashLink } from "../lib/send.ts";
 import { STATUS_LABELS, type FileCard, type ItemDetail, type SendAction } from "../model.ts";
 import { ConfirmDialog } from "../ConfirmDialog.tsx";
@@ -19,7 +20,7 @@ interface Props {
 
 const BUSY = ["exporting", "sending"];
 
-function CropPreview({ file, aspect, position }: { file: FileCard; aspect: Aspect; position: number }) {
+function CropPreview({ file, crop }: { file: FileCard; crop: Crop }) {
   const box = React.useRef<HTMLDivElement>(null);
   const [size, setSize] = React.useState({ w: 0, h: 0, sw: file.width ?? 0, sh: file.height ?? 0 });
 
@@ -41,12 +42,12 @@ function CropPreview({ file, aspect, position }: { file: FileCard; aspect: Aspec
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  const rect = overlayRect(size.w, size.h, size.sw, size.sh, aspect, position);
+  const rect = overlayRect(size.w, size.h, size.sw, size.sh, crop.aspect, crop.position, crop.edges);
   const src = file.image ?? file.thumb;
   return (
     <div ref={box} className="imaglr-preview">
       {src ? <img src={baseUrl() + src} alt="" onLoad={(e) => measure(e.currentTarget)} /> : null}
-      {rect.axis !== "none" ? (
+      {rect.cropped ? (
         <div className="imaglr-crop" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />
       ) : null}
     </div>
@@ -92,7 +93,7 @@ export function Editor({ itemId, onClose }: Props) {
   const [detail, setDetail] = React.useState<ItemDetail | null>(null);
   const [tags, setTags] = React.useState<string[]>([]);
   const [caption, setCaption] = React.useState("");
-  const [crop, setCrop] = React.useState<{ aspect: Aspect; position: number }>({ aspect: "original", position: 0.5 });
+  const [crop, setCrop] = React.useState<Crop>({ aspect: "original", position: 0.5 });
   const [trim, setTrim] = React.useState<{ inS: number; outS: number; mute: boolean; flip: boolean; format: "video" | "gif"; codec: "h264" | "hevc"; maxEdge: number | null }>(
     { inS: 0, outS: 0, mute: false, flip: false, format: "video", codec: "h264", maxEdge: null });
   const [blogId, setBlogId] = React.useState<number | null>(null);
@@ -280,6 +281,7 @@ export function Editor({ itemId, onClose }: Props) {
         ) : null}
         {isClip ? (
           <ClipPanel
+            itemId={item.id}
             sceneId={files[0].stash_scene_id}
             imageId={files[0].stash_marker_id ? null : files[0].stash_image_id}
             value={{ ...trim, crop }}
@@ -293,26 +295,8 @@ export function Editor({ itemId, onClose }: Props) {
           />
         ) : single ? (
           <>
-            <CropPreview file={files[0]} aspect={crop.aspect} position={crop.position} />
-            <Form.Group className="mt-2">
-              <Form.Label>Crop</Form.Label>
-              <div>
-                <ButtonGroup className="imaglr-segmented">
-                  {(Object.keys(ASPECTS) as Aspect[]).map((a) => (
-                    <Button key={a} variant={crop.aspect === a ? "primary" : "secondary"} disabled={locked}
-                      onClick={() => edit(setCrop)({ ...crop, aspect: a })}>
-                      {a === "original" ? "Original" : a}
-                    </Button>
-                  ))}
-                </ButtonGroup>
-              </div>
-              {crop.aspect !== "original" ? (
-                <Form.Control type="range" min={0} max={1} step={0.01} value={crop.position} disabled={locked}
-                  aria-label="Crop position" className="mt-2"
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                    edit(setCrop)({ ...crop, position: Number(e.target.value) })} />
-              ) : null}
-            </Form.Group>
+            <CropPreview file={files[0]} crop={crop} />
+            <CropControls crop={crop} disabled={locked} itemId={item.id} onChange={edit(setCrop)} />
           </>
         ) : (
           <>
