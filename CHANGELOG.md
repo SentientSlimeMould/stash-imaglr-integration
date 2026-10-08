@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Share a whole scene** without making a marker: tag the scene `imaglr` (one scene from its page, or several
+  at once with the scene list's Edit button). It appears on the Clips tab as a clip over the scene's full length (up to the
+  10-minute limit), with the scene's tags, performers and studio suggested, and everything in the editor works
+  as for a marker clip. Trims stay in the plugin: the plugin still never creates or edits markers for you.
+  Sending swaps the scene's tag to the sent tag, as it does for images.
+
 ## 0.1.16 — 2026-10-08
 
 - The clip editor is laid out in sections: the preview and trim, then **Picture** (crop, edge trims, flip) and

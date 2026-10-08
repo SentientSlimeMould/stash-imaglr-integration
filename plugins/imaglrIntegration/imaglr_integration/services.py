@@ -11,7 +11,7 @@ from . import items as repo
 from .db import Database, now_iso
 from .settings import Settings
 from .settings import PLUGIN_ID
-from .stash import Image, Marker, Tag, api
+from .stash import Image, Marker, Scene, Tag, api
 from .tags.pipeline import (
     TagConfig,
     collect_clip_sources,
@@ -20,6 +20,8 @@ from .tags.pipeline import (
     parse_patterns,
     suggest,
 )
+
+MAX_CLIP_SECONDS = 600  # the longest clip the editor allows (send_ops enforces it on edits)
 
 SET_KINDS = ("image", "still", "clip")
 BUSY_STATUSES = ("exporting", "sending", "sent")
@@ -53,6 +55,15 @@ def image_suggestions(db: Database, settings: Settings, image: Image):
 
 def marker_suggestions(db: Database, settings: Settings, marker: Marker):
     return suggest(collect_clip_sources(marker, marker.scene), tag_config(settings), repo.tag_mapping(db))
+
+
+def scene_suggestions(db: Database, settings: Settings, scene: Scene):
+    """Tags for a whole scene: its tags, performers and studio (there is no marker)."""
+    return suggest(collect_clip_sources(None, scene), tag_config(settings), repo.tag_mapping(db))
+
+
+def is_whole_scene(member: dict[str, Any]) -> bool:
+    return member["kind"] == "clip" and bool(member["stash_scene_id"]) and not member["stash_marker_id"]
 
 
 def marker_bounds(marker: Marker, default_len: float) -> tuple[float, float]:
@@ -95,11 +106,17 @@ def source_suggestions(stash: Any, db: Database, settings: Settings, member: dic
     if member["kind"] == "clip" and member["stash_marker_id"]:
         marker = api.find_marker(stash, member["stash_marker_id"])
         return marker, marker_suggestions(db, settings, marker) if marker else None
+    if is_whole_scene(member):
+        scene = api.find_scene(stash, member["stash_scene_id"])
+        return scene, scene_suggestions(db, settings, scene) if scene else None
     if member["kind"] == "still":
         source = repo.get_item(db, member["source_item_id"]) if member["source_item_id"] else None
         if source and source["stash_marker_id"]:
             marker = api.find_marker(stash, source["stash_marker_id"])
             return None, marker_suggestions(db, settings, marker) if marker else None
+        if source and is_whole_scene(source):
+            scene = api.find_scene(stash, source["stash_scene_id"])
+            return None, scene_suggestions(db, settings, scene) if scene else None
         return None, None
     image = api.find_image(stash, member["stash_image_id"]) if member["stash_image_id"] else None
     return image, image_suggestions(db, settings, image) if image else None
@@ -130,6 +147,22 @@ def item_from_marker(db: Database, settings: Settings, marker: Marker) -> dict[s
         db, kind="clip", stash_marker_id=marker.id, stash_scene_id=marker.scene.id if marker.scene else None,
         source_title=marker_title(marker), in_s=in_s, out_s=out_s,
         tags=marker_suggestions(db, settings, marker).active_names(),
+        format="gif" if settings.clips_as_gif else "video",
+        codec="hevc" if settings.clips_hevc else "h264", max_edge=settings.clip_max_edge,
+    )
+
+
+def item_from_scene(db: Database, settings: Settings, scene: Scene) -> dict[str, Any]:
+    """The scene's current (unsent) whole-scene clip, creating it over the scene's full length if needed. The
+    plugin never creates a marker for it; the in/out points live only here."""
+    existing = repo.active_for_scene(db, scene.id)
+    if existing:
+        return refresh_tags(db, existing, scene_suggestions(db, settings, scene).active_names())
+    duration = scene.duration or settings.default_clip_seconds
+    return repo.create_item(
+        db, kind="clip", stash_scene_id=scene.id, source_title=scene.display_title,
+        in_s=0.0, out_s=min(float(duration), float(MAX_CLIP_SECONDS)),
+        tags=scene_suggestions(db, settings, scene).active_names(),
         format="gif" if settings.clips_as_gif else "video",
         codec="hevc" if settings.clips_hevc else "h264", max_edge=settings.clip_max_edge,
     )
@@ -240,23 +273,28 @@ def image_card(item: dict[str, Any], image: Image | None, first_seen: str | None
     }
 
 
-def clip_card(item: dict[str, Any], marker: Marker | None, first_seen: str | None) -> dict[str, Any]:
-    scene = marker.scene if marker else None
+def clip_card(item: dict[str, Any], marker: Marker | None, first_seen: str | None,
+              scene: Scene | None = None) -> dict[str, Any]:
+    """A clip's card: from its marker, or from its scene alone when the whole scene is being shared."""
+    scene = marker.scene if marker else scene
     f = scene.primary_file if scene else None
+    whole = marker is None and scene is not None
     return {
         **_state(item),
         "tab": "clips",
         "stash_marker_id": item["stash_marker_id"],
         "stash_scene_id": item["stash_scene_id"],
-        "thumb": relative_url(marker.screenshot_url) if marker else None,
-        "preview": relative_url(marker.stream_url) if marker else None,  # played on hover
+        "whole_scene": whole,
+        "thumb": relative_url(marker.screenshot_url if marker else scene.screenshot_url if scene else None),
+        "preview": relative_url(marker.stream_url if marker else scene.preview_url if scene else None),  # played on hover
         "width": f.width if f else None,
         "height": f.height if f else None,
         "duration": (item["out_s"] or 0) - (item["in_s"] or 0),
         "in_s": item["in_s"],
         "out_s": item["out_s"],
+        "scene_duration": scene.duration if scene else None,
         "format": (f.video_codec or "").upper() if f else None,
-        "created_at": marker.created_at if marker else item["created_at"],
+        "created_at": (marker.created_at if marker else scene.created_at if scene else None) or item["created_at"],
         "date": scene.date if scene else None,
         "first_seen": first_seen,
     }

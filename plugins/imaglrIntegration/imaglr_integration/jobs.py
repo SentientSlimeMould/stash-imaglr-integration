@@ -181,6 +181,11 @@ def clip_source(ctx: Context, item: dict[str, Any]) -> tuple[str, dict[str, str]
         if image is None:
             raise JobFailed("source_deleted", f"{item['source_title']} no longer exists in Stash.")
         source = image_source(image)
+    elif item["stash_scene_id"]:  # a whole scene, shared without a marker
+        scene = api.find_scene(ctx.stash, item["stash_scene_id"])
+        if scene is None:
+            raise JobFailed("source_deleted", f"{item['source_title']} no longer exists in Stash.")
+        source = scene_source(scene)
     else:
         raise JobFailed("source_missing", "This clip has no source in Stash.")
     if isinstance(source, LocalFile):
@@ -581,6 +586,8 @@ def swap_source_tags(ctx: Context, members: list[dict[str, Any]], queue_tag, don
                     api.marker_swap_tags(ctx.stash, marker, queue_tag, done_tag)
             elif m["stash_image_id"]:
                 api.image_swap_tags(ctx.stash, m["stash_image_id"], queue_tag, done_tag)
+            elif m["stash_scene_id"]:
+                api.scene_swap_tags(ctx.stash, m["stash_scene_id"], queue_tag, done_tag)
             repo.update_item(ctx.db, m["id"], tags_pending=False)
         except StashError as e:
             failed.append(f"{m['source_title']} ({e})")

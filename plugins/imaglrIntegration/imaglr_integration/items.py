@@ -101,10 +101,25 @@ def active_for_marker(db: Database, marker_id: str) -> dict[str, Any] | None:
     return decode(row) if row else None
 
 
-def sent_with_pending_swap(db: Database, *, marker_id: str | None = None, image_id: str | None = None) -> dict[str, Any] | None:
+def sent_with_pending_swap(db: Database, *, marker_id: str | None = None, image_id: str | None = None,
+                           scene_id: str | None = None) -> dict[str, Any] | None:
     """A sent item for this source whose Stash tags never got swapped (the swap failed or the task died)."""
+    if scene_id:  # a whole scene: the clip that has the scene but no marker
+        row = db.fetchone("SELECT * FROM items WHERE stash_scene_id=? AND stash_marker_id IS NULL AND status='sent' "
+                          "AND tags_pending=1 ORDER BY created_at DESC LIMIT 1", (scene_id,))
+        return decode(row) if row else None
     column, value = ("stash_marker_id", marker_id) if marker_id else ("stash_image_id", image_id)
     row = db.fetchone(f"SELECT * FROM items WHERE {column}=? AND status='sent' AND tags_pending=1 ORDER BY created_at DESC LIMIT 1", (value,))
+    return decode(row) if row else None
+
+
+def active_for_scene(db: Database, scene_id: str) -> dict[str, Any] | None:
+    """The scene's current whole-scene clip (one without a marker), if any."""
+    row = db.fetchone(
+        "SELECT * FROM items WHERE stash_scene_id=? AND stash_marker_id IS NULL AND kind='clip' AND status!='sent' "
+        "ORDER BY created_at DESC LIMIT 1",
+        (scene_id,),
+    )
     return decode(row) if row else None
 
 

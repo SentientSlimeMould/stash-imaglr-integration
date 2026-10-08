@@ -46,8 +46,10 @@ def op_queue(ctx: Context) -> dict[str, Any]:
     config, tags = _workflow(ctx)
     db = ctx.db
     markers = api.queued_markers(ctx.stash, tags[0].id)
+    scenes = api.queued_scenes(ctx.stash, tags[0].id)
     images = api.queued_images(ctx.stash, tags[0].id)
-    seen = services.mark_seen(db, [f"marker:{m.id}" for m in markers] + [f"image:{i.id}" for i in images])
+    seen = services.mark_seen(db, [f"marker:{m.id}" for m in markers] + [f"scene:{s.id}" for s in scenes]
+                              + [f"image:{i.id}" for i in images])
 
     cards: dict[str, dict[str, Any]] = {}
     for marker in markers:
@@ -55,6 +57,11 @@ def op_queue(ctx: Context) -> dict[str, Any]:
             continue
         item = services.item_from_marker(db, config, marker)
         cards[item["id"]] = services.clip_card(item, marker, seen.get(f"marker:{marker.id}"))
+    for scene in scenes:  # a scene with the queue tag is shared whole, without a marker
+        if _retry_pending_swap(ctx, tags, scene_id=scene.id):
+            continue
+        item = services.item_from_scene(db, config, scene)
+        cards[item["id"]] = services.clip_card(item, None, seen.get(f"scene:{scene.id}"), scene=scene)
     for image in images:
         if _retry_pending_swap(ctx, tags, image_id=image.id):
             continue
@@ -107,6 +114,16 @@ def _add_images(ctx: Context, image_ids: list[str], as_one_post: bool) -> dict[s
     return {"added": len(image_ids) - len(already), "already": len(already), "post_id": post_id}
 
 
+def op_add_scenes(ctx: Context) -> dict[str, Any]:
+    """Queue whole scenes (from the ⋯ menu of Stash's scene list): tag them, as tagging by hand would."""
+    ids = [str(i) for i in (ctx.args.get("scene_ids") or []) if str(i).strip()][:500]
+    if not ids:
+        raise UserError("No scenes selected.")
+    config, (queue_tag, _) = _workflow(ctx)
+    api.scenes_add_tags(ctx.stash, ids, [queue_tag.id])
+    return {"added": len(ids), "tag": queue_tag.name}
+
+
 def op_add_images(ctx: Context) -> dict[str, Any]:
     ids = ctx.args.get("image_ids")
     if not isinstance(ids, list):
@@ -157,6 +174,8 @@ def _file_view(ctx: Context, config, member: dict[str, Any]):
     source, sugg = services.source_suggestions(ctx.stash, ctx.db, config, member)
     if member["kind"] == "clip" and member["stash_marker_id"]:
         card = services.clip_card(member, source, None)
+    elif services.is_whole_scene(member):
+        card = services.clip_card(member, None, None, scene=source)
     elif member["kind"] == "still":
         card = services.still_card(member)
         card["image"] = card["thumb"]
@@ -250,6 +269,9 @@ def _remove_one(ctx: Context, item_id: str) -> int:
     image_ids = [m["stash_image_id"] for m in members if m["stash_image_id"]]
     if image_ids:
         api.images_remove_tags(ctx.stash, image_ids, [queue_tag.id])
+    scene_ids = [m["stash_scene_id"] for m in members if services.is_whole_scene(m)]
+    if scene_ids:
+        api.scenes_remove_tags(ctx.stash, scene_ids, [queue_tag.id])
     for marker in markers:
         api.marker_remove_tag(ctx.stash, marker, queue_tag)
     for m in members:
@@ -265,6 +287,7 @@ OPERATIONS = {
     "remove_from_queue": op_remove_from_queue,
     "queue": op_queue,
     "add_images": op_add_images,
+    "add_scenes": op_add_scenes,
     "add_gallery": op_add_gallery,
     "post_create": op_post_create,
     "post_split": op_post_split,

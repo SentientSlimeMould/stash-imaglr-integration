@@ -33,6 +33,8 @@ export interface Card {
   stash_image_id?: string | null;
   stash_marker_id?: string | null;
   stash_scene_id?: string | null;
+  whole_scene?: boolean; // a clip cut from a scene shared whole, with no marker behind it
+  scene_duration?: number | null;
   tab?: "clips" | "images";
   preview?: string | null; // clips: Stash's marker preview video
   in_s?: number | null;

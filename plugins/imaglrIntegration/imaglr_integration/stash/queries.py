@@ -38,7 +38,7 @@ mutation TagCreate($name: String!) { tagCreate(input: { name: $name }) { id name
 SCENE_FIELDS = """
   id title date created_at
   files { path duration width height frame_rate video_codec audio_codec format size }
-  paths { stream screenshot }
+  paths { stream screenshot preview }
   tags { id name }
   performers { name }
   studio { name }
@@ -155,6 +155,34 @@ query FindScenes($q: String!, $page: Int!, $perPage: Int!) {
 }
 """
 )
+
+FIND_QUEUED_SCENES = (
+    """
+query QueuedScenes($tagId: ID!, $page: Int!, $perPage: Int!) {
+  findScenes(
+    scene_filter: { tags: { value: [$tagId], modifier: INCLUDES } }
+    filter: { page: $page, per_page: $perPage, sort: "created_at", direction: DESC }
+  ) {
+    count
+    scenes { """
+    + SCENE_FIELDS
+    + """ }
+  }
+}
+"""
+)
+
+BULK_SCENE_ADD_TAGS = """
+mutation BulkSceneAddTags($ids: [ID!]!, $add: [ID!]) {
+  bulkSceneUpdate(input: { ids: $ids, tag_ids: { ids: $add, mode: ADD } }) { id }
+}
+"""
+
+BULK_SCENE_REMOVE_TAGS = """
+mutation BulkSceneRemoveTags($ids: [ID!]!, $remove: [ID!]) {
+  bulkSceneUpdate(input: { ids: $ids, tag_ids: { ids: $remove, mode: REMOVE } }) { id }
+}
+"""
 
 FIND_SCENE_BY_ID = (
     """
