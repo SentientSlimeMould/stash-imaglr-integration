@@ -47,7 +47,7 @@ export function CropControls({ crop, disabled, itemId, onChange, flip, onFlip }:
 
   const summary = [cropSummary(crop), flip ? "flipped" : ""].filter(Boolean).join(" · ");
   return (
-    <Fold id="picture" label="Picture" summary={summary}>
+    <Fold id="picture" label="Picture options" summary={summary}>
     <Form.Group className="mt-2">
       <Form.Label className="sr-only">Aspect</Form.Label>
       <div>

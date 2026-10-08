@@ -144,6 +144,18 @@ MIGRATIONS = [
     ALTER TABLE items ADD COLUMN codec TEXT NOT NULL DEFAULT 'h264';
     ALTER TABLE items ADD COLUMN max_edge INTEGER;
     """,
+    # v9: how a GIF loops: forward, or boomerang (forward then back)
+    """
+    ALTER TABLE items ADD COLUMN loop TEXT NOT NULL DEFAULT 'forward';
+    """,
+    # v10: a GIF's picture width (the ladder starts there); NULL = the feed width, 698 px
+    """
+    ALTER TABLE items ADD COLUMN gif_width INTEGER;
+    """,
+    # v11: a GIF's or WebP's frame rate; NULL = the ladder's own (15 at the top)
+    """
+    ALTER TABLE items ADD COLUMN gif_fps INTEGER;
+    """,
 ]
 
 

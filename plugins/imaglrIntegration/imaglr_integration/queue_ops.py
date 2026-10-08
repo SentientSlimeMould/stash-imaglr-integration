@@ -182,7 +182,8 @@ def _file_view(ctx: Context, config, member: dict[str, Any]):
     else:
         card = services.image_card(member, source, None)
         card["image"] = services.relative_url(source.image_url) if source else None
-    card.update({k: member[k] for k in ("crop", "in_s", "out_s", "mute", "flip", "format", "codec", "max_edge", "output_note",
+    card.update({k: member[k] for k in ("crop", "in_s", "out_s", "mute", "flip", "format", "codec", "max_edge", "loop", "gif_width", "gif_fps", "output_note",
+                                        "output_mime",
                                         "stash_marker_id", "stash_scene_id", "stash_image_id")})
     card["prepared"] = services.prepared_url(member["id"], member["output_path"]) if member["output_path"] else None
     return card, sugg
@@ -204,7 +205,8 @@ def op_item_detail(ctx: Context) -> dict[str, Any]:
     return {
         "item": {k: item[k] for k in ("id", "kind", "status", "tags", "caption", "blog_id", "action", "crop",
                                       "error_code", "error_detail", "progress", "source_title", "in_s", "out_s",
-                                      "mute", "flip", "format", "codec", "max_edge", "output_note", "hdr_warning", "tags_auto")},
+                                      "mute", "flip", "format", "codec", "max_edge", "loop", "gif_width", "gif_fps", "output_note", "hdr_warning", "tags_auto",
+                                      "updated_at")},
         "files": [card for card, _ in views],
         "suggestions": suggestions.to_dict(),
         "blogs": [blogs.public(b) for b in blogs.list_blogs(ctx.db)],

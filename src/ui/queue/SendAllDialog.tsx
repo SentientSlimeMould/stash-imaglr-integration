@@ -84,7 +84,7 @@ export function SendAllDialog({ itemIds, selected, onClose }: {
         {gifs.gifs ? (
           <div className="imaglr-plan-gifs">
             <div>
-              {gifs.gifs} {gifs.gifs === 1 ? "clip will be a GIF" : "clips will be GIFs"}.
+              {gifs.gifs} {gifs.gifs === 1 ? "clip will be a GIF or WebP" : "clips will be GIFs or WebPs"}.
               {gifs.long ? ` ${gifs.long} ${gifs.long === 1 ? "is" : "are"} longer than ${LONG_GIF_SECONDS} seconds. Send ${gifs.long === 1 ? "it" : "them"} as a video instead?` : null}
             </div>
             {gifs.long ? (
@@ -93,7 +93,7 @@ export function SendAllDialog({ itemIds, selected, onClose }: {
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLongAsVideo(e.target.checked)} />
             ) : null}
             <Form.Check id="imaglr-gif-fallback" type="checkbox" checked={gifFallback}
-              label="If a GIF can't be made small enough, send it as a video."
+              label="If a GIF or WebP can't be made small enough, send it as a video."
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGifFallback(e.target.checked)} />
           </div>
         ) : null}

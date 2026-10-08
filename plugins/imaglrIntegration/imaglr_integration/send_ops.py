@@ -25,9 +25,12 @@ from .settings import PLUGIN_ID
 from .tags.pipeline import MAX_TAG_LEN, MAX_TAGS
 
 IN_FLIGHT = ("exporting", "sending")
-EDITABLE = {"tags", "caption", "blog_id", "action", "crop", "in_s", "out_s", "mute", "flip", "format", "codec", "max_edge"}
-FORMATS = ("video", "gif")
+EDITABLE = {"tags", "caption", "blog_id", "action", "crop", "in_s", "out_s", "mute", "flip", "format", "codec", "max_edge", "loop",
+            "gif_width", "gif_fps"}
+MAX_ANIMATION_FPS = 60
+FORMATS = ("video", "gif", "webp")
 CODECS = ("h264", "hevc")
+LOOPS = ("forward", "boomerang")
 MAX_EDGES = (None, 1280, 854)  # as the source, 720p, 480p
 MAX_CLIP_SECONDS = services.MAX_CLIP_SECONDS
 ASPECTS = ("original", "9:16", "4:5", "1:1")
@@ -110,7 +113,17 @@ def op_item_update(ctx: Context) -> dict[str, Any]:
         changes["max_edge"] = int(changes["max_edge"]) if changes["max_edge"] else None
         if changes["max_edge"] not in MAX_EDGES:
             raise UserError("Unknown picture size.")
-    if {"in_s", "out_s", "mute", "flip", "format", "codec", "max_edge"} & set(changes):
+    if "loop" in changes and changes["loop"] not in LOOPS:
+        raise UserError("Unknown loop.")
+    if "gif_width" in changes:
+        changes["gif_width"] = int(changes["gif_width"]) if changes["gif_width"] else None
+        if changes["gif_width"] is not None and changes["gif_width"] not in {r[0] for r in fc.GIF_LADDER[1:]}:
+            raise UserError("Unknown GIF size.")
+    if "gif_fps" in changes:
+        changes["gif_fps"] = int(changes["gif_fps"]) if changes["gif_fps"] else None
+        if changes["gif_fps"] is not None and not (1 <= changes["gif_fps"] <= MAX_ANIMATION_FPS):
+            raise UserError("Unknown frame rate.")
+    if {"in_s", "out_s", "mute", "flip", "format", "codec", "max_edge", "loop", "gif_width", "gif_fps"} & set(changes):
         if item["kind"] != "clip":
             raise UserError("Only clips can be trimmed, muted, flipped or made into GIFs.")
         in_s = round(float(changes["in_s"]), 3) if "in_s" in changes else float(item["in_s"] or 0)
@@ -123,8 +136,10 @@ def op_item_update(ctx: Context) -> dict[str, Any]:
             raise UserError(f"Clips can be at most {MAX_CLIP_SECONDS // 60} minutes long.")
         changes.update(in_s=in_s, out_s=out_s, mute=bool(changes.get("mute", item["mute"])),
                        flip=bool(changes.get("flip", item["flip"])), format=changes.get("format", item["format"]),
-                       codec=changes.get("codec", item["codec"]), max_edge=changes.get("max_edge", item["max_edge"]))
-        keys = ("in_s", "out_s", "mute", "flip", "format", "codec", "max_edge")
+                       codec=changes.get("codec", item["codec"]), max_edge=changes.get("max_edge", item["max_edge"]),
+                       loop=changes.get("loop", item["loop"]), gif_width=changes.get("gif_width", item["gif_width"]),
+                       gif_fps=changes.get("gif_fps", item["gif_fps"]))
+        keys = ("in_s", "out_s", "mute", "flip", "format", "codec", "max_edge", "loop", "gif_width", "gif_fps")
         if tuple(changes[k] for k in keys) != tuple(item[k] for k in keys):
             changes.update(output_path=None, output_bytes=None, output_mime=None, output_note=None,
                            size_guard_retried=False)  # export again
@@ -225,7 +240,7 @@ def plan_send_all(ctx: Context, item_ids: list[str]) -> list[dict[str, Any]]:
                 entry.update(blog_id=blog["id"], blog=blog["name"] or f"Blog {blog['id']}",
                              action="draft" if action == "publish" else action, downgraded=action == "publish")
                 members = repo.set_members(ctx.db, item_id) if item["kind"] == "set" else [item]
-                gifs = [m for m in members if m["kind"] == "clip" and m["format"] == "gif"]
+                gifs = [m for m in members if m["kind"] == "clip" and m["format"] in ("gif", "webp")]  # animated: no sound, image limit
                 if gifs:
                     entry["gif"] = True
                     entry["long_gif"] = any(((m["out_s"] or 0) - (m["in_s"] or 0)) > LONG_GIF_SECONDS for m in gifs)

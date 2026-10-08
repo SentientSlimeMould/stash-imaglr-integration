@@ -94,8 +94,8 @@ export function Editor({ itemId, onClose }: Props) {
   const [tags, setTags] = React.useState<string[]>([]);
   const [caption, setCaption] = React.useState("");
   const [crop, setCrop] = React.useState<Crop>({ aspect: "original", position: 0.5 });
-  const [trim, setTrim] = React.useState<{ inS: number; outS: number; mute: boolean; flip: boolean; format: "video" | "gif"; codec: "h264" | "hevc"; maxEdge: number | null }>(
-    { inS: 0, outS: 0, mute: false, flip: false, format: "video", codec: "h264", maxEdge: null });
+  const [trim, setTrim] = React.useState<{ inS: number; outS: number; mute: boolean; flip: boolean; format: "video" | "gif" | "webp"; codec: "h264" | "hevc"; maxEdge: number | null; loop: "forward" | "boomerang"; gifWidth: number | null; gifFps: number | null }>(
+    { inS: 0, outS: 0, mute: false, flip: false, format: "video", codec: "h264", maxEdge: null, loop: "forward", gifWidth: null, gifFps: null });
   const [blogId, setBlogId] = React.useState<number | null>(null);
   const [action, setAction] = React.useState<SendAction | null>(null);
   const [confirmPublish, setConfirmPublish] = React.useState(false);
@@ -105,6 +105,7 @@ export function Editor({ itemId, onClose }: Props) {
   const [busy, setBusy] = React.useState(false);
   const [changed, setChanged] = React.useState(false);
   const [dirty, setDirty] = React.useState(false);
+  const [makingGif, setMakingGif] = React.useState(false); // the GIF preview is being made
 
   const load = React.useCallback(() => {
     runOperation<ItemDetail>("item_detail", { item_id: itemId }).then((d) => {
@@ -115,7 +116,8 @@ export function Editor({ itemId, onClose }: Props) {
       setCaption(d.item.caption);
       setCrop(d.item.crop);
       setTrim({ inS: d.item.in_s ?? 0, outS: d.item.out_s ?? 0, mute: d.item.mute, flip: d.item.flip, format: d.item.format,
-        codec: d.item.codec ?? "h264", maxEdge: d.item.max_edge ?? null });
+        codec: d.item.codec ?? "h264", maxEdge: d.item.max_edge ?? null, loop: d.item.loop ?? "forward", gifWidth: d.item.gif_width ?? null,
+        gifFps: d.item.gif_fps ?? null });
       setBlogId(d.item.blog_id);
       setAction(d.item.action);
       setDirty(false);
@@ -160,7 +162,7 @@ export function Editor({ itemId, onClose }: Props) {
         tags, caption, crop, blog_id: blogId, action,
         ...(resetTags ? { tags_auto: true } : {}),
         ...(isClip ? { in_s: trim.inS, out_s: trim.outS, mute: trim.mute, flip: trim.flip, format: trim.format,
-          codec: trim.codec, max_edge: trim.maxEdge } : {}),
+          codec: trim.codec, max_edge: trim.maxEdge, loop: trim.loop, gif_width: trim.gifWidth, gif_fps: trim.gifFps } : {}),
       },
     });
     setDirty(false);
@@ -208,6 +210,20 @@ export function Editor({ itemId, onClose }: Props) {
       else onClose(true);
     } catch (e) {
       Toast.error(e);
+    }
+  }
+
+  async function previewGif() {
+    setMakingGif(true);
+    try {
+      await save();
+      await runOperation("gif_preview", { item_id: item.id });
+      setChanged(true);
+      load();
+    } catch (e) {
+      Toast.error(e);
+    } finally {
+      setMakingGif(false);
     }
   }
 
@@ -287,8 +303,14 @@ export function Editor({ itemId, onClose }: Props) {
             value={{ ...trim, crop }}
             disabled={locked}
             gifTargetMb={detail.gif_target_mb}
+            sourceFps={files[0].fps ?? null}
+            gifPreview={!dirty && trim.format !== "video" && files[0].output_mime === `image/${trim.format}` && files[0].prepared
+              // the file keeps its name across re-makes, so the item's update time keeps the browser from showing a stale copy
+              ? { url: `${files[0].prepared}?v=${encodeURIComponent(item.updated_at)}`, note: files[0].output_note } : null}
+            makingGif={makingGif}
+            onPreviewGif={previewGif}
             onChange={(v: ClipState) => {
-              edit(setTrim)({ inS: v.inS, outS: v.outS, mute: v.mute, flip: v.flip, format: v.format, codec: v.codec, maxEdge: v.maxEdge });
+              edit(setTrim)({ inS: v.inS, outS: v.outS, mute: v.mute, flip: v.flip, format: v.format, codec: v.codec, maxEdge: v.maxEdge, loop: v.loop, gifWidth: v.gifWidth, gifFps: v.gifFps });
               setCrop(v.crop);
             }}
             onSaveStill={saveStill}

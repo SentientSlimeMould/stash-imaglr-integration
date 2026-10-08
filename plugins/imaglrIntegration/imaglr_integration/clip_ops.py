@@ -7,6 +7,7 @@ from typing import Any
 
 from . import items as repo
 from . import jobs, services
+from . import settings as plugin_settings
 from .context import Context, UserError
 
 
@@ -27,6 +28,26 @@ def op_still_create(ctx: Context) -> dict[str, Any]:
     return {"item_id": still["id"], "thumb": services.prepared_url(still["id"], frame)}  # type: ignore[index]
 
 
+def op_gif_preview(ctx: Context) -> dict[str, Any]:
+    """Make the GIF a clip would be sent as, now, so the editor can show it: the same export the send task
+    runs, stored as the clip's prepared file, so sending uploads exactly what was previewed. Edits that change
+    the picture clear the prepared file again (send_ops), which is how the editor knows a preview is stale."""
+    clip = repo.get_item(ctx.db, ctx.arg("item_id"))
+    if clip is None or clip["kind"] != "clip":
+        raise UserError("That clip no longer exists. Refresh the page.")
+    if clip["format"] not in jobs.ANIMATED:
+        raise UserError("Choose GIF or WebP under Format first.")
+    if clip["status"] in services.BUSY_STATUSES:
+        raise UserError("This clip is being sent.")
+    try:
+        config = plugin_settings.load(ctx.stash)
+        prepared = jobs.prepare_clip(ctx, clip, jobs.media_tools(ctx), lambda: False, lambda f: None, config=config)
+    except jobs.JobFailed as e:
+        raise UserError(e.detail) from None
+    return {"url": services.prepared_url(prepared["id"], prepared["output_path"]), "note": prepared["output_note"],
+            "bytes": prepared["output_bytes"]}
+
+
 def op_crop_detect(ctx: Context) -> dict[str, Any]:
     """Edge trims that cut the black borders off an item's picture (a clip is sampled across its range).
     Nothing is saved: the editor shows the result and the user decides."""
@@ -42,4 +63,5 @@ def op_crop_detect(ctx: Context) -> dict[str, Any]:
 OPERATIONS = {
     "still_create": op_still_create,
     "crop_detect": op_crop_detect,
+    "gif_preview": op_gif_preview,
 }

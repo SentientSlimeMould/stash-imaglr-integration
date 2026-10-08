@@ -186,11 +186,28 @@ def video_note(codec: str, size: int, long_edge: int) -> str:
     return f"{fc.CODEC_LABELS.get(codec, codec)} · {size / 1048576:.1f} MB · {long_edge} px"
 
 
-def gif_note(size: int, long_edge: int, fps: int) -> str:
-    return f"GIF · {size / 1048576:.1f} MB · {long_edge} px · {fps} fps"
+def gif_note(size: int, width: int, fps: int, loop: str = "forward", fmt: str = "gif") -> str:
+    loop_part = " · boomerang" if loop == "boomerang" else ""
+    label = "WebP" if fmt == "webp" else "GIF"
+    return f"{label} · {size / 1048576:.1f} MB · {width} px wide · {fps} fps{loop_part}"
 
 
-def export_gif(
+def webp_available(ffmpeg: str) -> bool:
+    return "libwebp_anim" in encoders(ffmpeg)
+
+
+def export_gif(src: str, out_dir: str, **kw) -> ExportResult:
+    """Cut a clip to an animated GIF under the target; see export_animation."""
+    return export_animation("gif", src, out_dir, **kw)
+
+
+def export_webp(src: str, out_dir: str, **kw) -> ExportResult:
+    """Cut a clip to an animated WebP under the target; see export_animation."""
+    return export_animation("webp", src, out_dir, **kw)
+
+
+def export_animation(
+    fmt: str,
     src: str,
     out_dir: str,
     *,
@@ -208,27 +225,40 @@ def export_gif(
     should_cancel=None,
     probe_info: ProbeInfo | None = None,
     edges: dict[str, float] | None = None,
+    loop: str = "forward",
+    max_width: int | None = None,
+    fps: int | None = None,
 ) -> ExportResult:
-    """Cut [in_s, out_s] of src to an animated GIF under target_bytes, going down the quality ladder until it
-    fits. The bottom rung is accepted up to limit_bytes (imaglr's ceiling); beyond that GifTooLarge says how
-    much shorter the clip would have to be."""
+    """Cut [in_s, out_s] of src to an animated GIF or WebP under target_bytes, going down the format's quality
+    ladder until it fits (starting at max_width when given). The bottom rung is accepted up to limit_bytes
+    (imaglr's ceiling); beyond that GifTooLarge says how much shorter the clip would have to be."""
     os.makedirs(out_dir, exist_ok=True)
     info = probe_info or probe(settings.ffprobe, src, headers)
     w, h = info.display_size
     if not w or not h:
         raise UnsupportedMedia("ffprobe could not read the video's dimensions")
     duration = max(0.1, out_s - in_s)
-    final = os.path.join(out_dir, output_name(title, in_s, out_s, "gif"))
+    final = os.path.join(out_dir, output_name(title, in_s, out_s, fmt))
     part = final + ".part"
     for stale in glob.glob(os.path.join(glob.escape(out_dir), "*.part")):
         _remove(stale)
 
     size = 0
-    rungs = fc.GIF_LADDER
-    for n, (long_edge, gif_fps, colors) in enumerate(rungs):
-        cmd = fc.build_gif_cmd(settings.ffmpeg, src, part, in_s, out_s, w, h, long_edge=long_edge, gif_fps=gif_fps,
-                               colors=colors, aspect=aspect, position=position, flip=flip, headers=headers,
-                               edges=edges)
+    rungs = fc.WEBP_LADDER if fmt == "webp" else fc.GIF_LADDER
+    if max_width:  # the user's picture size: the ladder starts at that rung
+        rungs = tuple(r for r in rungs if r[0] <= max_width) or rungs[-1:]
+    wanted_fps = fps
+    for n, (rung_width, fps, quality) in enumerate(rungs):
+        if wanted_fps:  # the user's frame rate, at every rung
+            fps = wanted_fps
+        long_edge = fc.gif_long_edge_cap(w, h, aspect, position, rung_width, edges)
+        common = dict(aspect=aspect, position=position, flip=flip, headers=headers, edges=edges, loop=loop)
+        if fmt == "webp":
+            cmd = fc.build_webp_cmd(settings.ffmpeg, src, part, in_s, out_s, w, h, long_edge=long_edge, fps=fps,
+                                    quality=quality, **common)
+        else:
+            cmd = fc.build_gif_cmd(settings.ffmpeg, src, part, in_s, out_s, w, h, long_edge=long_edge, gif_fps=fps,
+                                   colors=quality, **common)
         lo, hi = 0.9 * n / len(rungs), 0.9 * (n + 1) / len(rungs)
         run_ffmpeg(cmd, output=part, duration_s=duration, progress_cb=progress_cb, should_cancel=should_cancel,
                    progress_range=(lo, hi))
@@ -236,10 +266,12 @@ def export_gif(
         if size <= target_bytes:
             break
         if n < len(rungs) - 1:
-            log.info(f"GIF is {size / 1048576:.1f} MB at {long_edge} px / {gif_fps} fps; trying a smaller setting")
+            log.info(f"{fmt.upper()} is {size / 1048576:.1f} MB at {rung_width} px wide / {fps} fps; trying a smaller setting")
             _remove(part)
     else:
-        long_edge, gif_fps, colors = rungs[-1]
+        rung_width, fps, quality = rungs[-1]
+        fps = wanted_fps or fps
+        long_edge = fc.gif_long_edge_cap(w, h, aspect, position, rung_width, edges)
         if size > limit_bytes:
             _remove(part)
             raise GifTooLarge(size, limit_bytes, fit_seconds=max(1.0, duration * limit_bytes * 0.9 / size))
@@ -254,7 +286,7 @@ def export_gif(
     if progress_cb:
         progress_cb(1.0)
     ow, oh = _output_dims(w, h, aspect, position, long_edge, edges)
-    return ExportResult(final_path, size, ow, oh, False, thumb, gif_note(size, long_edge, gif_fps))
+    return ExportResult(final_path, size, ow, oh, False, thumb, gif_note(size, ow, fps, loop, fmt))
 
 
 def detect_edges(ffmpeg: str, src: str, width: int, height: int, times: list[float],

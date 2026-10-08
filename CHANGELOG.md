@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- **WebP** joins Video and GIF as a Format for clips: an animated WebP plays automatically in the feed like a GIF,
+  has no sound, and is usually a third to a half of the GIF's size, so it loads faster. Same loop, picture size,
+  preview and size ladder as GIF. (Needs an ffmpeg with the animated WebP encoder, which Stash's has.)
+- **Preview a GIF before sending.** In the clip editor, **Preview GIF** makes the GIF exactly as it would be sent
+  and shows it looping in place of the video, with its size, width and frame rate. Sending then uploads that
+  very file. Any edit that changes the picture clears the preview, so what you see is always current.
+- **Boomerang GIFs.** A **Loop** choice under Format: Forward, or Boomerang (forward then back), which loops
+  without a jump. The estimate and the long-GIF warning allow for the doubled frames.
+- A **Frame rate** for GIFs and WebPs under Format: Auto (the ladder's own, 15 at the top), or any of the
+  usual rates up to the source's own; the estimate scales with it. The Format hint now states the pros and cons
+  of whichever format is selected.
+- A **Picture size** for GIFs under Format: Original (the feed width), 480 px or 320 px; the estimate follows.
+- GIFs are sized for imaglr's feed: the first rung is now 698 px wide (the feed's content width) so a GIF is
+  never shown upscaled, and the card says the width ("GIF · 9.4 MB · 698 px wide · 15 fps").
+
 ## 0.1.17 — 2026-10-08
 
 - The menu icon is redrawn to the proportions of imaglr's own favicon: a narrower ring, a wider gap and a large
@@ -12,9 +29,9 @@
 
 ## 0.1.16 — 2026-10-08
 
-- The clip editor is laid out in sections: the preview and trim, then **Picture** (crop, edge trims, flip) and
-  **Format** (video or GIF, codec, picture size, sound, with the size estimate), each folded away with a
-  header that says what is set, e.g. "Format · Video · H.264 · 1080p · about 45 MB". The image editor has the
+- The clip editor is laid out in sections: the preview and trim, then **Picture options** (crop, edge trims, flip) and
+  **Format options** (video or GIF, codec, picture size, sound, with the size estimate), each folded away with a
+  header that says what is set, e.g. "Format options · Video · H.264 · 1080p · about 45 MB". The image editor has the
   same Picture section. Both remember whether you left them open.
 - The crop can now **trim the edges** of a clip or image, for black borders the aspect presets couldn't
   remove: top, bottom, left and right in percent, with a **Detect borders** button that asks ffmpeg where

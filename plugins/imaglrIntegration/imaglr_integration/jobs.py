@@ -30,7 +30,11 @@ from .media.naming import slugify
 from .media import ffmpeg_cmd as fc
 from .media.probe import probe
 from .media.video_export import (GifTooLarge, UnsupportedMedia, VideoSettings, detect_edges, export_clip, export_gif,
-                                 gif_to_mp4, grab_frame, hevc_available)
+                                 export_webp, gif_to_mp4, grab_frame, hevc_available, webp_available)
+
+ANIMATED = ("gif", "webp")  # clip formats that are images to imaglr: autoplay, no sound, the 40 MB image limit
+ANIMATED_MIME = {"gif": "image/gif", "webp": "image/webp"}
+ANIMATED_LABEL = {"gif": "GIF", "webp": "WebP"}
 from .stash import HttpStream, LocalFile, StashError, api
 from .stash.paths import image_source, scene_source
 from .tags.caption import caption_to_html
@@ -209,9 +213,14 @@ def prepare_clip(ctx: Context, member: dict[str, Any], tools: tuple[str, str], s
     src, headers = clip_source(ctx, member)
     crop = member["crop"] or {}
     edges = fc.clean_edges(crop.get("edges"))
-    if member["format"] == "gif":
+    if member["format"] in ANIMATED:
+        fmt, label = member["format"], ANIMATED_LABEL[member["format"]]
+        if fmt == "webp" and not webp_available(ffmpeg):
+            raise JobFailed("no_webp", f"{member['source_title']}: this Stash's ffmpeg has no animated WebP encoder. "
+                            "Choose GIF or video for the clip.")
+        export = export_webp if fmt == "webp" else export_gif
         try:
-            result = export_gif(
+            result = export(
                 src, _fresh_dir(ctx, member["id"]), title=member["source_title"] or "clip",
                 in_s=float(member["in_s"] or 0), out_s=float(member["out_s"] or 0),
                 settings=VideoSettings(ffmpeg, ffprobe), headers=headers,
@@ -219,15 +228,16 @@ def prepare_clip(ctx: Context, member: dict[str, Any], tools: tuple[str, str], s
                 limit_bytes=int(plugin_settings.GIF_HARD_LIMIT_MB * 1024 * 1024 * SAFETY),
                 aspect=crop.get("aspect") or "original", position=float(crop.get("position", 0.5)),
                 flip=bool(member["flip"]), progress_cb=progress, should_cancel=should_cancel, edges=edges,
+                loop=member.get("loop") or "forward", max_width=member.get("gif_width"), fps=member.get("gif_fps"),
             )
         except GifTooLarge as e:
             if not gif_fallback:
                 raise JobFailed(
                     "gif_too_large",
-                    f"This GIF is too big even at its smallest ({e.size / 1048576:.0f} MB; the limit is "
+                    f"This {label} is too big even at its smallest ({e.size / 1048576:.0f} MB; the limit is "
                     f"{plugin_settings.GIF_HARD_LIMIT_MB}). Trim it to about {e.fit_seconds:.0f} seconds, or send it as a video.",
                 ) from None
-            log.info(f"{member['source_title']}: GIF would be {e.size / 1048576:.0f} MB; sending as a video instead")
+            log.info(f"{member['source_title']}: {label} would be {e.size / 1048576:.0f} MB; sending as a video instead")
             member = repo.update_item(ctx.db, member["id"], format="video") or member  # type: ignore[assignment]
             return prepare_clip(ctx, member, tools, should_cancel, progress, config=config,
                                 max_bytes=max_bytes) | {"gif_fallback": True}
@@ -236,7 +246,7 @@ def prepare_clip(ctx: Context, member: dict[str, Any], tools: tuple[str, str], s
         except FfmpegError as e:
             raise JobFailed("ffmpeg_failed", f"{member['source_title']}: {e}") from None
         return repo.update_item(ctx.db, member["id"], output_path=result.path, output_bytes=result.bytes,
-                                output_mime="image/gif", output_note=result.note, hdr_warning=False,
+                                output_mime=ANIMATED_MIME[fmt], output_note=result.note, hdr_warning=False,
                                 error_code=None, error_detail=None)  # type: ignore[return-value]
     codec = member["codec"] or "h264"
     if codec == "hevc" and not hevc_available(ffmpeg):
@@ -327,7 +337,7 @@ def grab_still(ctx: Context, clip: dict[str, Any], t: float, still_id: str) -> s
 def _is_prepared(member: dict[str, Any], max_bytes: int | None = None) -> bool:
     path = member["output_path"]
     if member["kind"] == "clip":  # a prepared GIF is no use when the clip is to go as a video, and vice versa
-        wanted = "image/gif" if member["format"] == "gif" else "video/mp4"
+        wanted = ANIMATED_MIME.get(member["format"], "video/mp4")
         if member["output_mime"] != wanted:
             return False
     if max_bytes and (member["output_bytes"] or 0) > max_bytes:  # e.g. prepared for a bigger limit than now
@@ -336,7 +346,7 @@ def _is_prepared(member: dict[str, Any], max_bytes: int | None = None) -> bool:
 
 
 def _is_video(member: dict[str, Any]) -> bool:
-    return member["kind"] == "clip" and member["format"] != "gif"
+    return member["kind"] == "clip" and member["format"] not in ANIMATED
 
 
 def video_budget(members: list[dict[str, Any]]) -> int:
@@ -436,7 +446,7 @@ def run_send(ctx: Context, item_id: str, action: str | None = None, gif_fallback
         return
     should_cancel = _cancel_check(ctx, item_id)
     members = repo.set_members(ctx.db, item_id) if item["kind"] == "set" else [item]
-    if format_override in ("video", "gif"):
+    if format_override in ("video",) + ANIMATED:
         members = [{**m, "format": format_override} if m["kind"] == "clip" else m for m in members]
     try:
         if not members:
