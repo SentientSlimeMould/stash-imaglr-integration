@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { edgeLabel, outputEdge, videoEstimate } from "../../src/ui/lib/video.ts";
+import { edgeLabel, outputEdge, sizeChoicesFor, videoEstimate } from "../../src/ui/lib/video.ts";
 
 test("picture size labels and the output edge never exceed the source or 1080p", () => {
   assert.equal(edgeLabel(1920), "1080p");
@@ -31,4 +31,11 @@ test("a long clip is warned about, with advice that fits the choices made", () =
   assert.match(videoEstimate(420, "hevc", 1920).text, /Choose a smaller picture\./);
   assert.match(videoEstimate(1200, "h264", 854).text, /Choose H\.265 or a shorter clip\./);
   assert.match(videoEstimate(1200, "hevc", 854).text, /Choose a shorter clip\./);
+});
+
+test("only picture sizes smaller than the source are offered", () => {
+  assert.deepEqual(sizeChoicesFor(1920).map((o) => o.label), ["Original", "720p", "480p"]);
+  assert.deepEqual(sizeChoicesFor(1280).map((o) => o.label), ["Original", "480p"]);
+  assert.deepEqual(sizeChoicesFor(320).map((o) => o.label), ["Original"]);
+  assert.deepEqual(sizeChoicesFor(null).map((o) => o.label), ["Original", "720p", "480p"]);
 });
