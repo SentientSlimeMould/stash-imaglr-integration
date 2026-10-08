@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The crop controls shared by the clip and image editors: the aspect preset and its position, and edge trims
-// for black borders, with a detector that asks ffmpeg where the picture is. Same react-bootstrap pieces as
-// Stash's own forms; every button is thumb-sized.
+// The editor's Picture section, shared by the clip and image editors: everything that changes what is in the
+// frame. The aspect preset and its position, edge trims for black borders with a detector that asks ffmpeg
+// where the picture is, and (for clips) the horizontal flip. Same react-bootstrap pieces as Stash's own
+// forms; every button is thumb-sized. The section folds away; its header says what is set.
 import React from "react";
 import { runOperation } from "../api.ts";
 import { ASPECTS, cropSummary, EDGE_NAMES, emptyEdges, hasEdges, MAX_EDGE_PERCENT } from "../lib/crop.ts";
@@ -15,9 +16,11 @@ interface Props {
   disabled: boolean;
   itemId: string;
   onChange: (crop: Crop) => void;
+  flip?: boolean; // clips only: mirror left-to-right
+  onFlip?: (flip: boolean) => void;
 }
 
-export function CropControls({ crop, disabled, itemId, onChange }: Props) {
+export function CropControls({ crop, disabled, itemId, onChange, flip, onFlip }: Props) {
   const { Button, ButtonGroup, Form } = PluginApi.libraries.Bootstrap;
   const Toast = PluginApi.hooks.useToast();
   const [detecting, setDetecting] = React.useState(false);
@@ -42,8 +45,9 @@ export function CropControls({ crop, disabled, itemId, onChange }: Props) {
     }
   }
 
+  const summary = [cropSummary(crop), flip ? "flipped" : ""].filter(Boolean).join(" · ");
   return (
-    <Fold id="crop" label="Crop" summary={cropSummary(crop)}>
+    <Fold id="picture" label="Picture" summary={summary}>
     <Form.Group className="mt-2">
       <Form.Label className="sr-only">Aspect</Form.Label>
       <div>
@@ -89,6 +93,15 @@ export function CropControls({ crop, disabled, itemId, onChange }: Props) {
           </div>
         ))}
       </div>
+      {onFlip ? (
+        <>
+          <Form.Check id="imaglr-flip" type="switch" label="Flip horizontally" className="mt-2" checked={!!flip} disabled={disabled}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => onFlip(e.target.checked)} />
+          {flip ? (
+            <div className="small text-muted">The sent clip is mirrored left-to-right; the preview above isn't.</div>
+          ) : null}
+        </>
+      ) : null}
     </Form.Group>
     </Fold>
   );

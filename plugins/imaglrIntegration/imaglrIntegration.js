@@ -188,16 +188,16 @@
     const label = `${CODEC_LABELS[codec]} at ${edgeLabel(longEdge)}`;
     if (usualMb <= VIDEO_CAP_MB * 0.95 || s === 0) {
       const mb = usualMb < 10 ? Math.max(1, Math.round(usualMb)) : Math.round(usualMb / 5) * 5;
-      return { text: `About ${mb} MB as ${label}.`, warn: false };
+      return { text: `About ${mb} MB as ${label}.`, short: `about ${mb} MB`, warn: false };
     }
     const budget = Math.max(200, Math.round(VIDEO_CAP_MB * 8192 * 0.95 / s - audio));
     const floor = lookup(FLOOR_KBPS, longEdge, codec);
     const rate = budget >= 1e3 ? `${(budget / 1e3).toFixed(1)} Mbit/s` : `${budget} kbit/s`;
     if (budget >= floor) {
-      return { text: `Over ${VIDEO_CAP_MB} MB at the usual quality, so it will be encoded at about ${rate} as ${label}, which should still look fine.`, warn: false };
+      return { text: `Over ${VIDEO_CAP_MB} MB at the usual quality, so it will be encoded at about ${rate} as ${label}, which should still look fine.`, short: `about ${rate}, fine`, warn: false };
     }
     const advice = codec === "h264" && longEdge > 854 ? "Choose a smaller picture or H.265." : longEdge > 854 ? "Choose a smaller picture." : codec === "h264" ? "Choose H.265 or a shorter clip." : "Choose a shorter clip.";
-    return { text: `Over ${VIDEO_CAP_MB} MB at the usual quality, so it will be encoded at about ${rate} as ${label}, which will look poor. ${advice}`, warn: true };
+    return { text: `Over ${VIDEO_CAP_MB} MB at the usual quality, so it will be encoded at about ${rate} as ${label}, which will look poor. ${advice}`, short: `about ${rate}, will look poor`, warn: true };
   }
 
   // src/ui/lib/crop.ts
@@ -269,7 +269,7 @@
     } catch {
     }
   }
-  function Fold({ id, label, summary, children }) {
+  function Fold({ id, label, summary, tone = "muted", children }) {
     const { Button, Collapse } = PluginApi.libraries.Bootstrap;
     const [open, setOpen] = react_default.useState(() => load(id));
     return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-fold" }, /* @__PURE__ */ react_default.createElement(
@@ -286,14 +286,14 @@
       },
       open ? "\u25BE" : "\u25B8",
       " ",
-      label,
-      !open && summary ? /* @__PURE__ */ react_default.createElement("span", { className: "text-muted" }, " \xB7 ", summary) : null
+      /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-fold-label" }, label),
+      !open && summary ? /* @__PURE__ */ react_default.createElement("span", { className: tone === "warning" ? "text-warning" : "text-muted" }, " \xB7 ", summary) : null
     ), /* @__PURE__ */ react_default.createElement(Collapse, { in: open }, /* @__PURE__ */ react_default.createElement("div", { id: `imaglr-fold-${id}` }, children)));
   }
 
   // src/ui/editor/CropControls.tsx
   var LABELS = { top: "Top", bottom: "Bottom", left: "Left", right: "Right" };
-  function CropControls({ crop, disabled, itemId, onChange }) {
+  function CropControls({ crop, disabled, itemId, onChange, flip, onFlip }) {
     const { Button, ButtonGroup, Form } = PluginApi.libraries.Bootstrap;
     const Toast = PluginApi.hooks.useToast();
     const [detecting, setDetecting] = react_default.useState(false);
@@ -315,7 +315,8 @@
         setDetecting(false);
       }
     }
-    return /* @__PURE__ */ react_default.createElement(Fold, { id: "crop", label: "Crop", summary: cropSummary(crop) }, /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, { className: "sr-only" }, "Aspect"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(ASPECTS).map((a) => /* @__PURE__ */ react_default.createElement(
+    const summary = [cropSummary(crop), flip ? "flipped" : ""].filter(Boolean).join(" \xB7 ");
+    return /* @__PURE__ */ react_default.createElement(Fold, { id: "picture", label: "Picture", summary }, /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, { className: "sr-only" }, "Aspect"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(ASPECTS).map((a) => /* @__PURE__ */ react_default.createElement(
       Button,
       {
         key: a,
@@ -379,7 +380,18 @@
         onClick: () => setEdge(name, percent(name) + 1)
       },
       "+"
-    ))))));
+    )))), onFlip ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(
+      Form.Check,
+      {
+        id: "imaglr-flip",
+        type: "switch",
+        label: "Flip horizontally",
+        className: "mt-2",
+        checked: !!flip,
+        disabled,
+        onChange: (e) => onFlip(e.target.checked)
+      }
+    ), flip ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted" }, "The sent clip is mirrored left-to-right; the preview above isn't.") : null) : null));
   }
 
   // src/ui/lib/send.ts
@@ -566,11 +578,10 @@
       }
     ), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-time-buttons" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onNudge(-1), "aria-label": `${label} back 1 second` }, "\u22121s"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onNudge(-0.1), "aria-label": `${label} back a tenth` }, "\u22120.1"), /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", disabled, onClick: onSet }, "Set here"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onNudge(0.1), "aria-label": `${label} forward a tenth` }, "+0.1"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onNudge(1), "aria-label": `${label} forward 1 second` }, "+1s")));
   }
-  function moreSummary(v) {
-    const parts = [];
-    if (v.codec === "hevc") parts.push(CODEC_LABELS.hevc);
-    if (v.maxEdge) parts.push(edgeLabel(v.maxEdge));
-    return parts.join(" \xB7 ");
+  function formatHeader(v, estimate, edge) {
+    if (v.format === "gif") return { text: `GIF \xB7 ${describeGifEstimate(v.outS - v.inS)}`, warn: v.outS - v.inS > LONG_GIF_SECONDS };
+    const parts = ["Video", CODEC_LABELS[v.codec], edgeLabel(edge), v.mute ? "no sound" : "", estimate.short];
+    return { text: parts.filter(Boolean).join(" \xB7 "), warn: estimate.warn };
   }
   function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTargetMb, onChange, onSaveStill }) {
     const { Button, ButtonGroup, Form } = PluginApi.libraries.Bootstrap;
@@ -611,6 +622,8 @@
     }
     const sourceEdge = Math.max(size.vw, size.vh) || null;
     const sizeChoices = sizeChoicesFor(sourceEdge);
+    const estimate = videoEstimate(value.outS - value.inS, value.codec, outputEdge(sourceEdge, value.maxEdge), value.mute);
+    const header = formatHeader(value, estimate, outputEdge(sourceEdge, value.maxEdge));
     const rect = overlayRect(size.w, size.h, size.vw, size.vh, value.crop.aspect, value.crop.position, value.crop.edges);
     return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-clip" }, error ? /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-danger" }, "Can't play this video: ", error) : null, /* @__PURE__ */ react_default.createElement("div", { ref: box, className: "imaglr-preview imaglr-video" }, playback ? /* @__PURE__ */ react_default.createElement(
       "video",
@@ -652,7 +665,17 @@
         onNudge: (d) => trim(value.inS, value.outS + d, "out"),
         onType: (t) => trim(value.inS, t, "out")
       }
-    ), /* @__PURE__ */ react_default.createElement(CropControls, { crop: value.crop, disabled, itemId, onChange: (crop) => onChange({ ...value, crop }) }), /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Format"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, ["video", "gif"].map((f) => /* @__PURE__ */ react_default.createElement(
+    ), /* @__PURE__ */ react_default.createElement(
+      CropControls,
+      {
+        crop: value.crop,
+        disabled,
+        itemId,
+        onChange: (crop) => onChange({ ...value, crop }),
+        flip: value.flip,
+        onFlip: (flip) => onChange({ ...value, flip })
+      }
+    ), /* @__PURE__ */ react_default.createElement(Fold, { id: "format", label: "Format", summary: header.text, tone: header.warn ? "warning" : "muted" }, /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2" }, /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, ["video", "gif"].map((f) => /* @__PURE__ */ react_default.createElement(
       Button,
       {
         key: f,
@@ -661,31 +684,7 @@
         onClick: () => onChange({ ...value, format: f })
       },
       f === "video" ? "Video" : "GIF"
-    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "GIFs play automatically in feeds. Videos are higher quality, are quicker to load and have sound, but require the user to click play."), value.format === "gif" ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "This will be a GIF of ", describeGifEstimate(value.outS - value.inS), ". GIFs over about ", gifTargetMb, " MB are slow to load, so the plugin will automatically lower the quality if it has to."), value.outS - value.inS > LONG_GIF_SECONDS ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning mt-1" }, "Long GIFs may need lower frame-rates and resolutions. Clips below ", LONG_GIF_SECONDS, " seconds work best.") : null) : (() => {
-      const edge = outputEdge(sourceEdge, value.maxEdge);
-      const est = videoEstimate(value.outS - value.inS, value.codec, edge, value.mute);
-      return /* @__PURE__ */ react_default.createElement("div", { className: `small mt-1 ${est.warn ? "text-warning" : "text-muted"}` }, est.text);
-    })()), value.format === "gif" ? null : /* @__PURE__ */ react_default.createElement(
-      Form.Check,
-      {
-        id: "imaglr-mute",
-        type: "switch",
-        label: "Remove sound",
-        checked: value.mute,
-        disabled,
-        onChange: (e) => onChange({ ...value, mute: e.target.checked })
-      }
-    ), /* @__PURE__ */ react_default.createElement(
-      Form.Check,
-      {
-        id: "imaglr-flip",
-        type: "switch",
-        label: "Flip horizontally",
-        checked: value.flip,
-        disabled,
-        onChange: (e) => onChange({ ...value, flip: e.target.checked })
-      }
-    ), value.flip ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted" }, "The sent clip is mirrored left-to-right; the preview above isn't.") : null, value.format === "gif" ? null : /* @__PURE__ */ react_default.createElement(Fold, { id: "clip-more", label: "More options", summary: moreSummary(value) }, /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2 mb-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Codec"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(CODEC_LABELS).map((c) => /* @__PURE__ */ react_default.createElement(
+    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "GIFs play automatically in feeds. Videos are higher quality, are quicker to load and have sound, but require the user to click play.")), value.format === "gif" ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "This will be a GIF of ", describeGifEstimate(value.outS - value.inS), ". GIFs over about ", gifTargetMb, " MB are slow to load, so the plugin will automatically lower the quality if it has to."), value.outS - value.inS > LONG_GIF_SECONDS ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning mt-1" }, "Long GIFs may need lower frame-rates and resolutions. Clips below ", LONG_GIF_SECONDS, " seconds work best.") : null) : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2 mb-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Codec"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(CODEC_LABELS).map((c) => /* @__PURE__ */ react_default.createElement(
       Button,
       {
         key: c,
@@ -703,7 +702,17 @@
         onClick: () => onChange({ ...value, maxEdge: o.value })
       },
       o.label
-    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "Smaller pictures make smaller files and encode faster. Original keeps the source's size, up to 1080p.")) : null));
+    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "Smaller pictures make smaller files and encode faster. Original keeps the source's size, up to 1080p.")) : null, /* @__PURE__ */ react_default.createElement(
+      Form.Check,
+      {
+        id: "imaglr-mute",
+        type: "switch",
+        label: "Remove sound",
+        checked: value.mute,
+        disabled,
+        onChange: (e) => onChange({ ...value, mute: e.target.checked })
+      }
+    ), /* @__PURE__ */ react_default.createElement("div", { className: `small mt-1 ${estimate.warn ? "text-warning" : "text-muted"}` }, estimate.text))));
   }
 
   // src/ui/lib/tags.ts

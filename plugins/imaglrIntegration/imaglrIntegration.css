@@ -385,4 +385,7 @@
   .imaglr-fold {
     margin-top: 0.5rem;
   }
+  .imaglr-fold-label {
+    font-weight: 600;
+  }
 }

@@ -41,6 +41,7 @@ export function outputEdge(sourceEdge: number | null, maxEdge: number | null): n
 
 export interface VideoEstimate {
   text: string; // e.g. "About 45 MB as H.264 at 1080p."
+  short: string; // for a section header, e.g. "about 45 MB" or "about 1.7 Mbit/s, will look poor"
   warn: boolean; // the budget is too thin for this picture: suggest a smaller one or H.265
 }
 
@@ -53,15 +54,15 @@ export function videoEstimate(seconds: number, codec: Codec, longEdge: number, m
   const label = `${CODEC_LABELS[codec]} at ${edgeLabel(longEdge)}`;
   if (usualMb <= VIDEO_CAP_MB * 0.95 || s === 0) {
     const mb = usualMb < 10 ? Math.max(1, Math.round(usualMb)) : Math.round(usualMb / 5) * 5;
-    return { text: `About ${mb} MB as ${label}.`, warn: false };
+    return { text: `About ${mb} MB as ${label}.`, short: `about ${mb} MB`, warn: false };
   }
   const budget = Math.max(200, Math.round((VIDEO_CAP_MB * 8192 * 0.95) / s - audio));
   const floor = lookup(FLOOR_KBPS, longEdge, codec);
   const rate = budget >= 1000 ? `${(budget / 1000).toFixed(1)} Mbit/s` : `${budget} kbit/s`;
   if (budget >= floor) {
-    return { text: `Over ${VIDEO_CAP_MB} MB at the usual quality, so it will be encoded at about ${rate} as ${label}, which should still look fine.`, warn: false };
+    return { text: `Over ${VIDEO_CAP_MB} MB at the usual quality, so it will be encoded at about ${rate} as ${label}, which should still look fine.`, short: `about ${rate}, fine`, warn: false };
   }
   const advice = codec === "h264" && longEdge > 854 ? "Choose a smaller picture or H.265."
     : longEdge > 854 ? "Choose a smaller picture." : codec === "h264" ? "Choose H.265 or a shorter clip." : "Choose a shorter clip.";
-  return { text: `Over ${VIDEO_CAP_MB} MB at the usual quality, so it will be encoded at about ${rate} as ${label}, which will look poor. ${advice}`, warn: true };
+  return { text: `Over ${VIDEO_CAP_MB} MB at the usual quality, so it will be encoded at about ${rate} as ${label}, which will look poor. ${advice}`, short: `about ${rate}, will look poor`, warn: true };
 }

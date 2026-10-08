@@ -469,7 +469,11 @@
   .imaglr-edges {
     grid-template-columns: 1fr;
   }
-/* Editor: collapsed sections (Crop, More options) */
+/* Editor: collapsed sections (Picture, Format): a bold label, then what is set, in muted text */
 .imaglr-fold {
   margin-top: 0.5rem;
+}
+
+.imaglr-fold-label {
+  font-weight: 600;
 }

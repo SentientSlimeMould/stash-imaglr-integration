@@ -8,6 +8,7 @@ interface Props {
   id: string; // also the localStorage key
   label: string;
   summary?: string; // what is set inside, shown while collapsed; empty when everything is default
+  tone?: "muted" | "warning"; // the summary's colour: warning when it carries a warning
   children: React.ReactNode;
 }
 
@@ -19,15 +20,15 @@ function save(id: string, open: boolean): void {
   try { localStorage.setItem(`imaglr-fold-${id}`, open ? "1" : "0"); } catch { /* ignore */ }
 }
 
-export function Fold({ id, label, summary, children }: Props) {
+export function Fold({ id, label, summary, tone = "muted", children }: Props) {
   const { Button, Collapse } = PluginApi.libraries.Bootstrap;
   const [open, setOpen] = React.useState(() => load(id));
   return (
     <div className="imaglr-fold">
       <Button variant="link" className="p-0 imaglr-touch" aria-expanded={open} aria-controls={`imaglr-fold-${id}`}
         onClick={() => { setOpen(!open); save(id, !open); }}>
-        {open ? "▾" : "▸"} {label}
-        {!open && summary ? <span className="text-muted"> · {summary}</span> : null}
+        {open ? "▾" : "▸"} <span className="imaglr-fold-label">{label}</span>
+        {!open && summary ? <span className={tone === "warning" ? "text-warning" : "text-muted"}> · {summary}</span> : null}
       </Button>
       <Collapse in={open}>
         <div id={`imaglr-fold-${id}`}>{children}</div>

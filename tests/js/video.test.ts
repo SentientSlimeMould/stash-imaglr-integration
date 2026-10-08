@@ -18,6 +18,7 @@ test("a short clip gets a plain size estimate", () => {
   const e = videoEstimate(30, "h264", 1920);
   assert.equal(e.warn, false);
   assert.match(e.text, /^About 2\d MB as H\.264 at 1080p\.$/);
+  assert.match(e.short, /^about 2\d MB$/);
   assert.match(videoEstimate(30, "hevc", 1280, true).text, /^About \d+ MB as H\.265 at 720p\.$/);
 });
 
@@ -25,6 +26,7 @@ test("a long clip is warned about, with advice that fits the choices made", () =
   const seven = videoEstimate(420, "h264", 1920);
   assert.equal(seven.warn, true);
   assert.match(seven.text, /encoded at about 1\.7 Mbit\/s as H\.264 at 1080p, which will look poor\. Choose a smaller picture or H\.265\./);
+  assert.equal(seven.short, "about 1.7 Mbit/s, will look poor");
   const hevc720 = videoEstimate(420, "hevc", 1280);
   assert.equal(hevc720.warn, false);
   assert.match(hevc720.text, /should still look fine/);
