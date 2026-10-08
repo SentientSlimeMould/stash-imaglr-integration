@@ -6,7 +6,7 @@ your [imaglr](https://imaglr.com) blogs.
 - **Share Images:** add the tag `imaglr` to an image, or multi-select them in any image list and choose **⋯ → Add to imaglr**. 
 - **Share Clips:** create a scene marker in Stash and tag it `imaglr`. You can fine-tune the edit if needed before sending.
 - **Share a whole scene:** tag the scene `imaglr` and it joins the Clips tab over its full length, no marker needed. Trim it in the editor like any clip.
-- **GIF or video:** each clip can go out as an animated GIF, which plays straight away in feeds, or as a video. The plugin shrinks a GIF step by step until it fits imaglr's limit.
+- **Video, WebP or GIF:** each clip can go out as a video, or as an animated WebP or GIF, which play straight away in feeds. The plugin shrinks a WebP or GIF step by step until it fits imaglr's limit, and you can preview exactly what will be sent.
 - **Tags:** Tags for your imaglr posts are suggested from your Stash tags (including performers, studio and galleries). These can be edited before sending.
 - **Tag Mapping:** Set up rules on your Stash tags to automatically translate them to one or many corresponding Imaglr tags. 
 - **Draft, Queue or Publish immediately:** You can set a default upload action for each blog you want to send to and alter that if needed any time you send.
@@ -94,8 +94,9 @@ picture size for clips, and how long prepared files are kept.
 - **Open imaglr → Clips or Images.** Search, filter, sort and select items. Select several
   cards and choose **Make one post** to combine clips and images into one post.
 - **Tap a card to edit it:** crop, including trimming the edges off black borders (there's a button that finds
-  them); for clips, set in and out points (written back to the Stash marker), output as GIF or video, choose the
-  codec and picture size, remove the sound or save a still; edit tags and caption; choose the blog and what
+  them); for clips, set in and out points (written back to the Stash marker), output as video, WebP or GIF, choose
+  the codec and picture size (and for WebP and GIF the loop, size and frame rate, with a preview of the result), remove
+  the sound or save a still; edit tags and caption; choose the blog and what
   happens when sent. Then press the send button.
 - **Send all** sends every item shown (or the ticked ones) using each item's settings. It never publishes
   straight away: items set to Publish now are saved as drafts instead.
@@ -138,9 +139,9 @@ your Stash library, other files or your machine.
 - imaglr's API refuses any upload over 100 MB, whatever its documentation says, so a video is encoded to fit that.
   A long clip is encoded at a lower bitrate to fit; the editor estimates the size as you trim and warns when a
   smaller picture or H.265 would look better.
-- imaglr accepts GIFs up to 40 MB. A long clip, or one with a lot of movement, may only fit as a GIF at a low frame
-  rate and resolution; the editor estimates the size as you trim, and Send all can fall back to a video for any GIF
-  that won't fit.
+- imaglr accepts WebPs and GIFs up to 40 MB. A long clip, or one with a lot of movement, may only fit at a low frame
+  rate and resolution; the editor estimates the size as you trim, and Send all can fall back to a video for any WebP
+  or GIF that won't fit.
 - Animated WebP images can be sent as they are, but not cropped or converted to video (Stash's ffmpeg can't read
   them).
 - If you stop a send from Stash's Tasks page on macOS or Windows, the ffmpeg process may continue to run on until 
