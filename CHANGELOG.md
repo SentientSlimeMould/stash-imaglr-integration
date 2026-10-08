@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.20 — 2026-10-08
 
 - **A cover for a video.** imaglr shows a frame from about one second in as a video's picture in the feed (it
   has no way to set one). In the clip editor, **Use this frame as the cover** takes the frame at the playhead;
