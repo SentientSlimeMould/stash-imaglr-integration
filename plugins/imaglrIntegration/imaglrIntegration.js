@@ -1074,7 +1074,7 @@
           value: { ...trim, crop },
           disabled: locked,
           gifTargetMb: detail.gif_target_mb,
-          gifPreview: !dirty && trim.format === "gif" && files[0].output_mime === "image/gif" && files[0].prepared ? { url: files[0].prepared, note: files[0].output_note } : null,
+          gifPreview: !dirty && trim.format === "gif" && files[0].output_mime === "image/gif" && files[0].prepared ? { url: `${files[0].prepared}?v=${encodeURIComponent(item.updated_at)}`, note: files[0].output_note } : null,
           makingGif,
           onPreviewGif: previewGif,
           onChange: (v) => {

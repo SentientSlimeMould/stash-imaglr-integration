@@ -205,7 +205,8 @@ def op_item_detail(ctx: Context) -> dict[str, Any]:
     return {
         "item": {k: item[k] for k in ("id", "kind", "status", "tags", "caption", "blog_id", "action", "crop",
                                       "error_code", "error_detail", "progress", "source_title", "in_s", "out_s",
-                                      "mute", "flip", "format", "codec", "max_edge", "loop", "output_note", "hdr_warning", "tags_auto")},
+                                      "mute", "flip", "format", "codec", "max_edge", "loop", "output_note", "hdr_warning", "tags_auto",
+                                      "updated_at")},
         "files": [card for card, _ in views],
         "suggestions": suggestions.to_dict(),
         "blogs": [blogs.public(b) for b in blogs.list_blogs(ctx.db)],

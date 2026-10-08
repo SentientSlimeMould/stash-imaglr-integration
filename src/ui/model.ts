@@ -127,6 +127,7 @@ export interface ItemDetail {
     loop: "forward" | "boomerang";
     output_note: string | null;
     hdr_warning: boolean;
+    updated_at: string; // changes whenever the item (and so its prepared file) does: busts the browser's cache
     tags_auto: boolean; // tags still follow Stash and the tag rules (never edited)
   };
   files: FileCard[];
