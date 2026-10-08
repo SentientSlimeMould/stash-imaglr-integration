@@ -150,7 +150,9 @@
   opacity: 0.4;
 }
 .imaglr-tags {
-  margin-top: 1rem;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid #394b59;
 }
 .imaglr-tags-header {
   display: flex;

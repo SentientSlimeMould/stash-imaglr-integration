@@ -183,8 +183,12 @@
   opacity: 0.4;
 }
 
+/* The tags begin a new part of the form: a rule (the same as the plugin's other dividers) keeps them apart
+   from the media sections above, which end in a fold that may be open */
 .imaglr-tags {
-  margin-top: 1rem;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid #394b59;
 }
 
 .imaglr-tags-header {
