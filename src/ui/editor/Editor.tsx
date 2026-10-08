@@ -105,6 +105,7 @@ export function Editor({ itemId, onClose }: Props) {
   const [busy, setBusy] = React.useState(false);
   const [changed, setChanged] = React.useState(false);
   const [dirty, setDirty] = React.useState(false);
+  const [makingGif, setMakingGif] = React.useState(false); // the GIF preview is being made
 
   const load = React.useCallback(() => {
     runOperation<ItemDetail>("item_detail", { item_id: itemId }).then((d) => {
@@ -210,8 +211,6 @@ export function Editor({ itemId, onClose }: Props) {
       Toast.error(e);
     }
   }
-
-  const [makingGif, setMakingGif] = React.useState(false);
 
   async function previewGif() {
     setMakingGif(true);

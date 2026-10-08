@@ -905,6 +905,7 @@
     const [busy, setBusy] = react_default.useState(false);
     const [changed, setChanged] = react_default.useState(false);
     const [dirty, setDirty] = react_default.useState(false);
+    const [makingGif, setMakingGif] = react_default.useState(false);
     const load2 = react_default.useCallback(() => {
       runOperation("item_detail", { item_id: itemId }).then((d) => {
         setDetail(d);
@@ -1019,7 +1020,6 @@
         Toast.error(e);
       }
     }
-    const [makingGif, setMakingGif] = react_default.useState(false);
     async function previewGif() {
       setMakingGif(true);
       try {
