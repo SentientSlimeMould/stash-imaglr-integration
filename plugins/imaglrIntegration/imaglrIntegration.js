@@ -765,7 +765,7 @@
         onClick: () => onChange({ ...value, codec: c })
       },
       CODEC_LABELS[c]
-    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "H.265 is about 40 % smaller at the same quality and slower to encode. It plays in Safari, Chrome and Edge, but not every browser; H.264 plays everywhere.")), sizeChoices.length > 1 ? /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mb-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Picture size"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, sizeChoices.map((o) => /* @__PURE__ */ react_default.createElement(
+    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "H.265 files are 40 % smaller than H.264 at the same quality, so a longer clip fits the upload limit, at the cost of a slower encode.")), sizeChoices.length > 1 ? /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mb-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Picture size"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, sizeChoices.map((o) => /* @__PURE__ */ react_default.createElement(
       Button,
       {
         key: o.label,

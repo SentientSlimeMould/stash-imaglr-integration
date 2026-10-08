@@ -346,8 +346,8 @@ export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTarget
                 </ButtonGroup>
               </div>
               <div className="small text-muted mt-1">
-                H.265 is about 40 % smaller at the same quality and slower to encode. It plays in Safari, Chrome and
-                Edge, but not every browser; H.264 plays everywhere.
+                H.265 files are 40 % smaller than H.264 at the same quality, so a longer clip fits the upload limit,
+                at the cost of a slower encode.
               </div>
             </Form.Group>
             {sizeChoices.length > 1 ? (
