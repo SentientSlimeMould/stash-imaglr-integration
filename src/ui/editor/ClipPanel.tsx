@@ -252,7 +252,7 @@ export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTarget
 
       <CropControls crop={value.crop} disabled={disabled} itemId={itemId} onChange={(crop) => onChange({ ...value, crop })}
         flip={value.flip} onFlip={(flip) => onChange({ ...value, flip })} />
-      <Fold id="format" label="Format" summary={header.text} tone={header.warn ? "warning" : "muted"}>
+      <Fold id="format" label="Format options" summary={header.text} tone={header.warn ? "warning" : "muted"}>
         <Form.Group className="mt-2">
           <div>
             <ButtonGroup className="imaglr-segmented">

@@ -316,7 +316,7 @@
       }
     }
     const summary = [cropSummary(crop), flip ? "flipped" : ""].filter(Boolean).join(" \xB7 ");
-    return /* @__PURE__ */ react_default.createElement(Fold, { id: "picture", label: "Picture", summary }, /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, { className: "sr-only" }, "Aspect"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(ASPECTS).map((a) => /* @__PURE__ */ react_default.createElement(
+    return /* @__PURE__ */ react_default.createElement(Fold, { id: "picture", label: "Picture options", summary }, /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, { className: "sr-only" }, "Aspect"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(ASPECTS).map((a) => /* @__PURE__ */ react_default.createElement(
       Button,
       {
         key: a,
@@ -720,7 +720,7 @@
         flip: value.flip,
         onFlip: (flip) => onChange({ ...value, flip })
       }
-    ), /* @__PURE__ */ react_default.createElement(Fold, { id: "format", label: "Format", summary: header.text, tone: header.warn ? "warning" : "muted" }, /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2" }, /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(FORMAT_LABELS).map((f) => /* @__PURE__ */ react_default.createElement(
+    ), /* @__PURE__ */ react_default.createElement(Fold, { id: "format", label: "Format options", summary: header.text, tone: header.warn ? "warning" : "muted" }, /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2" }, /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(FORMAT_LABELS).map((f) => /* @__PURE__ */ react_default.createElement(
       Button,
       {
         key: f,

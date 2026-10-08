@@ -29,9 +29,9 @@
 
 ## 0.1.16 — 2026-10-08
 
-- The clip editor is laid out in sections: the preview and trim, then **Picture** (crop, edge trims, flip) and
-  **Format** (video or GIF, codec, picture size, sound, with the size estimate), each folded away with a
-  header that says what is set, e.g. "Format · Video · H.264 · 1080p · about 45 MB". The image editor has the
+- The clip editor is laid out in sections: the preview and trim, then **Picture options** (crop, edge trims, flip) and
+  **Format options** (video or GIF, codec, picture size, sound, with the size estimate), each folded away with a
+  header that says what is set, e.g. "Format options · Video · H.264 · 1080p · about 45 MB". The image editor has the
   same Picture section. Both remember whether you left them open.
 - The crop can now **trim the edges** of a clip or image, for black borders the aspect presets couldn't
   remove: top, bottom, left and right in percent, with a **Detect borders** button that asks ffmpeg where
