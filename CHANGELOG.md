@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Format options reordered: the size estimate is a labelled line under Picture size, the cover's instructions sit
+  above its button, and Remove sound closes the section.
+
 ## 0.1.20 — 2026-10-08
 
 - **A cover for a video.** imaglr shows a frame from about one second in as a video's picture in the feed (it

@@ -737,17 +737,7 @@
         onClick: () => onChange({ ...value, format: f })
       },
       FORMAT_LABELS[f]
-    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, FORMAT_HINTS[value.format])), value.format === "video" ? /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2 mb-2" }, /* @__PURE__ */ react_default.createElement(
-      Form.Check,
-      {
-        id: "imaglr-mute",
-        type: "switch",
-        label: "Remove sound",
-        checked: value.mute,
-        disabled,
-        onChange: (e) => onChange({ ...value, mute: e.target.checked })
-      }
-    )) : null, value.format !== "video" ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2 mb-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Loop"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(LOOP_LABELS).map((l) => /* @__PURE__ */ react_default.createElement(
+    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, FORMAT_HINTS[value.format])), value.format !== "video" ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2 mb-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Loop"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(LOOP_LABELS).map((l) => /* @__PURE__ */ react_default.createElement(
       Button,
       {
         key: l,
@@ -792,12 +782,22 @@
         onClick: () => onChange({ ...value, maxEdge: o.value })
       },
       o.label
-    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "Smaller pictures make smaller files and encode faster. Original keeps the source's size, up to 1080p.")) : null, /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2 mb-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Cover"), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mb-2" }, "imaglr takes the picture shown before a video plays from about one second in. With a cover, that moment is the frame you chose: the clip opens on it for ", COVER_HOLD_SECONDS, " seconds, then plays. Pause the clip on the frame you want, then press the button."), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-cover-row" }, value.coverT === null ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onChange({ ...value, coverT: Math.round(now() * 1e3) / 1e3 }) }, "Use this frame as the cover") : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("span", null, "The frame at ", /* @__PURE__ */ react_default.createElement("strong", null, fmtTime(value.coverT)), ", shown for ", COVER_HOLD_SECONDS, " s before the clip"), /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-clip-actions" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => {
+    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "Smaller pictures make smaller files and encode faster. Original keeps the source's size, up to 1080p.")) : null, /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2 mb-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Estimated size"), /* @__PURE__ */ react_default.createElement("div", { className: `small ${estimate.warn ? "text-warning" : "text-muted"}` }, estimate.text)), /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2 mb-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Cover"), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mb-2" }, "The video cover is shown before the video is played. To set a cover, scan to the frame you want in the player, then press the button below."), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-cover-row" }, value.coverT === null ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onChange({ ...value, coverT: Math.round(now() * 1e3) / 1e3 }) }, "Use this frame as the cover") : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("span", null, "The frame at ", /* @__PURE__ */ react_default.createElement("strong", null, fmtTime(value.coverT)), ", shown for ", COVER_HOLD_SECONDS, " s before the clip"), /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-clip-actions" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => {
       if (video.current) {
         video.current.pause();
         video.current.currentTime = value.coverT ?? 0;
       }
-    } }, "Show"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onChange({ ...value, coverT: Math.round(now() * 1e3) / 1e3 }) }, "Use this frame"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onChange({ ...value, coverT: null }) }, "Clear"))))), /* @__PURE__ */ react_default.createElement("div", { className: `small mt-1 ${estimate.warn ? "text-warning" : "text-muted"}` }, estimate.text))));
+    } }, "Show"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onChange({ ...value, coverT: Math.round(now() * 1e3) / 1e3 }) }, "Use this frame"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onChange({ ...value, coverT: null }) }, "Clear"))))), /* @__PURE__ */ react_default.createElement(
+      Form.Check,
+      {
+        id: "imaglr-mute",
+        type: "switch",
+        label: "Remove sound",
+        checked: value.mute,
+        disabled,
+        onChange: (e) => onChange({ ...value, mute: e.target.checked })
+      }
+    ))));
   }
 
   // src/ui/lib/tags.ts

@@ -270,12 +270,6 @@ export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTarget
           </div>
           <div className="small text-muted mt-1">{FORMAT_HINTS[value.format]}</div>
         </Form.Group>
-        {value.format === "video" ? (
-          <Form.Group className="mt-2 mb-2">
-            <Form.Check id="imaglr-mute" type="switch" label="Remove sound" checked={value.mute} disabled={disabled}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange({ ...value, mute: e.target.checked })} />
-          </Form.Group>
-        ) : null}
         {value.format !== "video" ? (
           <>
             <Form.Group className="mt-2 mb-2">
@@ -379,11 +373,14 @@ export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTarget
               </Form.Group>
             ) : null}
             <Form.Group className="mt-2 mb-2">
+              <Form.Label>Estimated size</Form.Label>
+              <div className={`small ${estimate.warn ? "text-warning" : "text-muted"}`}>{estimate.text}</div>
+            </Form.Group>
+            <Form.Group className="mt-2 mb-2">
               <Form.Label>Cover</Form.Label>
               <div className="small text-muted mb-2">
-                imaglr takes the picture shown before a video plays from about one second in. With a cover, that
-                moment is the frame you chose: the clip opens on it for {COVER_HOLD_SECONDS} seconds, then plays.
-                Pause the clip on the frame you want, then press the button.
+                The video cover is shown before the video is played. To set a cover, scan to the frame you want in
+                the player, then press the button below.
               </div>
               <div className="imaglr-cover-row">
                 {value.coverT === null ? (
@@ -402,7 +399,8 @@ export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTarget
                 )}
               </div>
             </Form.Group>
-            <div className={`small mt-1 ${estimate.warn ? "text-warning" : "text-muted"}`}>{estimate.text}</div>
+            <Form.Check id="imaglr-mute" type="switch" label="Remove sound" checked={value.mute} disabled={disabled}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange({ ...value, mute: e.target.checked })} />
           </>
         )}
       </Fold>
