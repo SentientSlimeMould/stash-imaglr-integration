@@ -584,7 +584,7 @@
       duration: i.visual_files[0]?.duration ?? null
     };
   }
-  var FORMAT_LABELS = { video: "Video", gif: "GIF", webp: "WebP" };
+  var FORMAT_LABELS = { video: "Video", webp: "WebP", gif: "GIF" };
   var FORMAT_HINTS = {
     video: "Best quality, keeps the sound, and the smallest file for anything long. The viewer has to click play.",
     gif: "Plays automatically in the feed. No sound, limited to 256 colours, and the largest file of the three, so short clips only.",

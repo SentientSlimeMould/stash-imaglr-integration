@@ -50,7 +50,7 @@ async function loadPlayback(sceneId: string | null, imageId: string | null): Pro
 }
 
 export type ClipFormat = "video" | "gif" | "webp";
-const FORMAT_LABELS: Record<ClipFormat, string> = { video: "Video", gif: "GIF", webp: "WebP" };
+const FORMAT_LABELS: Record<ClipFormat, string> = { video: "Video", webp: "WebP", gif: "GIF" }; // in this order on the buttons
 
 export interface ClipState {
   inS: number;
