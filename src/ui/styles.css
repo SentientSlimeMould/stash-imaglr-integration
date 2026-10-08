@@ -469,7 +469,7 @@
   .imaglr-edges {
     grid-template-columns: 1fr;
   }
-/* Clip editor: the collapsed "More options" (codec, picture size, flip) */
-.imaglr-more {
+/* Editor: collapsed sections (Crop, More options) */
+.imaglr-fold {
   margin-top: 0.5rem;
 }

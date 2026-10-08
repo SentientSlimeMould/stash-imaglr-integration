@@ -80,3 +80,11 @@ test("overlay marks the trimmed picture even with the original aspect", () => {
   close(r.height, 180, 3);
   assert.equal(overlayRect(400, 225, 1920, 1080, "original", 0.5, null).cropped, false);
 });
+
+test("the crop section's summary names what is set", async () => {
+  const { cropSummary } = await import("../../src/ui/lib/crop.ts");
+  assert.equal(cropSummary({ aspect: "original" }), "");
+  assert.equal(cropSummary({ aspect: "1:1" }), "1:1");
+  assert.equal(cropSummary({ aspect: "original", edges: { top: 0.1, bottom: 0, left: 0, right: 0 } }), "edges trimmed");
+  assert.equal(cropSummary({ aspect: "9:16", edges: { top: 0.1, bottom: 0, left: 0, right: 0 } }), "9:16 · edges trimmed");
+});

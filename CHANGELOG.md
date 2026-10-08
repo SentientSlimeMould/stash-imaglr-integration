@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The editor's crop controls sit in a collapsed **Crop** section whose header says what is set (e.g. "1:1 ·
+  edges trimmed"), like **More options**; both remember whether you left them open.
 - The crop can now **trim the edges** of a clip or image, for black borders the aspect presets couldn't
   remove: top, bottom, left and right in percent, with a **Detect borders** button that asks ffmpeg where
   the picture is (sampled across a clip's range). The aspect preset and its position apply inside what is

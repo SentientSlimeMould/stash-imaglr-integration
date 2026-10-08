@@ -13,6 +13,14 @@ export function emptyEdges(): CropEdges {
   return { top: 0, right: 0, bottom: 0, left: 0 };
 }
 
+/** What the crop is set to, for the collapsed section's header: "1:1 · edges trimmed"; empty when nothing is cropped. */
+export function cropSummary(crop: { aspect: Aspect; edges?: CropEdges | null }): string {
+  const parts: string[] = [];
+  if (crop.aspect !== "original") parts.push(crop.aspect);
+  if (hasEdges(crop.edges)) parts.push("edges trimmed");
+  return parts.join(" · ");
+}
+
 export function hasEdges(edges: CropEdges | null | undefined): boolean {
   return !!edges && EDGE_NAMES.some((n) => (edges[n] ?? 0) > 0);
 }

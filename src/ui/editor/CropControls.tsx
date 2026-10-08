@@ -4,7 +4,8 @@
 // Stash's own forms; every button is thumb-sized.
 import React from "react";
 import { runOperation } from "../api.ts";
-import { ASPECTS, EDGE_NAMES, emptyEdges, hasEdges, MAX_EDGE_PERCENT } from "../lib/crop.ts";
+import { ASPECTS, cropSummary, EDGE_NAMES, emptyEdges, hasEdges, MAX_EDGE_PERCENT } from "../lib/crop.ts";
+import { Fold } from "./Fold.tsx";
 import type { Aspect, Crop, CropEdges } from "../lib/types.ts";
 
 const LABELS: Record<keyof CropEdges, string> = { top: "Top", bottom: "Bottom", left: "Left", right: "Right" };
@@ -42,8 +43,9 @@ export function CropControls({ crop, disabled, itemId, onChange }: Props) {
   }
 
   return (
+    <Fold id="crop" label="Crop" summary={cropSummary(crop)}>
     <Form.Group className="mt-2">
-      <Form.Label>Crop</Form.Label>
+      <Form.Label className="sr-only">Aspect</Form.Label>
       <div>
         <ButtonGroup className="imaglr-segmented">
           {(Object.keys(ASPECTS) as Aspect[]).map((a) => (
@@ -88,5 +90,6 @@ export function CropControls({ crop, disabled, itemId, onChange }: Props) {
         ))}
       </div>
     </Form.Group>
+    </Fold>
   );
 }

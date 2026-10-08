@@ -207,6 +207,12 @@
   function emptyEdges() {
     return { top: 0, right: 0, bottom: 0, left: 0 };
   }
+  function cropSummary(crop) {
+    const parts = [];
+    if (crop.aspect !== "original") parts.push(crop.aspect);
+    if (hasEdges(crop.edges)) parts.push("edges trimmed");
+    return parts.join(" \xB7 ");
+  }
   function hasEdges(edges) {
     return !!edges && EDGE_NAMES.some((n) => (edges[n] ?? 0) > 0);
   }
@@ -249,6 +255,42 @@
     return { left: dx + n.x * dw, top: dy + n.y * dh, width: n.w * dw, height: n.h * dh, axis: n.axis, cropped: n.cropped };
   }
 
+  // src/ui/editor/Fold.tsx
+  function load(id) {
+    try {
+      return localStorage.getItem(`imaglr-fold-${id}`) === "1";
+    } catch {
+      return false;
+    }
+  }
+  function save(id, open) {
+    try {
+      localStorage.setItem(`imaglr-fold-${id}`, open ? "1" : "0");
+    } catch {
+    }
+  }
+  function Fold({ id, label, summary, children }) {
+    const { Button, Collapse } = PluginApi.libraries.Bootstrap;
+    const [open, setOpen] = react_default.useState(() => load(id));
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-fold" }, /* @__PURE__ */ react_default.createElement(
+      Button,
+      {
+        variant: "link",
+        className: "p-0 imaglr-touch",
+        "aria-expanded": open,
+        "aria-controls": `imaglr-fold-${id}`,
+        onClick: () => {
+          setOpen(!open);
+          save(id, !open);
+        }
+      },
+      open ? "\u25BE" : "\u25B8",
+      " ",
+      label,
+      !open && summary ? /* @__PURE__ */ react_default.createElement("span", { className: "text-muted" }, " \xB7 ", summary) : null
+    ), /* @__PURE__ */ react_default.createElement(Collapse, { in: open }, /* @__PURE__ */ react_default.createElement("div", { id: `imaglr-fold-${id}` }, children)));
+  }
+
   // src/ui/editor/CropControls.tsx
   var LABELS = { top: "Top", bottom: "Bottom", left: "Left", right: "Right" };
   function CropControls({ crop, disabled, itemId, onChange }) {
@@ -273,7 +315,7 @@
         setDetecting(false);
       }
     }
-    return /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Crop"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(ASPECTS).map((a) => /* @__PURE__ */ react_default.createElement(
+    return /* @__PURE__ */ react_default.createElement(Fold, { id: "crop", label: "Crop", summary: cropSummary(crop) }, /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, { className: "sr-only" }, "Aspect"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(ASPECTS).map((a) => /* @__PURE__ */ react_default.createElement(
       Button,
       {
         key: a,
@@ -337,7 +379,7 @@
         onClick: () => setEdge(name, percent(name) + 1)
       },
       "+"
-    )))));
+    ))))));
   }
 
   // src/ui/lib/send.ts
@@ -504,20 +546,6 @@
       duration: i.visual_files[0]?.duration ?? null
     };
   }
-  var MORE_KEY = "imaglr-clip-more-open";
-  function loadMoreOpen() {
-    try {
-      return localStorage.getItem(MORE_KEY) === "1";
-    } catch {
-      return false;
-    }
-  }
-  function saveMoreOpen(open) {
-    try {
-      localStorage.setItem(MORE_KEY, open ? "1" : "0");
-    } catch {
-    }
-  }
   function TimeRow({ label, value, disabled, onSet, onNudge, onType }) {
     const { Button, Form } = PluginApi.libraries.Bootstrap;
     const [text, setText] = react_default.useState(fmtTime(value));
@@ -545,9 +573,8 @@
     return parts.join(" \xB7 ");
   }
   function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTargetMb, onChange, onSaveStill }) {
-    const { Button, ButtonGroup, Collapse, Form } = PluginApi.libraries.Bootstrap;
+    const { Button, ButtonGroup, Form } = PluginApi.libraries.Bootstrap;
     const video = react_default.useRef(null);
-    const [moreOpen, setMoreOpen] = react_default.useState(loadMoreOpen);
     const box = react_default.useRef(null);
     const [playback, setPlayback] = react_default.useState(null);
     const [error, setError] = react_default.useState(null);
@@ -658,22 +685,7 @@
         disabled,
         onChange: (e) => onChange({ ...value, flip: e.target.checked })
       }
-    ), value.flip ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted" }, "The sent clip is mirrored left-to-right; the preview above isn't.") : null, value.format === "gif" ? null : /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-more" }, /* @__PURE__ */ react_default.createElement(
-      Button,
-      {
-        variant: "link",
-        className: "p-0 imaglr-touch",
-        "aria-expanded": moreOpen,
-        "aria-controls": "imaglr-clip-more",
-        onClick: () => {
-          setMoreOpen(!moreOpen);
-          saveMoreOpen(!moreOpen);
-        }
-      },
-      moreOpen ? "\u25BE" : "\u25B8",
-      " More options",
-      !moreOpen && moreSummary(value) ? /* @__PURE__ */ react_default.createElement("span", { className: "text-muted" }, " \xB7 ", moreSummary(value)) : null
-    ), /* @__PURE__ */ react_default.createElement(Collapse, { in: moreOpen }, /* @__PURE__ */ react_default.createElement("div", { id: "imaglr-clip-more" }, /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2 mb-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Codec"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(CODEC_LABELS).map((c) => /* @__PURE__ */ react_default.createElement(
+    ), value.flip ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted" }, "The sent clip is mirrored left-to-right; the preview above isn't.") : null, value.format === "gif" ? null : /* @__PURE__ */ react_default.createElement(Fold, { id: "clip-more", label: "More options", summary: moreSummary(value) }, /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2 mb-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Codec"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(CODEC_LABELS).map((c) => /* @__PURE__ */ react_default.createElement(
       Button,
       {
         key: c,
@@ -691,7 +703,7 @@
         onClick: () => onChange({ ...value, maxEdge: o.value })
       },
       o.label
-    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "Smaller pictures make smaller files and encode faster. Original keeps the source's size, up to 1080p.")) : null))));
+    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "Smaller pictures make smaller files and encode faster. Original keeps the source's size, up to 1080p.")) : null));
   }
 
   // src/ui/lib/tags.ts
@@ -866,7 +878,7 @@
     const [busy, setBusy] = react_default.useState(false);
     const [changed, setChanged] = react_default.useState(false);
     const [dirty, setDirty] = react_default.useState(false);
-    const load = react_default.useCallback(() => {
+    const load2 = react_default.useCallback(() => {
       runOperation("item_detail", { item_id: itemId }).then((d) => {
         setDetail(d);
         setTags(d.item.tags);
@@ -891,13 +903,13 @@
         onClose(true);
       });
     }, [itemId]);
-    react_default.useEffect(load, [load]);
+    react_default.useEffect(load2, [load2]);
     const busyStatus = detail ? BUSY.includes(detail.item.status) : false;
     react_default.useEffect(() => {
       if (!busyStatus) return;
-      const timer = window.setInterval(load, 2e3);
+      const timer = window.setInterval(load2, 2e3);
       return () => window.clearInterval(timer);
-    }, [busyStatus, load]);
+    }, [busyStatus, load2]);
     if (!detail) return null;
     const { item, files, blogs } = detail;
     const queueTag = detail.queue_tag;
@@ -913,7 +925,7 @@
         setDirty(true);
       };
     }
-    async function save() {
+    async function save2() {
       if (!dirty) return;
       await runOperation("item_update", {
         item_id: item.id,
@@ -944,7 +956,7 @@
     async function saveAndClose() {
       setBusy(true);
       try {
-        await save();
+        await save2();
         onClose(true);
       } catch (e) {
         Toast.error(e);
@@ -958,7 +970,7 @@
       }
       setBusy(true);
       try {
-        await save();
+        await save2();
         await runOperation("send", { item_id: item.id, blog_id: blog?.id, action });
         onClose(true);
       } catch (e) {
@@ -969,10 +981,10 @@
     }
     async function arrange(ids) {
       try {
-        await save();
+        await save2();
         const result = await runOperation("post_arrange", { item_id: item.id, item_ids: ids });
         setChanged(true);
-        if (result.post_id) load();
+        if (result.post_id) load2();
         else onClose(true);
       } catch (e) {
         Toast.error(e);
@@ -1733,7 +1745,7 @@
     clips: (tag) => /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("p", null, "No clips waiting."), /* @__PURE__ */ react_default.createElement("p", null, "In Stash, add the tag ", /* @__PURE__ */ react_default.createElement("strong", null, tag), " to a scene marker (on the scene's ", /* @__PURE__ */ react_default.createElement("strong", null, "Markers"), " tab). Its start and end become the clip; you can trim it here.")),
     images: (tag) => /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("p", null, "No images waiting."), /* @__PURE__ */ react_default.createElement("p", null, "In Stash, tag images ", /* @__PURE__ */ react_default.createElement("strong", null, tag), ", or tick images in any image list and choose", " ", /* @__PURE__ */ react_default.createElement("strong", null, "\u22EF \u2192 Add to imaglr"), ". Stills saved from clips appear here too."))
   };
-  function QueueTab({ tab, openId, data, error, load }) {
+  function QueueTab({ tab, openId, data, error, load: load2 }) {
     const { Button } = PluginApi.libraries.Bootstrap;
     const { useHistory } = PluginApi.libraries.ReactRouterDOM;
     const { LoadingIndicator } = PluginApi.components;
@@ -1772,7 +1784,7 @@
         await action();
         Toast.success(done);
         setSelected(/* @__PURE__ */ new Set());
-        load();
+        load2();
       } catch (e) {
         Toast.error(e);
       }
@@ -1813,7 +1825,7 @@
     const url = (c) => `${ROUTE}?tab=${tab}&open=${c.id}`;
     const selecting = selected.size > 0;
     let body;
-    const problem = error ? /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-danger" }, "Couldn't load the list: ", error, " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0 imaglr-touch", onClick: load }, "Try again")) : null;
+    const problem = error ? /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-danger" }, "Couldn't load the list: ", error, " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0 imaglr-touch", onClick: load2 }, "Try again")) : null;
     if (error && !data) {
       body = problem;
     } else if (!data) {
@@ -1847,7 +1859,7 @@
         onChange: updateControls,
         onSelectAll: () => setSelected(new Set(items.map((c) => c.id))),
         onSelectNone: () => setSelected(/* @__PURE__ */ new Set()),
-        onRefresh: load,
+        onRefresh: load2,
         onSendAll: matching.length ? () => setSendAll(selected.size ? [...selected] : matching.map((c) => c.id)) : void 0
       }
     ), body, matching.length ? /* @__PURE__ */ react_default.createElement(
@@ -1865,7 +1877,7 @@
       setSendAll(null);
       if (sent) {
         setSelected(/* @__PURE__ */ new Set());
-        load();
+        load2();
       }
     } }) : null, confirmRemove ? /* @__PURE__ */ react_default.createElement(
       ConfirmDialog,
@@ -1886,7 +1898,7 @@
         itemId: openId,
         onClose: (changed) => {
           history.replace({ search: `?tab=${tab}` });
-          if (changed) load();
+          if (changed) load2();
         }
       }
     ) : null);
@@ -1902,10 +1914,10 @@
     const [error, setError] = react_default.useState(null);
     const [busy, setBusy] = react_default.useState(false);
     const changed = react_default.useRef(false);
-    const load = react_default.useCallback(() => {
+    const load2 = react_default.useCallback(() => {
       runOperation("sent_detail", { item_id: itemId }).then((r) => setItem(r.item), (e) => setError(e.message));
     }, [itemId]);
-    react_default.useEffect(load, [load]);
+    react_default.useEffect(load2, [load2]);
     async function retry() {
       if (!item) return;
       setBusy(true);
@@ -1913,7 +1925,7 @@
         await runOperation("retry_follow_up", { item_id: item.id });
         Toast.success(item.action === "publish" ? "Published." : "Added to the queue.");
         changed.current = true;
-        load();
+        load2();
       } catch (e) {
         Toast.error(e);
       } finally {
@@ -1970,7 +1982,7 @@
     const [page, setPage] = react_default.useState(1);
     const [data, setData] = react_default.useState(null);
     const [error, setError] = react_default.useState(null);
-    const load = react_default.useCallback(() => {
+    const load2 = react_default.useCallback(() => {
       return runOperation("sent_list", {
         page,
         per_page: controls.perPage,
@@ -1986,8 +1998,8 @@
       }, (e) => setError(e.message));
     }, [page, controls.perPage, controls.search, controls.sort, controls.dir, controls.blog, controls.sentAs]);
     react_default.useEffect(() => {
-      void load();
-    }, [load]);
+      void load2();
+    }, [load2]);
     function updateControls(next) {
       if (changesWhatIsListed(controls, next)) setPage(1);
       setControls(next);
@@ -1996,7 +2008,7 @@
     const filtered = !!controls.search || controls.blog != null || controls.sentAs !== "all";
     let body;
     if (error) {
-      body = /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-danger" }, "Couldn't load the sent posts: ", error, " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0 imaglr-touch", onClick: () => void load() }, "Try again"));
+      body = /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-danger" }, "Couldn't load the sent posts: ", error, " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0 imaglr-touch", onClick: () => void load2() }, "Try again"));
     } else if (!data) {
       body = LoadingIndicator ? /* @__PURE__ */ react_default.createElement(LoadingIndicator, null) : /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Loading\u2026");
     } else if (data.total === 0) {
@@ -2024,7 +2036,7 @@
         selected: 0,
         selectionActions: [],
         onChange: updateControls,
-        onRefresh: () => void load()
+        onRefresh: () => void load2()
       }
     ), body, data && data.total > 0 ? /* @__PURE__ */ react_default.createElement(
       Pager,
@@ -2043,7 +2055,7 @@
         itemId: openId,
         onClose: (changed) => {
           history.replace({ search: "?tab=sent" });
-          if (changed) void load();
+          if (changed) void load2();
         }
       }
     ) : null);
@@ -2100,7 +2112,7 @@
         setLowercase(r.lowercase_tags);
       }, () => void 0);
     }, []);
-    async function save(tags) {
+    async function save2(tags) {
       try {
         setRules((await runOperation("tag_rule_set", { stash_tag: stashTag, imaglr_tags: tags })).rules);
         setStashTag(null);
@@ -2130,7 +2142,7 @@
         onChange: setTargets,
         placeholder: "Add imaglr tags\u2026"
       }
-    )), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-rule-buttons" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", disabled: !stashTag || !targets.length, onClick: () => save(targets) }, "Save rule"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled: !stashTag, onClick: () => save([]) }, "Never suggest")), removing ? /* @__PURE__ */ react_default.createElement(
+    )), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-rule-buttons" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", disabled: !stashTag || !targets.length, onClick: () => save2(targets) }, "Save rule"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled: !stashTag, onClick: () => save2([]) }, "Never suggest")), removing ? /* @__PURE__ */ react_default.createElement(
       ConfirmDialog,
       {
         title: `Remove the rule for "${removing}"`,
@@ -2287,15 +2299,15 @@
     const [data, setData] = react_default.useState(null);
     const [error, setError] = react_default.useState(null);
     const [tick, setTick] = react_default.useState(0);
-    const load = react_default.useCallback(() => {
+    const load2 = react_default.useCallback(() => {
       return runOperation("queue").then((d) => {
         setData(d);
         setError(null);
       }, (e) => setError(e.message)).finally(() => setTick((t) => t + 1));
     }, []);
     react_default.useEffect(() => {
-      runOperation("recover").catch(() => void 0).finally(load);
-    }, [load]);
+      runOperation("recover").catch(() => void 0).finally(load2);
+    }, [load2]);
     const inFlight = data?.items.some((c) => BUSY3.includes(c.status)) ?? false;
     react_default.useEffect(() => {
       if (!inFlight || paused || !data) return;
@@ -2303,7 +2315,7 @@
         runOperation("send_status").then((s) => {
           const fresh = new Map(s.items.map((i) => [i.id, i]));
           const finished = data.items.some((c) => BUSY3.includes(c.status) && !fresh.has(c.id));
-          if (finished) return load();
+          if (finished) return load2();
           setData({ ...data, items: data.items.map((c) => fresh.has(c.id) ? { ...c, ...fresh.get(c.id) } : c) });
           setTick((t) => t + 1);
         }, (e) => {
@@ -2312,8 +2324,8 @@
         });
       }, POLL_MS);
       return () => window.clearTimeout(timer);
-    }, [tick, inFlight, paused, load]);
-    return { data, error, load };
+    }, [tick, inFlight, paused, load2]);
+    return { data, error, load: load2 };
   }
   function TabTitle({ title, count }) {
     const { Badge } = PluginApi.libraries.Bootstrap;
