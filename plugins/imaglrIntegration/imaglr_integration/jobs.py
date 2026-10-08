@@ -30,7 +30,7 @@ from .media.naming import slugify
 from .media import ffmpeg_cmd as fc
 from .media.probe import probe
 from .media.video_export import (GifTooLarge, UnsupportedMedia, VideoSettings, detect_edges, export_clip, export_gif,
-                                 gif_to_mp4, grab_frame)
+                                 gif_to_mp4, grab_frame, hevc_available)
 from .stash import HttpStream, LocalFile, StashError, api
 from .stash.paths import image_source, scene_source
 from .tags.caption import caption_to_html
@@ -233,7 +233,11 @@ def prepare_clip(ctx: Context, member: dict[str, Any], tools: tuple[str, str], s
         return repo.update_item(ctx.db, member["id"], output_path=result.path, output_bytes=result.bytes,
                                 output_mime="image/gif", output_note=result.note, hdr_warning=False,
                                 error_code=None, error_detail=None)  # type: ignore[return-value]
-    video_settings = VideoSettings(ffmpeg, ffprobe, allow_hevc=not config.no_hevc)
+    codec = member["codec"] or "h264"
+    if codec == "hevc" and not hevc_available(ffmpeg):
+        raise JobFailed("no_hevc", f"{member['source_title']}: this Stash's ffmpeg has no H.265 encoder. "
+                        "Choose H.264 for the clip.")
+    video_settings = VideoSettings(ffmpeg, ffprobe, codec=codec, max_long_edge=min(1920, member["max_edge"] or 1920))
     if max_bytes:
         video_settings.max_video_mb = max_bytes / 1048576
     try:

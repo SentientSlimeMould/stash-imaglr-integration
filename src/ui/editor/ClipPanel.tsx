@@ -6,7 +6,7 @@ import { clampTrim, pickStream, sameOrigin, type SceneStream, type VideoInfo } f
 import { overlayRect } from "../lib/crop.ts";
 import { CropControls } from "./CropControls.tsx";
 import { describeGifEstimate, LONG_GIF_SECONDS } from "../lib/gif.ts";
-import { longVideoNotice } from "../lib/video.ts";
+import { CODEC_LABELS, type Codec, edgeLabel, outputEdge, SIZE_OPTIONS, videoEstimate } from "../lib/video.ts";
 import { fmtTime, parseTime } from "../lib/format.ts";
 import type { Crop } from "../lib/types.ts";
 
@@ -56,7 +56,19 @@ export interface ClipState {
   mute: boolean;
   flip: boolean; // mirror left-to-right
   format: ClipFormat; // sent as a video, or as an animated GIF
+  codec: Codec; // videos: H.264 or H.265
+  maxEdge: number | null; // videos: picture size as a long edge; null = as the source (up to 1080p)
   crop: Crop;
+}
+
+const MORE_KEY = "imaglr-clip-more-open";
+
+function loadMoreOpen(): boolean {
+  try { return localStorage.getItem(MORE_KEY) === "1"; } catch { return false; }
+}
+
+function saveMoreOpen(open: boolean): void {
+  try { localStorage.setItem(MORE_KEY, open ? "1" : "0"); } catch { /* ignore */ }
 }
 
 interface Props {
@@ -102,9 +114,19 @@ function TimeRow({ label, value, disabled, onSet, onNudge, onType }: {
   );
 }
 
+/** What is set in More options while it is collapsed, e.g. "H.265 · 720p · flipped"; empty when all default. */
+export function moreSummary(v: ClipState): string {
+  const parts: string[] = [];
+  if (v.format !== "gif" && v.codec === "hevc") parts.push(CODEC_LABELS.hevc);
+  if (v.format !== "gif" && v.maxEdge) parts.push(edgeLabel(v.maxEdge));
+  if (v.flip) parts.push("flipped");
+  return parts.join(" · ");
+}
+
 export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTargetMb, onChange, onSaveStill }: Props) {
-  const { Button, ButtonGroup, Form } = PluginApi.libraries.Bootstrap;
+  const { Button, ButtonGroup, Collapse, Form } = PluginApi.libraries.Bootstrap;
   const video = React.useRef<HTMLVideoElement>(null);
+  const [moreOpen, setMoreOpen] = React.useState(loadMoreOpen);
   const box = React.useRef<HTMLDivElement>(null);
   const [playback, setPlayback] = React.useState<Playback | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -218,19 +240,69 @@ export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTarget
               </div>
             ) : null}
           </>
-        ) : longVideoNotice(value.outS - value.inS) ? (
-          <div className="small text-muted mt-1">{longVideoNotice(value.outS - value.inS)}</div>
-        ) : null}
+        ) : (() => {
+          const edge = outputEdge(Math.max(size.vw, size.vh) || null, value.maxEdge);
+          const est = videoEstimate(value.outS - value.inS, value.codec, edge, value.mute);
+          return <div className={`small mt-1 ${est.warn ? "text-warning" : "text-muted"}`}>{est.text}</div>;
+        })()}
       </Form.Group>
       {value.format === "gif" ? null : (
         <Form.Check id="imaglr-mute" type="switch" label="Remove sound" checked={value.mute} disabled={disabled}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange({ ...value, mute: e.target.checked })} />
       )}
-      <Form.Check id="imaglr-flip" type="switch" label="Flip horizontally" checked={value.flip} disabled={disabled}
-        onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange({ ...value, flip: e.target.checked })} />
-      {value.flip ? (
-        <div className="small text-muted">The sent clip is mirrored left-to-right; the preview above isn't.</div>
-      ) : null}
+      <div className="imaglr-more">
+        <Button variant="link" className="p-0 imaglr-touch" aria-expanded={moreOpen} aria-controls="imaglr-clip-more"
+          onClick={() => { setMoreOpen(!moreOpen); saveMoreOpen(!moreOpen); }}>
+          {moreOpen ? "▾" : "▸"} More options
+          {!moreOpen && moreSummary(value) ? <span className="text-muted"> · {moreSummary(value)}</span> : null}
+        </Button>
+        <Collapse in={moreOpen}>
+          <div id="imaglr-clip-more">
+            {value.format === "gif" ? null : (
+              <>
+                <Form.Group className="mt-2 mb-2">
+                  <Form.Label>Codec</Form.Label>
+                  <div>
+                    <ButtonGroup className="imaglr-segmented">
+                      {(Object.keys(CODEC_LABELS) as Codec[]).map((c) => (
+                        <Button key={c} variant={value.codec === c ? "primary" : "secondary"} disabled={disabled}
+                          onClick={() => onChange({ ...value, codec: c })}>
+                          {CODEC_LABELS[c]}
+                        </Button>
+                      ))}
+                    </ButtonGroup>
+                  </div>
+                  <div className="small text-muted mt-1">
+                    H.265 is about 40 % smaller at the same quality and slower to encode. It plays in Safari, Chrome and
+                    Edge, but not every browser; H.264 plays everywhere.
+                  </div>
+                </Form.Group>
+                <Form.Group className="mb-2">
+                  <Form.Label>Picture size</Form.Label>
+                  <div>
+                    <ButtonGroup className="imaglr-segmented">
+                      {SIZE_OPTIONS.map((o) => (
+                        <Button key={o.label} variant={(value.maxEdge ?? null) === o.value ? "primary" : "secondary"} disabled={disabled}
+                          onClick={() => onChange({ ...value, maxEdge: o.value })}>
+                          {o.label}
+                        </Button>
+                      ))}
+                    </ButtonGroup>
+                  </div>
+                  <div className="small text-muted mt-1">
+                    Smaller pictures make smaller files and encode faster. Original keeps the source's size, up to 1080p.
+                  </div>
+                </Form.Group>
+              </>
+            )}
+            <Form.Check id="imaglr-flip" type="switch" label="Flip horizontally" checked={value.flip} disabled={disabled}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange({ ...value, flip: e.target.checked })} />
+            {value.flip ? (
+              <div className="small text-muted">The sent clip is mirrored left-to-right; the preview above isn't.</div>
+            ) : null}
+          </div>
+        </Collapse>
+      </div>
     </div>
   );
 }

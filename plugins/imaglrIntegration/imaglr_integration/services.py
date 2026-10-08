@@ -131,6 +131,7 @@ def item_from_marker(db: Database, settings: Settings, marker: Marker) -> dict[s
         source_title=marker_title(marker), in_s=in_s, out_s=out_s,
         tags=marker_suggestions(db, settings, marker).active_names(),
         format="gif" if settings.clips_as_gif else "video",
+        codec="hevc" if settings.clips_hevc else "h264", max_edge=settings.clip_max_edge,
     )
 
 
@@ -156,7 +157,8 @@ def item_from_image(db: Database, settings: Settings, image: Image) -> dict[str,
         duration = f.duration if f and f.duration else None
         out_s = min(duration, settings.default_clip_seconds) if duration else settings.default_clip_seconds
         return repo.create_item(db, kind="clip", stash_image_id=image.id, source_title=image.display_title,
-                                in_s=0.0, out_s=out_s, tags=tags, format="gif" if settings.clips_as_gif else "video")
+                                in_s=0.0, out_s=out_s, tags=tags, format="gif" if settings.clips_as_gif else "video",
+        codec="hevc" if settings.clips_hevc else "h264", max_edge=settings.clip_max_edge)
     return repo.create_item(db, kind="image", stash_image_id=image.id, source_title=image.display_title, tags=tags)
 
 
@@ -274,7 +276,8 @@ def still_card(item: dict[str, Any]) -> dict[str, Any]:
 def _state(item: dict[str, Any]) -> dict[str, Any]:
     return {k: item[k] for k in ("id", "kind", "status", "progress", "error_code", "error_detail", "blog_id",
                                  "action")} | {"title": item["source_title"], "tag_count": len(item["tags"]),
-                                              "send_format": item["format"], "output_note": item["output_note"]}
+                                              "send_format": item["format"], "send_codec": item["codec"],
+                                              "max_edge": item["max_edge"], "output_note": item["output_note"]}
 
 
 def post_card(post: dict[str, Any], member_cards: list[dict[str, Any]]) -> dict[str, Any]:

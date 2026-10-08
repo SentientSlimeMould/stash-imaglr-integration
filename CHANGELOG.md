@@ -8,10 +8,12 @@
   left, the preview shows the result, and stills grabbed from a clip get the same controls.
 - Videos are now sized for imaglr's real upload limit. Its API refuses any request over 100 MB (the
   documentation's 500 MB per video cannot be reached), so a long clip used to encode to several hundred MB and
-  then fail. A clip is now encoded to fit 100 MB, the files of a multi-file post share that limit, and a long
-  clip keeps its resolution by switching to **H.265** before the picture is made smaller. The card shows what
-  was done (e.g. "H.265 · 92.1 MB · 1280 px") and the editor says so for clips over about three minutes. A new
-  setting, **Never use H.265**, keeps everything H.264 for the widest browser support.
+  then fail. A clip is now encoded to fit 100 MB and the files of a multi-file post share that limit.
+- Each clip has a **Codec** (H.264 or H.265) and a **Picture size** (Original, 720p or 480p) under a collapsed
+  **More options** in the editor, where *Flip horizontally* now lives too. The plugin never changes these for
+  you: the editor estimates the size as you trim and warns when a long clip would look poor with the choices
+  made. Two settings give new clips their defaults (**Clips as H.265 by default**, **Clip picture size by
+  default**). The card shows what came out, e.g. "H.265 · 92.1 MB · 1280 px".
 
 ## 0.1.15 — 2026-10-04
 

@@ -2,6 +2,7 @@
 // The Clips and Images tabs: what's waiting to be sent, shown with Stash's own list toolbar and cards.
 // A card links to its editor (?open=<id>), so tapping opens it and it can also be opened in a new tab.
 import React from "react";
+import { edgeLabel } from "../lib/video.ts";
 import { runOperation } from "../api.ts";
 import { Editor } from "../editor/Editor.tsx";
 import { applyControls, changesWhatIsListed, loadControls, paginate, saveControls, type QueueControlsState } from "../lib/sort.ts";
@@ -22,8 +23,9 @@ function cardDetail(card: Card): string {
   if (count) return `${count} files in one post`;
   if (card.kind === "clip") {
     if (card.output_note) return card.output_note; // e.g. "GIF · 9.4 MB · 480 px · 10 fps"
-    return [`${(card.duration ?? 0).toFixed(1)} s`, fmtDims(card.width, card.height), card.send_format === "gif" ? "GIF" : null]
-      .filter(Boolean).join(" · ");
+    const how = card.send_format === "gif" ? "GIF"
+      : [card.send_codec === "hevc" ? "H.265" : null, card.max_edge ? edgeLabel(card.max_edge) : null].filter(Boolean).join(" ");
+    return [`${(card.duration ?? 0).toFixed(1)} s`, fmtDims(card.width, card.height), how || null].filter(Boolean).join(" · ");
   }
   return [card.format?.toUpperCase(), fmtDims(card.width, card.height), card.animated ? "animated" : null]
     .filter(Boolean)

@@ -164,24 +164,14 @@ class BitrateBoundsTest(unittest.TestCase):
         self.assertEqual(fc.kbps_for_size(10 * 1024 * 1024, 10.0, 128, 0.9), int((8192 - 128) * 0.9))
 
 
-class EncodePlanTest(unittest.TestCase):
-    """Fitting a clip into the upload limit: H.265 keeps the picture large before the resolution drops."""
+class CodecTest(unittest.TestCase):
+    """The user's codec choice in the command, and the typical-bitrate table the estimate and the export share."""
 
-    def test_plenty_of_bitrate_is_plain_h264_at_full_size(self):
-        self.assertEqual(fc.plan_encode(6000, 1920, hevc=True), fc.EncodePlan("h264", 1920))
-        self.assertEqual(fc.plan_encode(6000, 1920, hevc=True).label, "H.264")
-
-    def test_thin_budget_switches_to_hevc_before_shrinking(self):
-        # a 7-minute clip in 100 MB: about 1750 kbps
-        self.assertEqual(fc.plan_encode(1750, 1920, hevc=True), fc.EncodePlan("hevc", 1280))
-        self.assertEqual(fc.plan_encode(1750, 1920, hevc=False), fc.EncodePlan("h264", 854))
-        self.assertEqual(fc.plan_encode(2500, 1920, hevc=True), fc.EncodePlan("hevc", 1920))
-
-    def test_never_upscales_and_bottoms_out_on_the_better_codec(self):
-        self.assertEqual(fc.plan_encode(6000, 1280, hevc=True), fc.EncodePlan("h264", 1280))
-        self.assertEqual(fc.plan_encode(100, 1920, hevc=True), fc.EncodePlan("hevc", 640))
-        self.assertEqual(fc.plan_encode(100, 1920, hevc=False), fc.EncodePlan("h264", 640))
-        self.assertEqual(fc.plan_encode(100, 480, hevc=False), fc.EncodePlan("h264", 480))  # smaller than the ladder
+    def test_typical_bitrates(self):
+        self.assertEqual(fc.typical_kbps("h264", 1920), 6000)
+        self.assertEqual(fc.typical_kbps("hevc", 1920), 3600)
+        self.assertEqual(fc.typical_kbps("h264", 1000), 1500)  # the next rung down
+        self.assertEqual(fc.typical_kbps("h264", 320), 900)  # below the table: its smallest rung
 
     def test_hevc_command(self):
         cmd = fc.build_clip_cmd(FF, "/in.mkv", "/out.mp4.part", 0, 10, 1920, 1080, 30, preset="medium", codec="hevc",

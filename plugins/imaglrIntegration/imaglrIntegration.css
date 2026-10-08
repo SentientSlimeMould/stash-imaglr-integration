@@ -382,4 +382,7 @@
   .imaglr-edges {
     grid-template-columns: 1fr;
   }
+  .imaglr-more {
+    margin-top: 0.5rem;
+  }
 }

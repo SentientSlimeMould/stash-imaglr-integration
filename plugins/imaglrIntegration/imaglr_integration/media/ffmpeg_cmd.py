@@ -16,44 +16,22 @@ AUDIO_KBPS = 128
 MAX_FPS = 60.0
 MIN_KBPS = 200
 
-# Fitting a long clip into imaglr's upload limit: the bitrate budget may be too thin for the picture size. The
-# export then keeps the picture large by switching to H.265 (about 40 % smaller at the same quality; plays in
-# Safari, Chrome and Edge, not every browser) and only then steps the resolution down. These are the lowest
-# video bitrates (kbps) at which each long edge still looks acceptable with H.264; H.265 needs about 60 %.
+# The user chooses the codec and the picture size for each clip; the plugin only fits the file under the
+# upload limit by bitrate. These are the bitrates (kbps) a CRF-20 encode of ordinary footage tends to come out
+# at for each long edge, used to skip a first encode that would certainly be over the limit, and (mirrored in
+# the editor, src/ui/lib/video.ts) to estimate sizes and warn when the budget is too thin for the picture.
 VIDEO_CODECS = ("h264", "hevc")
-RESOLUTION_LADDER: tuple[int, ...] = (1920, 1280, 854, 640)
-QUALITY_FLOOR_KBPS: dict[int, int] = {1920: 4000, 1280: 2000, 854: 1000, 640: 600}
-HEVC_FACTOR = 0.6
+CODEC_LABELS = {"h264": "H.264", "hevc": "H.265"}
+PICTURE_SIZES = (1280, 854)  # the "720p" and "480p" choices, as long edges; None means as the source (up to 1080p)
+TYPICAL_KBPS: dict[int, int] = {1920: 6000, 1280: 3000, 854: 1500, 640: 900}
+HEVC_FACTOR = 0.6  # H.265 needs about this much of H.264's bitrate for the same look
 
 
-@dataclass(frozen=True)
-class EncodePlan:
-    codec: str  # "h264" or "hevc"
-    long_edge: int  # the picture's long edge after any step-down
-
-    @property
-    def label(self) -> str:
-        return "H.265" if self.codec == "hevc" else "H.264"
-
-
-def quality_floor_kbps(codec: str, long_edge: int) -> int:
-    """The bitrate below which `codec` at this picture size looks poor."""
-    rung = max((e for e in RESOLUTION_LADDER if e <= long_edge), default=RESOLUTION_LADDER[-1])
-    floor = QUALITY_FLOOR_KBPS[rung]
-    return int(floor * HEVC_FACTOR) if codec == "hevc" else floor
-
-
-def plan_encode(target_kbps: int, long_edge: int, *, hevc: bool) -> EncodePlan:
-    """How to spend a bitrate budget on a picture whose long edge is `long_edge`: H.264 at full size when the
-    budget allows, else H.265 at full size (when the encoder is there and allowed), else the same two choices
-    one rung down, and so on. Below the bottom rung, the better codec at the smallest size."""
-    rungs = [e for e in RESOLUTION_LADDER if e <= long_edge] or [long_edge]
-    for edge in rungs:
-        if target_kbps >= quality_floor_kbps("h264", edge):
-            return EncodePlan("h264", edge)
-        if hevc and target_kbps >= quality_floor_kbps("hevc", edge):
-            return EncodePlan("hevc", edge)
-    return EncodePlan("hevc" if hevc else "h264", rungs[-1])
+def typical_kbps(codec: str, long_edge: int) -> int:
+    """What a CRF-20 encode of this codec at this picture size tends to need."""
+    rung = max((e for e in TYPICAL_KBPS if e <= long_edge), default=min(TYPICAL_KBPS))
+    kbps = TYPICAL_KBPS[rung]
+    return int(kbps * HEVC_FACTOR) if codec == "hevc" else kbps
 # ffmpeg's mjpeg -q:v 2 with 4:2:0 chroma matches libjpeg quality 92 (4:2:0) on PSNR, measured on ffmpeg 8.
 JPEG_QSCALE = 2
 

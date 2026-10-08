@@ -335,14 +335,16 @@ class VideoTest(RealMediaTest):
         self.assertFalse([n for n in os.listdir(self.out) if n.startswith("passlog")])
         self.assertEqual(res.note, f"H.264 · {res.bytes / 1048576:.1f} MB · 1280 px")
         self.assertEqual(ffprobe(res.path)["streams"][0]["width"], 1280)
+        short = export_clip(src, self.out, title="s", in_s=0, out_s=1, mute=True, settings=VideoSettings(FFMPEG, FFPROBE, preset="ultrafast"))
+        self.assertEqual(short.note, f"H.264 · {short.bytes / 1048576:.1f} MB · 1280 px")  # every video says what it is
         self.assert_no_leftovers(self.out)
 
-    def test_long_clip_keeps_its_size_with_hevc(self):
+    def test_hevc_at_a_chosen_picture_size(self):
         if not has_encoder("libx265"):
             self.skipTest("this ffmpeg has no libx265")
         src = self.make_source(self.path("src.mp4"), seconds=4, size="1920x1080", audio=False)
-        # 4 s in 0.35 MB is about 700 kbps: too thin for H.264 at any size above 640 px, fine for H.265 at 854
-        settings = VideoSettings(FFMPEG, FFPROBE, preset="ultrafast", max_video_mb=0.35, hevc_available=True)
+        # the user's choices: H.265 at 480p; 4 s in 0.35 MB is about 700 kbps, so this goes straight to two-pass
+        settings = VideoSettings(FFMPEG, FFPROBE, preset="ultrafast", max_video_mb=0.35, codec="hevc", max_long_edge=854)
         res = export_clip(src, self.out, title="t", in_s=0, out_s=4, mute=True, settings=settings)
         v = ffprobe(res.path)["streams"][0]
         self.assertEqual((v["codec_name"], v["codec_tag_string"], v["width"], v["height"]), ("hevc", "hvc1", 854, 480))
@@ -351,13 +353,14 @@ class VideoTest(RealMediaTest):
         self.assertLessEqual(res.bytes, 0.35 * 1024 * 1024 * 1.1)
         self.assert_no_leftovers(self.out)
 
-    def test_long_clip_without_hevc_steps_the_picture_down(self):
+    def test_the_picture_is_never_reduced_unasked(self):
         src = self.make_source(self.path("src.mp4"), seconds=4, size="1920x1080", audio=False)
-        settings = VideoSettings(FFMPEG, FFPROBE, preset="ultrafast", max_video_mb=0.35, allow_hevc=False)
+        settings = VideoSettings(FFMPEG, FFPROBE, preset="ultrafast", max_video_mb=0.35)
         res = export_clip(src, self.out, title="t", in_s=0, out_s=4, mute=True, settings=settings)
         v = ffprobe(res.path)["streams"][0]
-        self.assertEqual((v["codec_name"], v["width"], v["height"]), ("h264", 640, 360))
-        self.assertEqual(res.note, f"H.264 · {res.bytes / 1048576:.1f} MB · 640 px")
+        self.assertEqual((v["codec_name"], v["width"], v["height"]), ("h264", 1920, 1080))  # squeezed, not shrunk
+        self.assertEqual(res.note, f"H.264 · {res.bytes / 1048576:.1f} MB · 1920 px")
+        self.assertLessEqual(res.bytes, 0.35 * 1024 * 1024 * 1.1)
 
     def test_detect_borders_finds_black_bars(self):
         from imaglr_integration.media.video_export import detect_edges
