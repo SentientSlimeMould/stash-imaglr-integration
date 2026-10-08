@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.19 — 2026-10-08
 
 - **Large files upload again.** imaglr's edge refuses any single request over 100 MB, which is what stopped long
   clips. imaglr now provides a chunked upload, and the plugin uses it: a draft whose files would exceed that is
