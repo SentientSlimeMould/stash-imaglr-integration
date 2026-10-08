@@ -7,6 +7,7 @@
   very file. Any edit that changes the picture clears the preview, so what you see is always current.
 - **Boomerang GIFs.** A **Loop** choice under Format: Forward, or Boomerang (forward then back), which loops
   without a jump. The estimate and the long-GIF warning allow for the doubled frames.
+- A **Picture size** for GIFs under Format: Original (the feed width), 480 px or 320 px; the estimate follows.
 - GIFs are sized for imaglr's feed: the first rung is now 698 px wide (the feed's content width) so a GIF is
   never shown upscaled, and the card says the width ("GIF · 9.4 MB · 698 px wide · 15 fps").
 

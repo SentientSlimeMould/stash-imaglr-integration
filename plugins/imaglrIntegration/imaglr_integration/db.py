@@ -148,6 +148,10 @@ MIGRATIONS = [
     """
     ALTER TABLE items ADD COLUMN loop TEXT NOT NULL DEFAULT 'forward';
     """,
+    # v10: a GIF's picture width (the ladder starts there); NULL = the feed width, 698 px
+    """
+    ALTER TABLE items ADD COLUMN gif_width INTEGER;
+    """,
 ]
 
 

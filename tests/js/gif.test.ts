@@ -27,3 +27,13 @@ test("gif counts ignore skipped items", () => {
   ];
   assert.deepEqual(gifCounts(plan), { gifs: 2, long: 1 });
 });
+
+test("a smaller GIF picture scales the estimate by area and is only offered below the source width", async () => {
+  const { gifSizeChoicesFor } = await import("../../src/ui/lib/gif.ts");
+  const [lo698] = estimateGifMb(10);
+  const [lo480] = estimateGifMb(10, "forward", 480);
+  assert.ok(Math.abs(lo480 / lo698 - (480 * 480) / (698 * 698)) < 1e-9);
+  assert.deepEqual(gifSizeChoicesFor(1920).map((o) => o.label), ["Original", "480 px", "320 px"]);
+  assert.deepEqual(gifSizeChoicesFor(400).map((o) => o.label), ["Original", "320 px"]);
+  assert.deepEqual(gifSizeChoicesFor(null).map((o) => o.label), ["Original", "480 px", "320 px"]);
+});

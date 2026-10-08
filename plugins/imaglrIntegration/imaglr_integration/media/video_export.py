@@ -210,6 +210,7 @@ def export_gif(
     probe_info: ProbeInfo | None = None,
     edges: dict[str, float] | None = None,
     loop: str = "forward",
+    max_width: int | None = None,
 ) -> ExportResult:
     """Cut [in_s, out_s] of src to an animated GIF under target_bytes, going down the quality ladder until it
     fits. The bottom rung is accepted up to limit_bytes (imaglr's ceiling); beyond that GifTooLarge says how
@@ -227,6 +228,8 @@ def export_gif(
 
     size = 0
     rungs = fc.GIF_LADDER
+    if max_width:  # the user's picture size: the ladder starts at that rung
+        rungs = tuple(r for r in rungs if r[0] <= max_width) or rungs[-1:]
     for n, (rung_width, gif_fps, colors) in enumerate(rungs):
         long_edge = fc.gif_long_edge_cap(w, h, aspect, position, rung_width, edges)
         cmd = fc.build_gif_cmd(settings.ffmpeg, src, part, in_s, out_s, w, h, long_edge=long_edge, gif_fps=gif_fps,

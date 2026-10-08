@@ -316,7 +316,7 @@ def _state(item: dict[str, Any]) -> dict[str, Any]:
                                  "action")} | {"title": item["source_title"], "tag_count": len(item["tags"]),
                                               "send_format": item["format"], "send_codec": item["codec"],
                                               "max_edge": item["max_edge"], "loop": item["loop"],
-                                              "output_note": item["output_note"]}
+                                              "gif_width": item["gif_width"], "output_note": item["output_note"]}
 
 
 def post_card(post: dict[str, Any], member_cards: list[dict[str, Any]]) -> dict[str, Any]:

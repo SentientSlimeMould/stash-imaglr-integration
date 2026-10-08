@@ -347,6 +347,16 @@ class GifTest(unittest.TestCase):
         self.assertEqual(len([c for c in calls if "-loop" in c]), 3)
         self.assertTrue(r.path.endswith(".gif"))
 
+    def test_a_chosen_width_starts_the_ladder_there(self):
+        from imaglr_integration.media.video_export import VideoSettings, export_gif
+
+        run_patch, probe_patch, calls = self.fake_ffmpeg([1500])
+        with run_patch, probe_patch:
+            r = export_gif("/src.mp4", self.tmp.name, title="t", in_s=0, out_s=8, settings=VideoSettings("ff", "fp"),
+                           target_bytes=2000, limit_bytes=10000, max_width=480)
+        self.assertEqual(r.note, "GIF · 0.0 MB · 480 px wide · 12 fps")
+        self.assertEqual(len([c for c in calls if "-loop" in c]), 1)  # straight to the 480 rung
+
     def test_bottom_rung_is_accepted_up_to_the_hard_limit(self):
         from imaglr_integration.media.video_export import VideoSettings, export_gif
 

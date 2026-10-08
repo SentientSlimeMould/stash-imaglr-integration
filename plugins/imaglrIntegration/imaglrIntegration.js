@@ -490,18 +490,31 @@
   // src/ui/lib/gif.ts
   var LONG_GIF_SECONDS = 15;
   var MB_PER_SECOND = { low: 1.2, high: 3 };
+  var GIF_FEED_WIDTH = 698;
+  var GIF_SIZE_OPTIONS = [
+    { label: "Original", value: null },
+    { label: "480 px", value: 480 },
+    { label: "320 px", value: 320 }
+  ];
+  function gifSizeChoicesFor(sourceWidth) {
+    return GIF_SIZE_OPTIONS.filter((o) => o.value === null || !sourceWidth || o.value < sourceWidth);
+  }
+  function widthFactor(width) {
+    const w = Math.min(width ?? GIF_FEED_WIDTH, GIF_FEED_WIDTH);
+    return w * w / (GIF_FEED_WIDTH * GIF_FEED_WIDTH);
+  }
   function gifSeconds(seconds, loop = "forward") {
     return Math.max(0, seconds) * (loop === "boomerang" ? 2 : 1);
   }
-  function estimateGifMb(seconds, loop = "forward") {
-    const s = gifSeconds(seconds, loop);
+  function estimateGifMb(seconds, loop = "forward", width = null) {
+    const s = gifSeconds(seconds, loop) * widthFactor(width);
     return [s * MB_PER_SECOND.low, s * MB_PER_SECOND.high];
   }
   function roundMb(n) {
     return n < 10 ? Math.round(n) : Math.round(n / 5) * 5;
   }
-  function describeGifEstimate(seconds, loop = "forward") {
-    const [lo, hi] = estimateGifMb(seconds, loop).map(roundMb);
+  function describeGifEstimate(seconds, loop = "forward", width = null) {
+    const [lo, hi] = estimateGifMb(seconds, loop, width).map(roundMb);
     return lo === hi ? `roughly ${lo} MB` : `roughly ${lo}\u2013${hi} MB`;
   }
 
@@ -585,7 +598,8 @@
   function formatHeader(v, estimate, edge) {
     if (v.format === "gif") {
       const loop = v.loop === "boomerang" ? " \xB7 boomerang" : "";
-      return { text: `GIF${loop} \xB7 ${describeGifEstimate(v.outS - v.inS, v.loop)}`, warn: gifSeconds(v.outS - v.inS, v.loop) > LONG_GIF_SECONDS };
+      const size = v.gifWidth ? ` \xB7 ${v.gifWidth} px` : "";
+      return { text: `GIF${loop}${size} \xB7 ${describeGifEstimate(v.outS - v.inS, v.loop, v.gifWidth)}`, warn: gifSeconds(v.outS - v.inS, v.loop) > LONG_GIF_SECONDS };
     }
     const parts = ["Video", CODEC_LABELS[v.codec], edgeLabel(edge), v.mute ? "no sound" : "", estimate.short];
     return { text: parts.filter(Boolean).join(" \xB7 "), warn: estimate.warn };
@@ -630,6 +644,7 @@
     }
     const sourceEdge = Math.max(size.vw, size.vh) || null;
     const sizeChoices = sizeChoicesFor(sourceEdge);
+    const gifSizeChoices = gifSizeChoicesFor(size.vw || null);
     const estimate = videoEstimate(value.outS - value.inS, value.codec, outputEdge(sourceEdge, value.maxEdge), value.mute);
     const header = formatHeader(value, estimate, outputEdge(sourceEdge, value.maxEdge));
     const rect = overlayRect(size.w, size.h, size.vw, size.vh, value.crop.aspect, value.crop.position, value.crop.edges);
@@ -702,7 +717,16 @@
         onClick: () => onChange({ ...value, loop: l })
       },
       LOOP_LABELS[l]
-    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "A boomerang plays the clip forward then backward, so it loops without a jump. It doubles the frames.")), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "This will be a GIF of ", describeGifEstimate(value.outS - value.inS, value.loop), ". GIFs over about ", gifTargetMb, " MB are slow to load, so the plugin will automatically lower the quality if it has to."), gifSeconds(value.outS - value.inS, value.loop) > LONG_GIF_SECONDS ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning mt-1" }, "Long GIFs may need lower frame-rates and resolutions. ", value.loop === "boomerang" ? "A boomerang plays twice as long, so clips" : "Clips", " below ", value.loop === "boomerang" ? LONG_GIF_SECONDS / 2 : LONG_GIF_SECONDS, " seconds work best.") : null) : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2 mb-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Codec"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(CODEC_LABELS).map((c) => /* @__PURE__ */ react_default.createElement(
+    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "A boomerang plays the clip forward then backward, so it loops without a jump. It doubles the frames.")), gifSizeChoices.length > 1 ? /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mb-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Picture size"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, gifSizeChoices.map((o) => /* @__PURE__ */ react_default.createElement(
+      Button,
+      {
+        key: o.label,
+        variant: (value.gifWidth ?? null) === o.value ? "primary" : "secondary",
+        disabled,
+        onClick: () => onChange({ ...value, gifWidth: o.value })
+      },
+      o.label
+    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "Original is the feed's width, 698 px. A smaller picture makes a much smaller GIF.")) : null, /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "This will be a GIF of ", describeGifEstimate(value.outS - value.inS, value.loop, value.gifWidth), ". GIFs over about ", gifTargetMb, " MB are slow to load, so the plugin will automatically lower the quality if it has to."), gifSeconds(value.outS - value.inS, value.loop) > LONG_GIF_SECONDS ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning mt-1" }, "Long GIFs may need lower frame-rates and resolutions. ", value.loop === "boomerang" ? "A boomerang plays twice as long, so clips" : "Clips", " below ", value.loop === "boomerang" ? LONG_GIF_SECONDS / 2 : LONG_GIF_SECONDS, " seconds work best.") : null) : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2 mb-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Codec"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(CODEC_LABELS).map((c) => /* @__PURE__ */ react_default.createElement(
       Button,
       {
         key: c,
@@ -894,7 +918,7 @@
     const [caption, setCaption] = react_default.useState("");
     const [crop, setCrop] = react_default.useState({ aspect: "original", position: 0.5 });
     const [trim, setTrim] = react_default.useState(
-      { inS: 0, outS: 0, mute: false, flip: false, format: "video", codec: "h264", maxEdge: null, loop: "forward" }
+      { inS: 0, outS: 0, mute: false, flip: false, format: "video", codec: "h264", maxEdge: null, loop: "forward", gifWidth: null }
     );
     const [blogId, setBlogId] = react_default.useState(null);
     const [action, setAction] = react_default.useState(null);
@@ -922,7 +946,8 @@
           format: d.item.format,
           codec: d.item.codec ?? "h264",
           maxEdge: d.item.max_edge ?? null,
-          loop: d.item.loop ?? "forward"
+          loop: d.item.loop ?? "forward",
+          gifWidth: d.item.gif_width ?? null
         });
         setBlogId(d.item.blog_id);
         setAction(d.item.action);
@@ -973,7 +998,8 @@
             format: trim.format,
             codec: trim.codec,
             max_edge: trim.maxEdge,
-            loop: trim.loop
+            loop: trim.loop,
+            gif_width: trim.gifWidth
           } : {}
         }
       });
@@ -1078,7 +1104,7 @@
           makingGif,
           onPreviewGif: previewGif,
           onChange: (v) => {
-            edit(setTrim)({ inS: v.inS, outS: v.outS, mute: v.mute, flip: v.flip, format: v.format, codec: v.codec, maxEdge: v.maxEdge, loop: v.loop });
+            edit(setTrim)({ inS: v.inS, outS: v.outS, mute: v.mute, flip: v.flip, format: v.format, codec: v.codec, maxEdge: v.maxEdge, loop: v.loop, gifWidth: v.gifWidth });
             setCrop(v.crop);
           },
           onSaveStill: saveStill
@@ -1782,7 +1808,7 @@
     if (count) return `${count} files in one post`;
     if (card.kind === "clip") {
       if (card.output_note) return card.output_note;
-      const how = card.send_format === "gif" ? card.loop === "boomerang" ? "GIF boomerang" : "GIF" : [card.send_codec === "hevc" ? "H.265" : null, card.max_edge ? edgeLabel(card.max_edge) : null].filter(Boolean).join(" ");
+      const how = card.send_format === "gif" ? ["GIF", card.loop === "boomerang" ? "boomerang" : null, card.gif_width ? `${card.gif_width} px` : null].filter(Boolean).join(" ") : [card.send_codec === "hevc" ? "H.265" : null, card.max_edge ? edgeLabel(card.max_edge) : null].filter(Boolean).join(" ");
       return [card.whole_scene ? "whole scene" : null, `${(card.duration ?? 0).toFixed(1)} s`, fmtDims(card.width, card.height), how || null].filter(Boolean).join(" \xB7 ");
     }
     return [card.format?.toUpperCase(), fmtDims(card.width, card.height), card.animated ? "animated" : null].filter(Boolean).join(" \xB7 ");

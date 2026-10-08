@@ -6,7 +6,7 @@ import { clampTrim, pickStream, sameOrigin, type SceneStream, type VideoInfo } f
 import { overlayRect } from "../lib/crop.ts";
 import { CropControls } from "./CropControls.tsx";
 import { Fold } from "./Fold.tsx";
-import { describeGifEstimate, type GifLoop, gifSeconds, LONG_GIF_SECONDS } from "../lib/gif.ts";
+import { describeGifEstimate, type GifLoop, gifSeconds, gifSizeChoicesFor, LONG_GIF_SECONDS } from "../lib/gif.ts";
 import { CODEC_LABELS, type Codec, edgeLabel, outputEdge, sizeChoicesFor, videoEstimate } from "../lib/video.ts";
 import { fmtTime, parseTime } from "../lib/format.ts";
 import type { Crop } from "../lib/types.ts";
@@ -60,6 +60,7 @@ export interface ClipState {
   codec: Codec; // videos: H.264 or H.265
   maxEdge: number | null; // videos: picture size as a long edge; null = as the source (up to 1080p)
   loop: GifLoop; // GIFs: forward, or forward then back
+  gifWidth: number | null; // GIFs: picture width; null = the feed width (698 px)
   crop: Crop;
 }
 
@@ -116,7 +117,8 @@ function TimeRow({ label, value, disabled, onSet, onNudge, onType }: {
 export function formatHeader(v: ClipState, estimate: { short: string; warn: boolean }, edge: number): { text: string; warn: boolean } {
   if (v.format === "gif") {
     const loop = v.loop === "boomerang" ? " · boomerang" : "";
-    return { text: `GIF${loop} · ${describeGifEstimate(v.outS - v.inS, v.loop)}`, warn: gifSeconds(v.outS - v.inS, v.loop) > LONG_GIF_SECONDS };
+    const size = v.gifWidth ? ` · ${v.gifWidth} px` : "";
+    return { text: `GIF${loop}${size} · ${describeGifEstimate(v.outS - v.inS, v.loop, v.gifWidth)}`, warn: gifSeconds(v.outS - v.inS, v.loop) > LONG_GIF_SECONDS };
   }
   const parts = ["Video", CODEC_LABELS[v.codec], edgeLabel(edge), v.mute ? "no sound" : "", estimate.short];
   return { text: parts.filter(Boolean).join(" · "), warn: estimate.warn };
@@ -169,6 +171,7 @@ export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTarget
 
   const sourceEdge = Math.max(size.vw, size.vh) || null;
   const sizeChoices = sizeChoicesFor(sourceEdge);
+  const gifSizeChoices = gifSizeChoicesFor(size.vw || null);
   const estimate = videoEstimate(value.outS - value.inS, value.codec, outputEdge(sourceEdge, value.maxEdge), value.mute);
   const header = formatHeader(value, estimate, outputEdge(sourceEdge, value.maxEdge));
   const rect = overlayRect(size.w, size.h, size.vw, size.vh, value.crop.aspect, value.crop.position, value.crop.edges);
@@ -271,8 +274,26 @@ export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTarget
                 A boomerang plays the clip forward then backward, so it loops without a jump. It doubles the frames.
               </div>
             </Form.Group>
+            {gifSizeChoices.length > 1 ? (
+              <Form.Group className="mb-2">
+                <Form.Label>Picture size</Form.Label>
+                <div>
+                  <ButtonGroup className="imaglr-segmented">
+                    {gifSizeChoices.map((o) => (
+                      <Button key={o.label} variant={(value.gifWidth ?? null) === o.value ? "primary" : "secondary"} disabled={disabled}
+                        onClick={() => onChange({ ...value, gifWidth: o.value })}>
+                        {o.label}
+                      </Button>
+                    ))}
+                  </ButtonGroup>
+                </div>
+                <div className="small text-muted mt-1">
+                  Original is the feed's width, 698 px. A smaller picture makes a much smaller GIF.
+                </div>
+              </Form.Group>
+            ) : null}
             <div className="small text-muted mt-1">
-              This will be a GIF of {describeGifEstimate(value.outS - value.inS, value.loop)}. GIFs over about {gifTargetMb} MB are slow to
+              This will be a GIF of {describeGifEstimate(value.outS - value.inS, value.loop, value.gifWidth)}. GIFs over about {gifTargetMb} MB are slow to
               load, so the plugin will automatically lower the quality if it has to.
             </div>
             {gifSeconds(value.outS - value.inS, value.loop) > LONG_GIF_SECONDS ? (
