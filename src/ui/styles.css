@@ -497,3 +497,12 @@
   gap: 0.5rem;
   margin: 0.5rem 0;
 }
+
+/* Clip editor: the cover row (the chosen frame's time and its actions) */
+.imaglr-cover-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}

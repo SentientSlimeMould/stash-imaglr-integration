@@ -26,7 +26,7 @@ from .tags.pipeline import MAX_TAG_LEN, MAX_TAGS
 
 IN_FLIGHT = ("exporting", "sending")
 EDITABLE = {"tags", "caption", "blog_id", "action", "crop", "in_s", "out_s", "mute", "flip", "format", "codec", "max_edge", "loop",
-            "gif_width", "gif_fps"}
+            "gif_width", "gif_fps", "cover_t"}
 MAX_ANIMATION_FPS = 60
 FORMATS = ("video", "gif", "webp")
 CODECS = ("h264", "hevc")
@@ -123,7 +123,12 @@ def op_item_update(ctx: Context) -> dict[str, Any]:
         changes["gif_fps"] = int(changes["gif_fps"]) if changes["gif_fps"] else None
         if changes["gif_fps"] is not None and not (1 <= changes["gif_fps"] <= MAX_ANIMATION_FPS):
             raise UserError("Unknown frame rate.")
-    if {"in_s", "out_s", "mute", "flip", "format", "codec", "max_edge", "loop", "gif_width", "gif_fps"} & set(changes):
+    if "cover_t" in changes:
+        cover = changes["cover_t"]
+        changes["cover_t"] = round(float(cover), 3) if cover is not None and cover != "" else None
+        if changes["cover_t"] is not None and not (0 <= changes["cover_t"] < 10 ** 6):
+            raise UserError("The cover time must be a time in the video.")
+    if {"in_s", "out_s", "mute", "flip", "format", "codec", "max_edge", "loop", "gif_width", "gif_fps", "cover_t"} & set(changes):
         if item["kind"] != "clip":
             raise UserError("Only clips can be trimmed, muted, flipped or made into GIFs.")
         in_s = round(float(changes["in_s"]), 3) if "in_s" in changes else float(item["in_s"] or 0)
@@ -138,8 +143,8 @@ def op_item_update(ctx: Context) -> dict[str, Any]:
                        flip=bool(changes.get("flip", item["flip"])), format=changes.get("format", item["format"]),
                        codec=changes.get("codec", item["codec"]), max_edge=changes.get("max_edge", item["max_edge"]),
                        loop=changes.get("loop", item["loop"]), gif_width=changes.get("gif_width", item["gif_width"]),
-                       gif_fps=changes.get("gif_fps", item["gif_fps"]))
-        keys = ("in_s", "out_s", "mute", "flip", "format", "codec", "max_edge", "loop", "gif_width", "gif_fps")
+                       gif_fps=changes.get("gif_fps", item["gif_fps"]), cover_t=changes.get("cover_t", item["cover_t"]))
+        keys = ("in_s", "out_s", "mute", "flip", "format", "codec", "max_edge", "loop", "gif_width", "gif_fps", "cover_t")
         if tuple(changes[k] for k in keys) != tuple(item[k] for k in keys):
             changes.update(output_path=None, output_bytes=None, output_mime=None, output_note=None,
                            size_guard_retried=False)  # export again

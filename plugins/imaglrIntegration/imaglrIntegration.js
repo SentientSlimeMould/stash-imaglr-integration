@@ -585,6 +585,7 @@
     };
   }
   var FORMAT_LABELS = { video: "Video", webp: "WebP", gif: "GIF" };
+  var COVER_HOLD_SECONDS = 1.5;
   var FORMAT_HINTS = {
     video: "Best quality, keeps the sound, and the smallest file for anything long. The viewer has to click play.",
     gif: "Plays automatically in the feed. No sound, limited to 256 colours, and the largest file of the three, so short clips only.",
@@ -621,7 +622,14 @@
         warn: gifSeconds(v.outS - v.inS, v.loop) > LONG_GIF_SECONDS
       };
     }
-    const parts = ["Video", CODEC_LABELS[v.codec], edgeLabel(edge), v.mute ? "no sound" : "", estimate.short];
+    const parts = [
+      "Video",
+      CODEC_LABELS[v.codec],
+      edgeLabel(edge),
+      v.mute ? "no sound" : "",
+      v.coverT !== null ? `cover at ${fmtTime(v.coverT)}` : "",
+      estimate.short
+    ];
     return { text: parts.filter(Boolean).join(" \xB7 "), warn: estimate.warn };
   }
   function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTargetMb, sourceFps, gifPreview, makingGif, onChange, onSaveStill, onPreviewGif }) {
@@ -729,7 +737,17 @@
         onClick: () => onChange({ ...value, format: f })
       },
       FORMAT_LABELS[f]
-    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, FORMAT_HINTS[value.format])), value.format !== "video" ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2 mb-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Loop"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(LOOP_LABELS).map((l) => /* @__PURE__ */ react_default.createElement(
+    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, FORMAT_HINTS[value.format])), value.format === "video" ? /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2 mb-2" }, /* @__PURE__ */ react_default.createElement(
+      Form.Check,
+      {
+        id: "imaglr-mute",
+        type: "switch",
+        label: "Remove sound",
+        checked: value.mute,
+        disabled,
+        onChange: (e) => onChange({ ...value, mute: e.target.checked })
+      }
+    )) : null, value.format !== "video" ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2 mb-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Loop"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(LOOP_LABELS).map((l) => /* @__PURE__ */ react_default.createElement(
       Button,
       {
         key: l,
@@ -774,17 +792,12 @@
         onClick: () => onChange({ ...value, maxEdge: o.value })
       },
       o.label
-    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "Smaller pictures make smaller files and encode faster. Original keeps the source's size, up to 1080p.")) : null, /* @__PURE__ */ react_default.createElement(
-      Form.Check,
-      {
-        id: "imaglr-mute",
-        type: "switch",
-        label: "Remove sound",
-        checked: value.mute,
-        disabled,
-        onChange: (e) => onChange({ ...value, mute: e.target.checked })
+    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "Smaller pictures make smaller files and encode faster. Original keeps the source's size, up to 1080p.")) : null, /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2 mb-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Cover"), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mb-2" }, "imaglr takes the picture shown before a video plays from about one second in. With a cover, that moment is the frame you chose: the clip opens on it for ", COVER_HOLD_SECONDS, " seconds, then plays. Pause the clip on the frame you want, then press the button."), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-cover-row" }, value.coverT === null ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onChange({ ...value, coverT: Math.round(now() * 1e3) / 1e3 }) }, "Use this frame as the cover") : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("span", null, "The frame at ", /* @__PURE__ */ react_default.createElement("strong", null, fmtTime(value.coverT)), ", shown for ", COVER_HOLD_SECONDS, " s before the clip"), /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-clip-actions" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => {
+      if (video.current) {
+        video.current.pause();
+        video.current.currentTime = value.coverT ?? 0;
       }
-    ), /* @__PURE__ */ react_default.createElement("div", { className: `small mt-1 ${estimate.warn ? "text-warning" : "text-muted"}` }, estimate.text))));
+    } }, "Show"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onChange({ ...value, coverT: Math.round(now() * 1e3) / 1e3 }) }, "Use this frame"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onChange({ ...value, coverT: null }) }, "Clear"))))), /* @__PURE__ */ react_default.createElement("div", { className: `small mt-1 ${estimate.warn ? "text-warning" : "text-muted"}` }, estimate.text))));
   }
 
   // src/ui/lib/tags.ts
@@ -948,7 +961,7 @@
     const [caption, setCaption] = react_default.useState("");
     const [crop, setCrop] = react_default.useState({ aspect: "original", position: 0.5 });
     const [trim, setTrim] = react_default.useState(
-      { inS: 0, outS: 0, mute: false, flip: false, format: "video", codec: "h264", maxEdge: null, loop: "forward", gifWidth: null, gifFps: null }
+      { inS: 0, outS: 0, mute: false, flip: false, format: "video", codec: "h264", maxEdge: null, loop: "forward", gifWidth: null, gifFps: null, coverT: null }
     );
     const [blogId, setBlogId] = react_default.useState(null);
     const [action, setAction] = react_default.useState(null);
@@ -978,7 +991,8 @@
           maxEdge: d.item.max_edge ?? null,
           loop: d.item.loop ?? "forward",
           gifWidth: d.item.gif_width ?? null,
-          gifFps: d.item.gif_fps ?? null
+          gifFps: d.item.gif_fps ?? null,
+          coverT: d.item.cover_t ?? null
         });
         setBlogId(d.item.blog_id);
         setAction(d.item.action);
@@ -1031,7 +1045,8 @@
             max_edge: trim.maxEdge,
             loop: trim.loop,
             gif_width: trim.gifWidth,
-            gif_fps: trim.gifFps
+            gif_fps: trim.gifFps,
+            cover_t: trim.coverT
           } : {}
         }
       });
@@ -1137,7 +1152,7 @@
           makingGif,
           onPreviewGif: previewGif,
           onChange: (v) => {
-            edit(setTrim)({ inS: v.inS, outS: v.outS, mute: v.mute, flip: v.flip, format: v.format, codec: v.codec, maxEdge: v.maxEdge, loop: v.loop, gifWidth: v.gifWidth, gifFps: v.gifFps });
+            edit(setTrim)({ inS: v.inS, outS: v.outS, mute: v.mute, flip: v.flip, format: v.format, codec: v.codec, maxEdge: v.maxEdge, loop: v.loop, gifWidth: v.gifWidth, gifFps: v.gifFps, coverT: v.coverT });
             setCrop(v.crop);
           },
           onSaveStill: saveStill

@@ -401,6 +401,33 @@ class VideoTest(RealMediaTest):
         self.assertTrue(res.note.startswith("WebP · ") and res.note.endswith("· boomerang"), res.note)
         self.assertEqual(res.width, 640)
 
+    def test_cover_frame_opens_the_clip(self):
+        from imaglr_integration.media.video_export import VideoSettings, export_clip
+        # 1 s red, then 3 s blue, with a tone
+        src = self.path("redblue.mp4")
+        ff("-f", "lavfi", "-i", "color=c=red:s=320x180:r=25:d=1", "-f", "lavfi", "-i", "color=c=blue:s=320x180:r=25:d=3",
+           "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=4",
+           "-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0[v]", "-map", "[v]", "-map", "2:a",
+           "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", src)
+        res = export_clip(src, self.out, title="c", in_s=2.0, out_s=4.0, cover_t=0.5,
+                          settings=VideoSettings(FFMPEG, FFPROBE, preset="ultrafast"))
+
+        def colour_at(t):
+            out = subprocess.run([FFMPEG, "-hide_banner", "-loglevel", "error", "-ss", f"{t:.2f}", "-i", res.path, "-frames:v", "1",
+                                  "-vf", "scale=1:1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], capture_output=True).stdout
+            return tuple(out[:3])
+
+        first, held, later = colour_at(0.0), colour_at(1.0), colour_at(2.0)
+        self.assertGreater(first[0], 200, first)  # the cover: red
+        self.assertLess(first[2], 60, first)
+        self.assertGreater(held[0], 200, held)  # still the cover at the second imaglr samples
+        self.assertGreater(later[2], 200, later)  # then the clip: blue
+        info = ffprobe(res.path, "-show_format", "-show_streams")
+        self.assertAlmostEqual(float(info["format"]["duration"]), 3.5, delta=0.2)  # 2 s clip + 1.5 s cover
+        self.assertTrue(any(s["codec_type"] == "audio" for s in info["streams"]))
+        self.assertEqual((res.width, res.height), (320, 180))
+        self.assertTrue(res.note.endswith(" · with cover"), res.note)
+
     def test_failure_leaves_no_part(self):
         src = self.make_source(self.path("src.mp4"), seconds=2)
         info = probe(FFPROBE, src)

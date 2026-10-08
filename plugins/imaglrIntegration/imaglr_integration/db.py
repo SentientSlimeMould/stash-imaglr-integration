@@ -156,6 +156,11 @@ MIGRATIONS = [
     """
     ALTER TABLE items ADD COLUMN gif_fps INTEGER;
     """,
+    # v12: a video's cover: the source time (seconds) of the frame the clip opens on, held so imaglr's thumbnail
+    # (taken about a second in) shows it; NULL = none
+    """
+    ALTER TABLE items ADD COLUMN cover_t REAL;
+    """,
 ]
 
 

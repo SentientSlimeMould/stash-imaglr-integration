@@ -14,6 +14,9 @@ from dataclasses import dataclass
 ASPECTS: dict[str, float | None] = {"original": None, "9:16": 9 / 16, "4:5": 4 / 5, "1:1": 1.0}
 AUDIO_KBPS = 128
 MAX_FPS = 60.0
+# imaglr takes a video's thumbnail (the poster in the feed) from about 1.0 s in (measured 2026-10-08: 1.02 s on
+# 6, 10 and 20 s videos). A cover frame is therefore held for this long at the start, so that moment is the cover.
+COVER_HOLD_SECONDS = 1.5
 MIN_KBPS = 200
 
 # The user chooses the codec and the picture size for each clip; the plugin only fits the file under the
@@ -323,17 +326,36 @@ def build_clip_cmd(
     passlog: str | None = None,
     codec: str = "h264",
     edges: dict[str, float] | None = None,
+    cover_t: float | None = None,
+    cover_hold: float = COVER_HOLD_SECONDS,
 ) -> list[str]:
+    """The clip, optionally opening on a cover: the source frame at `cover_t` held for `cover_hold` seconds
+    before the clip itself, through the same crop/scale/flip chain, with the sound delayed to match."""
     duration = max(0.1, out_s - in_s)
     cmd = _base(ffmpeg)
     cmd += _headers_arg(headers)
-    cmd += ["-ss", f"{in_s:.3f}", "-i", src, "-t", f"{duration:.3f}", "-map", "0:v:0"]
     include_audio = has_audio and not mute
-    if include_audio:
-        cmd += ["-map", "0:a:0?"]
     vf = build_filter_chain(width, height, aspect, position, max_long_edge, fps, flip, edges)
-    if vf:
-        cmd += ["-vf", vf]
+    if cover_t is None:
+        cmd += ["-ss", f"{in_s:.3f}", "-i", src, "-t", f"{duration:.3f}", "-map", "0:v:0"]
+        if include_audio:
+            cmd += ["-map", "0:a:0?"]
+        if vf:
+            cmd += ["-vf", vf]
+    else:
+        out_fps = min(fps or 25.0, MAX_FPS) or 25.0
+        chain = (vf + "," if vf else "") + f"fps={out_fps:g},format=yuv420p"
+        # input 0: the clip (cut on the input side, so the output may be longer); input 1: a moment at the cover
+        cmd += ["-ss", f"{in_s:.3f}", "-t", f"{duration:.3f}", "-i", src]
+        cmd += _headers_arg(headers)
+        cmd += ["-ss", f"{cover_t:.3f}", "-t", "0.5", "-i", src]
+        graph = (f"[1:v]{chain},trim=end_frame=1,tpad=stop_mode=clone:stop_duration={cover_hold:g},setpts=PTS-STARTPTS[c];"
+                 f"[0:v]{chain},setpts=PTS-STARTPTS[v0];[c][v0]concat=n=2:v=1:a=0[v]")
+        if include_audio:
+            graph += f";[0:a]adelay=delays={int(cover_hold * 1000)}:all=1[a]"
+        cmd += ["-filter_complex", graph, "-map", "[v]"]
+        if include_audio:
+            cmd += ["-map", "[a]"]
     if codec == "hevc":
         # hvc1 is the tag Safari and QuickTime need; x265's own log is silenced (ffmpeg's -loglevel doesn't reach it)
         cmd += ["-c:v", "libx265", "-tag:v", "hvc1", "-preset", preset, "-pix_fmt", "yuv420p",

@@ -22,6 +22,7 @@ export interface Card {
   loop?: "forward" | "boomerang"; // GIFs: forward, or forward then back
   gif_width?: number | null; // GIFs: picture width in px; null = the feed width
   gif_fps?: number | null; // GIFs and WebPs: frame rate; null = the ladder's own
+  cover_t?: number | null; // videos: source time of the cover frame the clip opens on; null = none
   fps?: number | null; // clips: the source's frame rate
   output_note?: string | null; // after preparing: e.g. "GIF · 9.4 MB · 480 px · 10 fps"
   thumb: string | null; // relative to Stash's base URL
@@ -100,6 +101,7 @@ export interface FileCard extends Card {
   loop: "forward" | "boomerang";
   gif_width: number | null;
   gif_fps: number | null;
+  cover_t: number | null;
   output_note: string | null; // what the prepared file turned out to be, e.g. "GIF · 9.4 MB · 480 px · 10 fps"
   output_mime: string | null; // of the prepared file, e.g. "image/gif"
   stash_marker_id: string | null;
@@ -132,6 +134,7 @@ export interface ItemDetail {
     loop: "forward" | "boomerang";
     gif_width: number | null;
     gif_fps: number | null;
+    cover_t: number | null;
     output_note: string | null;
     hdr_warning: boolean;
     updated_at: string; // changes whenever the item (and so its prepared file) does: busts the browser's cache
