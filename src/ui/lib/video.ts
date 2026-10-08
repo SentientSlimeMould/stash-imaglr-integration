@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// What a clip sent as a video is up against: imaglr's API refuses any upload over 100 MB (measured; its
-// documentation says 500 MB), so the plugin encodes at the bitrate that fits. The user picks the codec and the
-// picture size; this estimates the outcome so they can decide. Mirrors the backend's ffmpeg_cmd tables.
+// What a clip sent as a video is up against: imaglr allows 500 MB per video (large files travel in pieces, so
+// the edge's 100 MB cap on one request no longer bites), and the plugin encodes at the bitrate that fits. The
+// user picks the codec and the picture size; this estimates the outcome so they can decide. Mirrors the
+// backend's ffmpeg_cmd tables.
 
 export type Codec = "h264" | "hevc";
 
-export const VIDEO_CAP_MB = 100;
+export const VIDEO_CAP_MB = 500;
 export const CODEC_LABELS: Record<Codec, string> = { h264: "H.264", hevc: "H.265" };
 /** The picture-size choices: a long edge in px, or null for "as the source (up to 1080p)". */
 export const SIZE_OPTIONS: { label: string; value: number | null }[] = [

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Large files upload again.** imaglr's edge refuses any single request over 100 MB, which is what stopped long
+  clips. imaglr now provides a chunked upload, and the plugin uses it: a draft whose files would exceed that is
+  sent in 50 MB pieces (each its own request, a failed piece simply re-sent) and the draft references them. The
+  limits are back to imaglr's own: 500 MB per video, 40 MB per image, and a post's files no longer have to fit
+  one request together. The editor's estimates follow.
+
 ## 0.1.18 — 2026-10-08
 
 - **WebP** joins Video and GIF as a Format for clips: an animated WebP plays automatically in the feed like a GIF,

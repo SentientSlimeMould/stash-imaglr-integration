@@ -120,6 +120,10 @@ def main(port, fake_port):
     print("verify")
     page = urllib.request.urlopen(f"http://127.0.0.1:{fake_port}/", timeout=10).read().decode()
     check(sent_image["draft_id"] in page and sent_clip["draft_id"] in page, "fake imaglr lists both drafts")
+    clip_row = page[page.index(f"<td>{sent_clip['draft_id']}</td>"):].split("</tr>", 1)[0]
+    check("(chunked)" in clip_row, "the clip (over the dev single-request limit) went up in pieces")
+    image_row = page[page.index(f"<td>{sent_image['draft_id']}</td>"):].split("</tr>", 1)[0]
+    check("(chunked)" not in image_row, "the small image went in one request")
     check("e2e, smoke" in page or "e2e" in page, "tags reached imaglr")
     image_tags = {t["name"] for t in stash.gql(
         "query($id: ID!) { findImage(id: $id) { tags { name } } }", id=images[0]["id"])["findImage"]["tags"]}

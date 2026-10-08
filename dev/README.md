@@ -73,6 +73,9 @@ IMAGLR_API_BASE=https://imaglr.com/api/v2 docker compose up -d   # point the tes
 docker compose up -d                                             # back to the fake
 ```
 
+`IMAGLR_SINGLE_REQUEST_LIMIT` (set to 1 MB in the compose file, honoured only alongside the fake) makes the plugin
+send any draft over that size through the fake's chunked uploads, so the e2e clip exercises that path.
+
 `python3 dev/imaglr_upload_limit.py` posts test videos of rising size to the test blog (and discards the drafts) to
 show where imaglr's edge refuses an upload; measured at 100 MiB per request on 2026-10-08, whatever the docs say.
 

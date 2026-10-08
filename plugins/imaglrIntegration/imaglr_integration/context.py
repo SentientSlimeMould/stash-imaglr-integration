@@ -16,6 +16,9 @@ from .stash import StashClient
 
 # Development only: point the plugin at a fake imaglr (dev/fake_imaglr.py). Unset in normal use.
 IMAGLR_BASE_ENV = "IMAGLR_API_BASE"
+# Development only: the single-request limit above which a draft's files go up in pieces (bytes), so the
+# chunked path can be exercised with small test files. Unset in normal use (the client's own 95 MB).
+IMAGLR_REQUEST_LIMIT_ENV = "IMAGLR_SINGLE_REQUEST_LIMIT"
 
 
 def imaglr_base_override() -> str | None:
@@ -82,6 +85,9 @@ class Context:
         if base:
             log.warning(f"{IMAGLR_BASE_ENV} is set: talking to {base} instead of imaglr.com (development only)")
             kwargs["base_url"] = base
+            limit = (os.environ.get(IMAGLR_REQUEST_LIMIT_ENV) or "").strip()
+            if limit.isdigit() and int(limit) > 0:  # only alongside the fake: never shrink real requests
+                kwargs["single_request_limit"] = int(limit)
         return ImaglrClient(blog["api_key"], self.version, **kwargs)
 
     def arg(self, name: str, kind: type = str, required: bool = True) -> Any:
