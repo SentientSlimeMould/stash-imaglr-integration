@@ -73,6 +73,9 @@ IMAGLR_API_BASE=https://imaglr.com/api/v2 docker compose up -d   # point the tes
 docker compose up -d                                             # back to the fake
 ```
 
+`python3 dev/imaglr_upload_limit.py` posts test videos of rising size to the test blog (and discards the drafts) to
+show where imaglr's edge refuses an upload; measured at 100 MiB per request on 2026-10-08, whatever the docs say.
+
 A real test blog's key belongs in `dev/.env.local` (git-ignored; nothing reads it automatically — paste it into the
 plugin's Settings when testing against real imaglr). Never paste keys into commits, issues or chat.
 
