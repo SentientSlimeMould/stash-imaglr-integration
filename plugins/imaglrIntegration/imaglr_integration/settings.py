@@ -25,6 +25,7 @@ class Settings:
     prepared_retention_days: int = 14
     clips_as_gif: bool = False  # new clips start as animated GIFs instead of videos
     gif_target_mb: float = 20.0  # the GIF export aims under this; imaglr's hard limit is 40 MB
+    no_hevc: bool = False  # never encode H.265, even for long clips that would otherwise lose resolution
 
 
 # Stash setting name -> (field, converter). Keep in step with `settings:` in imaglrIntegration.yml.
@@ -36,6 +37,7 @@ _FIELDS = {
     "videoClipsAsGif": ("clips_as_gif", bool),
     "videoDefaultClipSeconds": ("default_clip_seconds", float),
     "videoGifTargetMb": ("gif_target_mb", float),
+    "videoNoHevc": ("no_hevc", bool),
     "workingFilesKeepDays": ("prepared_retention_days", int),
 }
 

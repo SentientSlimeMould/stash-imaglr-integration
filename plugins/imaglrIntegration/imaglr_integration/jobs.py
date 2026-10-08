@@ -34,8 +34,12 @@ from .tags.caption import caption_to_html
 from .tags.pipeline import MAX_TAGS, dropped_tags
 
 IMAGE_LIMIT = 40 * 1024 * 1024  # imaglr: 40 MB per image
-VIDEO_LIMIT = 500 * 1024 * 1024  # imaglr: 500 MB per video
-REQUEST_LIMIT = 900 * 1024 * 1024  # imaglr: "one request may total roughly 900 MB"
+# imaglr's documentation says 500 MB per video and roughly 900 MB per request, but its API sits behind an edge
+# that refuses any request body over 100 MiB with a bare 413 (measured 2026-10-08: 97 MiB accepted, 101 MiB
+# refused, two 55 MB files in one post refused). The post's files have to fit this together.
+REQUEST_LIMIT = 100 * 1024 * 1024
+VIDEO_LIMIT = REQUEST_LIMIT
+MIN_VIDEO_BYTES = 2 * 1024 * 1024  # below this share of the request a video isn't worth encoding
 SAFETY = 0.95  # stay under the limits
 MAX_RATE_LIMIT_WAIT = 120  # longer waits fail the item with a retry button instead of blocking Stash's queue
 
@@ -186,12 +190,15 @@ GIF_FALLBACK_NOTE = "Sent as a video - the GIF would have been over imaglr's lim
 
 def prepare_clip(ctx: Context, member: dict[str, Any], tools: tuple[str, str], should_cancel, progress,
                  bitrate_scale: float | None = None, previous_bytes: int | None = None,
-                 config: plugin_settings.Settings | None = None, gif_fallback: bool = False) -> dict[str, Any]:
+                 config: plugin_settings.Settings | None = None, gif_fallback: bool = False,
+                 max_bytes: int | None = None) -> dict[str, Any]:
+    """Export one clip. `max_bytes` is this video's share of the request (see video_budget); the GIF path has
+    its own target."""
     ffmpeg, ffprobe = tools
+    config = config or plugin_settings.Settings()
     src, headers = clip_source(ctx, member)
     crop = member["crop"] or {}
     if member["format"] == "gif":
-        config = config or plugin_settings.Settings()
         try:
             result = export_gif(
                 src, _fresh_dir(ctx, member["id"]), title=member["source_title"] or "clip",
@@ -211,7 +218,8 @@ def prepare_clip(ctx: Context, member: dict[str, Any], tools: tuple[str, str], s
                 ) from None
             log.info(f"{member['source_title']}: GIF would be {e.size / 1048576:.0f} MB; sending as a video instead")
             member = repo.update_item(ctx.db, member["id"], format="video") or member  # type: ignore[assignment]
-            return prepare_clip(ctx, member, tools, should_cancel, progress, config=config) | {"gif_fallback": True}
+            return prepare_clip(ctx, member, tools, should_cancel, progress, config=config,
+                                max_bytes=max_bytes) | {"gif_fallback": True}
         except (UnsupportedMedia, ValueError) as e:
             raise JobFailed("unsupported_video", f"{member['source_title']}: {e}") from None
         except FfmpegError as e:
@@ -219,11 +227,14 @@ def prepare_clip(ctx: Context, member: dict[str, Any], tools: tuple[str, str], s
         return repo.update_item(ctx.db, member["id"], output_path=result.path, output_bytes=result.bytes,
                                 output_mime="image/gif", output_note=result.note, hdr_warning=False,
                                 error_code=None, error_detail=None)  # type: ignore[return-value]
+    video_settings = VideoSettings(ffmpeg, ffprobe, allow_hevc=not config.no_hevc)
+    if max_bytes:
+        video_settings.max_video_mb = max_bytes / 1048576
     try:
         result = export_clip(
             src, _fresh_dir(ctx, member["id"]), title=member["source_title"] or "clip",
             in_s=float(member["in_s"] or 0), out_s=float(member["out_s"] or 0),
-            settings=VideoSettings(ffmpeg, ffprobe), headers=headers,
+            settings=video_settings, headers=headers,
             aspect=crop.get("aspect") or "original", position=float(crop.get("position", 0.5)),
             mute=bool(member["mute"]), flip=bool(member["flip"]), progress_cb=progress, should_cancel=should_cancel,
             bitrate_scale=bitrate_scale, previous_bytes=previous_bytes,
@@ -235,8 +246,8 @@ def prepare_clip(ctx: Context, member: dict[str, Any], tools: tuple[str, str], s
     if result.hdr:
         log.warning(f"{member['source_title']}: HDR source; colours may look washed out (tone mapping isn't supported)")
     return repo.update_item(ctx.db, member["id"], output_path=result.path, output_bytes=result.bytes,
-                            output_mime="video/mp4", output_note=None, hdr_warning=result.hdr, error_code=None,
-                            error_detail=None)  # type: ignore[return-value]
+                            output_mime="video/mp4", output_note=result.note, hdr_warning=result.hdr,
+                            error_code=None, error_detail=None)  # type: ignore[return-value]
 
 
 def grab_still(ctx: Context, clip: dict[str, Any], t: float, still_id: str) -> str:
@@ -251,13 +262,33 @@ def grab_still(ctx: Context, clip: dict[str, Any], t: float, still_id: str) -> s
         raise JobFailed("ffmpeg_failed", f"Couldn't grab that frame: {e}") from None
 
 
-def _is_prepared(member: dict[str, Any]) -> bool:
+def _is_prepared(member: dict[str, Any], max_bytes: int | None = None) -> bool:
     path = member["output_path"]
     if member["kind"] == "clip":  # a prepared GIF is no use when the clip is to go as a video, and vice versa
         wanted = "image/gif" if member["format"] == "gif" else "video/mp4"
         if member["output_mime"] != wanted:
             return False
+    if max_bytes and (member["output_bytes"] or 0) > max_bytes:  # e.g. prepared for a bigger limit than now
+        return False
     return bool(path and os.path.isfile(path) and os.path.getsize(path) == member["output_bytes"])
+
+
+def _is_video(member: dict[str, Any]) -> bool:
+    return member["kind"] == "clip" and member["format"] != "gif"
+
+
+def video_budget(members: list[dict[str, Any]]) -> int:
+    """Bytes each video in the post may take: the request limit less what the other files take, shared equally
+    among the videos. Raises when that is too little to be worth encoding."""
+    videos = [m for m in members if _is_video(m)]
+    if not videos:
+        return VIDEO_LIMIT
+    others = sum(m["output_bytes"] or 0 for m in members if not _is_video(m))
+    share = int((REQUEST_LIMIT * SAFETY - others) / len(videos))
+    if share < MIN_VIDEO_BYTES:
+        raise JobFailed("file_too_large", f"Together these files are over imaglr's {REQUEST_LIMIT // 1048576} MB "
+                        "per post. Split the post.")
+    return share
 
 
 # ---- sending --------------------------------------------------------------------------------
@@ -316,14 +347,15 @@ def _upload_error(ctx: Context, blog: dict[str, Any], e: ImaglrError) -> JobFail
 def _shrink_videos(ctx: Context, members: list[dict[str, Any]], should_cancel) -> bool:
     """imaglr rejected the upload as too large: re-encode each clip once at 90 % of the target bitrate.
     Returns False when there is nothing left to shrink (images are already sized under imaglr's limit)."""
-    clips = [n for n, m in enumerate(members) if m["kind"] == "clip" and m["format"] == "video" and not m["size_guard_retried"]]
+    clips = [n for n, m in enumerate(members) if _is_video(m) and not m["size_guard_retried"]]
     if not clips:
         return False
     tools = media_tools(ctx)
+    budget = video_budget(members)
     for n in clips:
         repo.update_item(ctx.db, members[n]["id"], size_guard_retried=True)
         members[n] = prepare_clip(ctx, members[n], tools, should_cancel, lambda f: None, bitrate_scale=0.9,
-                                  previous_bytes=members[n]["output_bytes"])
+                                  previous_bytes=members[n]["output_bytes"], max_bytes=budget)
     return True
 
 
@@ -360,37 +392,45 @@ def run_send(ctx: Context, item_id: str, action: str | None = None, gif_fallback
         item = services.refresh_item_tags(ctx.stash, ctx.db, config, item, force=True)
         tags = list(item["tags"])[:MAX_TAGS]
 
-        # 1. prepare (0-40 %)
+        # 1. prepare (0-40 %). Images, stills and GIFs first: their sizes decide how much of the request the
+        # videos may take between them.
         repo.update_item(ctx.db, item_id, status="exporting", progress=0, error_code=None, error_detail=None)
         tools = None
         fell_back: list[str] = []  # clips sent as video because their GIF wouldn't fit
-        for n, member in enumerate(members):
+        order = [n for n, m in enumerate(members) if not _is_video(m)] + [n for n, m in enumerate(members) if _is_video(m)]
+        budget: int | None = None
+        for done, n in enumerate(order):
+            member = members[n]
             if should_cancel():
                 raise Cancelled()
-            if not _is_prepared(member):
+            if _is_video(member) and budget is None:
+                budget = video_budget(members)
+            if not _is_prepared(member, budget if _is_video(member) else None):
                 tools = tools or media_tools(ctx)
                 if member["kind"] == "clip":
-                    def clip_progress(fraction: float, n: int = n) -> None:
-                        log.progress(0.4 * (n + fraction) / len(members))
+                    def clip_progress(fraction: float, done: int = done) -> None:
+                        log.progress(0.4 * (done + fraction) / len(members))
 
                     members[n] = prepare_clip(ctx, member, tools, should_cancel, clip_progress, config=config,
-                                              gif_fallback=gif_fallback)
+                                              gif_fallback=gif_fallback, max_bytes=budget)
                     if members[n].pop("gif_fallback", False):
                         fell_back.append(members[n]["id"])
+                        budget = None  # a GIF became a video: the shares change for the videos still to come
                 elif member["kind"] == "still":
                     members[n] = prepare_still(ctx, member, tools, should_cancel)
                 else:
                     members[n] = prepare_image(ctx, member, tools, should_cancel)
-            log.progress(0.4 * (n + 1) / len(members))
-            repo.update_item(ctx.db, item_id, progress=0.4 * (n + 1) / len(members))
+            log.progress(0.4 * (done + 1) / len(members))
+            repo.update_item(ctx.db, item_id, progress=0.4 * (done + 1) / len(members))
 
         files = [(m["output_path"], m["output_mime"]) for m in members]
         for m in members:
             limit = VIDEO_LIMIT if (m["output_mime"] or "").startswith("video/") else IMAGE_LIMIT
             if m["output_bytes"] > limit:
-                raise JobFailed("file_too_large", f"{m['source_title']} is over imaglr's size limit.")
+                raise JobFailed("file_too_large", f"{m['source_title']} is over imaglr's {limit // 1048576} MB upload limit.")
         if sum(m["output_bytes"] for m in members) > REQUEST_LIMIT:
-            raise JobFailed("file_too_large", "Together these files are over imaglr's ~900 MB per post.")
+            raise JobFailed("file_too_large", f"Together these files are over imaglr's {REQUEST_LIMIT // 1048576} MB "
+                            "per post. Split the post.")
 
         # 2. upload (40-95 %)
         repo.update_item(ctx.db, item_id, status="sending")

@@ -327,11 +327,37 @@ class VideoTest(RealMediaTest):
 
     def test_size_guard_two_pass(self):
         src = self.make_source(self.path("src.mp4"), seconds=3, size="1280x720", audio=False)
-        settings = VideoSettings(FFMPEG, FFPROBE, preset="ultrafast", crf=1, max_video_mb=0.3)
+        # 1 MB for 3 s is about 2600 kbps: enough for H.264 at 720p, so the first encode runs at crf 1, overshoots,
+        # and the two-pass encode at that bitrate takes over
+        settings = VideoSettings(FFMPEG, FFPROBE, preset="ultrafast", crf=1, max_video_mb=1.0)
         res = export_clip(src, self.out, title="t", in_s=0, out_s=3, mute=True, settings=settings)
-        self.assertLessEqual(res.bytes, 0.3 * 1024 * 1024 * 1.1)  # two-pass targets the limit
-        self.assertFalse([n for n in os.listdir(self.out) if n.startswith("x264pass")])
+        self.assertLessEqual(res.bytes, 1.0 * 1024 * 1024 * 1.1)  # two-pass targets the limit
+        self.assertFalse([n for n in os.listdir(self.out) if n.startswith("passlog")])
+        self.assertEqual(res.note, f"H.264 · {res.bytes / 1048576:.1f} MB · 1280 px")
+        self.assertEqual(ffprobe(res.path)["streams"][0]["width"], 1280)
         self.assert_no_leftovers(self.out)
+
+    def test_long_clip_keeps_its_size_with_hevc(self):
+        if not has_encoder("libx265"):
+            self.skipTest("this ffmpeg has no libx265")
+        src = self.make_source(self.path("src.mp4"), seconds=4, size="1920x1080", audio=False)
+        # 4 s in 0.35 MB is about 700 kbps: too thin for H.264 at any size above 640 px, fine for H.265 at 854
+        settings = VideoSettings(FFMPEG, FFPROBE, preset="ultrafast", max_video_mb=0.35, hevc_available=True)
+        res = export_clip(src, self.out, title="t", in_s=0, out_s=4, mute=True, settings=settings)
+        v = ffprobe(res.path)["streams"][0]
+        self.assertEqual((v["codec_name"], v["codec_tag_string"], v["width"], v["height"]), ("hevc", "hvc1", 854, 480))
+        self.assertEqual((res.width, res.height), (854, 480))
+        self.assertEqual(res.note, f"H.265 · {res.bytes / 1048576:.1f} MB · 854 px")
+        self.assertLessEqual(res.bytes, 0.35 * 1024 * 1024 * 1.1)
+        self.assert_no_leftovers(self.out)
+
+    def test_long_clip_without_hevc_steps_the_picture_down(self):
+        src = self.make_source(self.path("src.mp4"), seconds=4, size="1920x1080", audio=False)
+        settings = VideoSettings(FFMPEG, FFPROBE, preset="ultrafast", max_video_mb=0.35, allow_hevc=False)
+        res = export_clip(src, self.out, title="t", in_s=0, out_s=4, mute=True, settings=settings)
+        v = ffprobe(res.path)["streams"][0]
+        self.assertEqual((v["codec_name"], v["width"], v["height"]), ("h264", 640, 360))
+        self.assertEqual(res.note, f"H.264 · {res.bytes / 1048576:.1f} MB · 640 px")
 
     def test_failure_leaves_no_part(self):
         src = self.make_source(self.path("src.mp4"), seconds=2)

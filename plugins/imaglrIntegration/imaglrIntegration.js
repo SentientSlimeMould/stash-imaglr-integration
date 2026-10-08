@@ -285,6 +285,15 @@
     return lo === hi ? `roughly ${lo} MB` : `roughly ${lo}\u2013${hi} MB`;
   }
 
+  // src/ui/lib/video.ts
+  var VIDEO_CAP_MB = 100;
+  var LONG_VIDEO_SECONDS = 180;
+  function longVideoNotice(seconds) {
+    if (!(seconds > LONG_VIDEO_SECONDS)) return null;
+    const minutes = Math.round(seconds / 60);
+    return `A ${minutes}-minute video has to be reduced to fit imaglr's ${VIDEO_CAP_MB} MB upload limit. The plugin uses H.265, then a smaller picture, to keep it watchable.`;
+  }
+
   // src/ui/lib/format.ts
   function fmtTime(s, decimals = 1) {
     if (s == null || !isFinite(s)) return "\u2013";
@@ -470,7 +479,7 @@
         onClick: () => onChange({ ...value, format: f })
       },
       f === "video" ? "Video" : "GIF"
-    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "GIFs play automatically in feeds. Videos are higher quality, are quicker to load and have sound, but require the user to click play."), value.format === "gif" ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "This will be a GIF of ", describeGifEstimate(value.outS - value.inS), ". GIFs over about ", gifTargetMb, " MB are slow to load, so the plugin will automatically lower the quality if it has to."), value.outS - value.inS > LONG_GIF_SECONDS ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning mt-1" }, "Long GIFs may need lower frame-rates and resolutions. Clips below ", LONG_GIF_SECONDS, " seconds work best.") : null) : null), value.format === "gif" ? null : /* @__PURE__ */ react_default.createElement(
+    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "GIFs play automatically in feeds. Videos are higher quality, are quicker to load and have sound, but require the user to click play."), value.format === "gif" ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "This will be a GIF of ", describeGifEstimate(value.outS - value.inS), ". GIFs over about ", gifTargetMb, " MB are slow to load, so the plugin will automatically lower the quality if it has to."), value.outS - value.inS > LONG_GIF_SECONDS ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning mt-1" }, "Long GIFs may need lower frame-rates and resolutions. Clips below ", LONG_GIF_SECONDS, " seconds work best.") : null) : longVideoNotice(value.outS - value.inS) ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, longVideoNotice(value.outS - value.inS)) : null), value.format === "gif" ? null : /* @__PURE__ */ react_default.createElement(
       Form.Check,
       {
         id: "imaglr-mute",

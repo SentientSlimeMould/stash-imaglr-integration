@@ -43,3 +43,10 @@ class SettingsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HevcSettingTest(unittest.TestCase):
+    def test_hevc_is_allowed_unless_switched_off(self):
+        from imaglr_integration import settings as s
+        self.assertFalse(s.parse({}).no_hevc)
+        self.assertTrue(s.parse({"videoNoHevc": True}).no_hevc)

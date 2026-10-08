@@ -46,6 +46,10 @@ settings:
     displayName: GIF size target (MB)
     description: GIFs are made smaller or slower until they are under this. Leave empty for 20. imaglr refuses anything over 40.
     type: STRING
+  videoNoHevc:
+    displayName: Never use H.265
+    description: Videos have to fit imaglr's 100 MB upload limit. A long clip is normally encoded as H.265 to keep its resolution (it plays in Safari, Chrome and Edge, but not every browser). Turn this on to always use H.264 and accept a smaller picture instead.
+    type: BOOLEAN
   workingFilesKeepDays:
     displayName: Keep prepared files (days)
     description: How long processed files are kept after sending. Leave empty for 14.

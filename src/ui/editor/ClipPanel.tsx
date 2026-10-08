@@ -5,6 +5,7 @@ import { gql } from "../api.ts";
 import { clampTrim, pickStream, sameOrigin, type SceneStream, type VideoInfo } from "../lib/clip.ts";
 import { ASPECTS, overlayRect } from "../lib/crop.ts";
 import { describeGifEstimate, LONG_GIF_SECONDS } from "../lib/gif.ts";
+import { longVideoNotice } from "../lib/video.ts";
 import { fmtTime, parseTime } from "../lib/format.ts";
 import type { Aspect } from "../lib/types.ts";
 
@@ -233,6 +234,8 @@ export function ClipPanel({ sceneId, imageId, value, disabled, gifTargetMb, onCh
               </div>
             ) : null}
           </>
+        ) : longVideoNotice(value.outS - value.inS) ? (
+          <div className="small text-muted mt-1">{longVideoNotice(value.outS - value.inS)}</div>
         ) : null}
       </Form.Group>
       {value.format === "gif" ? null : (

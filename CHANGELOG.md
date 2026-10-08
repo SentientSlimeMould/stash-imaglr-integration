@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Videos are now sized for imaglr's real upload limit. Its API refuses any request over 100 MB (the
+  documentation's 500 MB per video cannot be reached), so a long clip used to encode to several hundred MB and
+  then fail. A clip is now encoded to fit 100 MB, the files of a multi-file post share that limit, and a long
+  clip keeps its resolution by switching to **H.265** before the picture is made smaller. The card shows what
+  was done (e.g. "H.265 · 92.1 MB · 1280 px") and the editor says so for clips over about three minutes. A new
+  setting, **Never use H.265**, keeps everything H.264 for the widest browser support.
+
 ## 0.1.15 — 2026-10-04
 
 - Clips can be sent as **animated GIFs** instead of videos (a **Format** choice in the editor; a plugin setting

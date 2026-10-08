@@ -162,3 +162,37 @@ class BitrateBoundsTest(unittest.TestCase):
 
         # a 10 MiB, 10 s file with 128 kbps audio: about 8064 kbps of video; 90 % of that
         self.assertEqual(fc.kbps_for_size(10 * 1024 * 1024, 10.0, 128, 0.9), int((8192 - 128) * 0.9))
+
+
+class EncodePlanTest(unittest.TestCase):
+    """Fitting a clip into the upload limit: H.265 keeps the picture large before the resolution drops."""
+
+    def test_plenty_of_bitrate_is_plain_h264_at_full_size(self):
+        self.assertEqual(fc.plan_encode(6000, 1920, hevc=True), fc.EncodePlan("h264", 1920))
+        self.assertEqual(fc.plan_encode(6000, 1920, hevc=True).label, "H.264")
+
+    def test_thin_budget_switches_to_hevc_before_shrinking(self):
+        # a 7-minute clip in 100 MB: about 1750 kbps
+        self.assertEqual(fc.plan_encode(1750, 1920, hevc=True), fc.EncodePlan("hevc", 1280))
+        self.assertEqual(fc.plan_encode(1750, 1920, hevc=False), fc.EncodePlan("h264", 854))
+        self.assertEqual(fc.plan_encode(2500, 1920, hevc=True), fc.EncodePlan("hevc", 1920))
+
+    def test_never_upscales_and_bottoms_out_on_the_better_codec(self):
+        self.assertEqual(fc.plan_encode(6000, 1280, hevc=True), fc.EncodePlan("h264", 1280))
+        self.assertEqual(fc.plan_encode(100, 1920, hevc=True), fc.EncodePlan("hevc", 640))
+        self.assertEqual(fc.plan_encode(100, 1920, hevc=False), fc.EncodePlan("h264", 640))
+        self.assertEqual(fc.plan_encode(100, 480, hevc=False), fc.EncodePlan("h264", 480))  # smaller than the ladder
+
+    def test_hevc_command(self):
+        cmd = fc.build_clip_cmd(FF, "/in.mkv", "/out.mp4.part", 0, 10, 1920, 1080, 30, preset="medium", codec="hevc",
+                                max_long_edge=1280)
+        s = " ".join(cmd)
+        self.assertIn("-c:v libx265 -tag:v hvc1 -preset medium -pix_fmt yuv420p -x265-params log-level=error", s)
+        self.assertNotIn("libx264", s)
+        self.assertNotIn("-profile:v", s)
+        self.assertIn("scale=1280:720", s)
+        first, second = fc.build_two_pass_cmds(1500, "/tmp/log", ffmpeg=FF, src="/in", out="/o.part", in_s=0, out_s=10,
+                                               width=1920, height=1080, fps=30, codec="hevc")
+        self.assertIn("libx265", " ".join(first))
+        self.assertIn("-pass 2", " ".join(second))
+        self.assertIn("-b:v 1500k", " ".join(second))

@@ -14,6 +14,45 @@ ASPECTS: dict[str, float | None] = {"original": None, "9:16": 9 / 16, "4:5": 4 /
 AUDIO_KBPS = 128
 MAX_FPS = 60.0
 MIN_KBPS = 200
+
+# Fitting a long clip into imaglr's upload limit: the bitrate budget may be too thin for the picture size. The
+# export then keeps the picture large by switching to H.265 (about 40 % smaller at the same quality; plays in
+# Safari, Chrome and Edge, not every browser) and only then steps the resolution down. These are the lowest
+# video bitrates (kbps) at which each long edge still looks acceptable with H.264; H.265 needs about 60 %.
+VIDEO_CODECS = ("h264", "hevc")
+RESOLUTION_LADDER: tuple[int, ...] = (1920, 1280, 854, 640)
+QUALITY_FLOOR_KBPS: dict[int, int] = {1920: 4000, 1280: 2000, 854: 1000, 640: 600}
+HEVC_FACTOR = 0.6
+
+
+@dataclass(frozen=True)
+class EncodePlan:
+    codec: str  # "h264" or "hevc"
+    long_edge: int  # the picture's long edge after any step-down
+
+    @property
+    def label(self) -> str:
+        return "H.265" if self.codec == "hevc" else "H.264"
+
+
+def quality_floor_kbps(codec: str, long_edge: int) -> int:
+    """The bitrate below which `codec` at this picture size looks poor."""
+    rung = max((e for e in RESOLUTION_LADDER if e <= long_edge), default=RESOLUTION_LADDER[-1])
+    floor = QUALITY_FLOOR_KBPS[rung]
+    return int(floor * HEVC_FACTOR) if codec == "hevc" else floor
+
+
+def plan_encode(target_kbps: int, long_edge: int, *, hevc: bool) -> EncodePlan:
+    """How to spend a bitrate budget on a picture whose long edge is `long_edge`: H.264 at full size when the
+    budget allows, else H.265 at full size (when the encoder is there and allowed), else the same two choices
+    one rung down, and so on. Below the bottom rung, the better codec at the smallest size."""
+    rungs = [e for e in RESOLUTION_LADDER if e <= long_edge] or [long_edge]
+    for edge in rungs:
+        if target_kbps >= quality_floor_kbps("h264", edge):
+            return EncodePlan("h264", edge)
+        if hevc and target_kbps >= quality_floor_kbps("hevc", edge):
+            return EncodePlan("hevc", edge)
+    return EncodePlan("hevc" if hevc else "h264", rungs[-1])
 # ffmpeg's mjpeg -q:v 2 with 4:2:0 chroma matches libjpeg quality 92 (4:2:0) on PSNR, measured on ffmpeg 8.
 JPEG_QSCALE = 2
 
@@ -159,6 +198,7 @@ def build_clip_cmd(
     headers: dict[str, str] | None = None,
     two_pass: tuple[int, int] | None = None,  # (pass number, target kbps)
     passlog: str | None = None,
+    codec: str = "h264",
 ) -> list[str]:
     duration = max(0.1, out_s - in_s)
     cmd = _base(ffmpeg)
@@ -170,7 +210,12 @@ def build_clip_cmd(
     vf = build_filter_chain(width, height, aspect, position, max_long_edge, fps, flip)
     if vf:
         cmd += ["-vf", vf]
-    cmd += ["-c:v", "libx264", "-profile:v", "high", "-preset", preset, "-pix_fmt", "yuv420p"]
+    if codec == "hevc":
+        # hvc1 is the tag Safari and QuickTime need; x265's own log is silenced (ffmpeg's -loglevel doesn't reach it)
+        cmd += ["-c:v", "libx265", "-tag:v", "hvc1", "-preset", preset, "-pix_fmt", "yuv420p",
+                "-x265-params", "log-level=error"]
+    else:
+        cmd += ["-c:v", "libx264", "-profile:v", "high", "-preset", preset, "-pix_fmt", "yuv420p"]
     if two_pass:
         pass_no, kbps = two_pass
         cmd += ["-b:v", f"{kbps}k", "-maxrate", f"{kbps}k", "-bufsize", f"{2 * kbps}k", "-pass", str(pass_no)]
