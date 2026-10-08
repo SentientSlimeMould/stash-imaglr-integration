@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **Preview a GIF before sending.** In the clip editor, **Preview GIF** makes the GIF exactly as it would be sent
+  and shows it looping in place of the video, with its size, width and frame rate. Sending then uploads that
+  very file. Any edit that changes the picture clears the preview, so what you see is always current.
+- **Boomerang GIFs.** A **Loop** choice under Format: Forward, or Boomerang (forward then back), which loops
+  without a jump. The estimate and the long-GIF warning allow for the doubled frames.
+- GIFs are sized for imaglr's feed: the first rung is now 698 px wide (the feed's content width) so a GIF is
+  never shown upscaled, and the card says the width ("GIF · 9.4 MB · 698 px wide · 15 fps").
+
 ## 0.1.17 — 2026-10-08
 
 - The menu icon is redrawn to the proportions of imaglr's own favicon: a narrower ring, a wider gap and a large

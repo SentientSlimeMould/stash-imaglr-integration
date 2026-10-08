@@ -181,15 +181,28 @@ def build_filter_chain(width: int, height: int, aspect: str, position: float, ma
     return ",".join(parts)
 
 
-# GIF quality ladder, best first: (long edge px, frames per second, palette colours). The export tries each rung
-# until the file is under the target; a lower rung is roughly 60-70 % of the size of the one above.
+# GIF quality ladder, best first: (width px, frames per second, palette colours). The export tries each rung
+# until the file is under the target; a lower rung is roughly 60-70 % of the size of the one above. The top
+# rung is imaglr's feed width (698 px), so a GIF is never shown upscaled there.
 GIF_LADDER: tuple[tuple[int, int, int], ...] = (
-    (640, 15, 256),
-    (540, 12, 256),
+    (698, 15, 256),
+    (560, 12, 256),
     (480, 12, 128),
     (400, 10, 128),
     (320, 8, 64),
 )
+GIF_LOOPS = ("forward", "boomerang")
+
+
+def gif_long_edge_cap(width: int, height: int, aspect: str, position: float, rung_width: int,
+                      edges: dict[str, float] | None = None) -> int:
+    """The long-edge cap that makes the GIF `rung_width` wide after cropping: for a landscape picture that is
+    the width itself; a portrait one is taller than it is wide."""
+    crop = compute_crop(width, height, aspect, position, edges)
+    w, h = (crop.w, crop.h) if crop else (width, height)
+    if w <= 0 or h <= 0 or w >= h:
+        return rung_width
+    return int(round(rung_width * h / w))
 
 
 def build_gif_cmd(
@@ -209,17 +222,22 @@ def build_gif_cmd(
     flip: bool = False,
     headers: dict[str, str] | None = None,
     edges: dict[str, float] | None = None,
+    loop: str = "forward",
 ) -> list[str]:
     """One-pass animated GIF: frame-rate cap, crop, scale and flip, then a palette made from the clip itself
-    (stats_mode=diff favours what moves) and ordered dithering with per-frame rectangles of change."""
+    (stats_mode=diff favours what moves) and ordered dithering with per-frame rectangles of change. A
+    boomerang plays the frames forward then backward (without repeating the turning frame)."""
     duration = max(0.1, out_s - in_s)
     chain = build_filter_chain(width, height, aspect, position, long_edge, 0, flip, edges)
     vf = f"fps={gif_fps}" + ("," + chain if chain else "")
+    if loop == "boomerang":
+        vf += ",split[f][r];[r]reverse,trim=start_frame=1[rv];[f][rv]concat=n=2:v=1:a=0"
     vf += (f",split[a][b];[a]palettegen=max_colors={colors}:stats_mode=diff[p];"
            f"[b][p]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle")
     cmd = _base(ffmpeg)
     cmd += _headers_arg(headers)
-    cmd += ["-ss", f"{in_s:.3f}", "-i", src, "-t", f"{duration:.3f}", "-an", "-filter_complex", vf, "-loop", "0", "-f", "gif", out]
+    # -t before -i cuts the source, not the output: a boomerang's output is twice as long as its source
+    cmd += ["-ss", f"{in_s:.3f}", "-t", f"{duration:.3f}", "-i", src, "-an", "-filter_complex", vf, "-loop", "0", "-f", "gif", out]
     return cmd
 
 

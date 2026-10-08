@@ -186,8 +186,9 @@ def video_note(codec: str, size: int, long_edge: int) -> str:
     return f"{fc.CODEC_LABELS.get(codec, codec)} · {size / 1048576:.1f} MB · {long_edge} px"
 
 
-def gif_note(size: int, long_edge: int, fps: int) -> str:
-    return f"GIF · {size / 1048576:.1f} MB · {long_edge} px · {fps} fps"
+def gif_note(size: int, width: int, fps: int, loop: str = "forward") -> str:
+    loop_part = " · boomerang" if loop == "boomerang" else ""
+    return f"GIF · {size / 1048576:.1f} MB · {width} px wide · {fps} fps{loop_part}"
 
 
 def export_gif(
@@ -208,6 +209,7 @@ def export_gif(
     should_cancel=None,
     probe_info: ProbeInfo | None = None,
     edges: dict[str, float] | None = None,
+    loop: str = "forward",
 ) -> ExportResult:
     """Cut [in_s, out_s] of src to an animated GIF under target_bytes, going down the quality ladder until it
     fits. The bottom rung is accepted up to limit_bytes (imaglr's ceiling); beyond that GifTooLarge says how
@@ -225,10 +227,11 @@ def export_gif(
 
     size = 0
     rungs = fc.GIF_LADDER
-    for n, (long_edge, gif_fps, colors) in enumerate(rungs):
+    for n, (rung_width, gif_fps, colors) in enumerate(rungs):
+        long_edge = fc.gif_long_edge_cap(w, h, aspect, position, rung_width, edges)
         cmd = fc.build_gif_cmd(settings.ffmpeg, src, part, in_s, out_s, w, h, long_edge=long_edge, gif_fps=gif_fps,
                                colors=colors, aspect=aspect, position=position, flip=flip, headers=headers,
-                               edges=edges)
+                               edges=edges, loop=loop)
         lo, hi = 0.9 * n / len(rungs), 0.9 * (n + 1) / len(rungs)
         run_ffmpeg(cmd, output=part, duration_s=duration, progress_cb=progress_cb, should_cancel=should_cancel,
                    progress_range=(lo, hi))
@@ -236,10 +239,11 @@ def export_gif(
         if size <= target_bytes:
             break
         if n < len(rungs) - 1:
-            log.info(f"GIF is {size / 1048576:.1f} MB at {long_edge} px / {gif_fps} fps; trying a smaller setting")
+            log.info(f"GIF is {size / 1048576:.1f} MB at {rung_width} px wide / {gif_fps} fps; trying a smaller setting")
             _remove(part)
     else:
-        long_edge, gif_fps, colors = rungs[-1]
+        rung_width, gif_fps, colors = rungs[-1]
+        long_edge = fc.gif_long_edge_cap(w, h, aspect, position, rung_width, edges)
         if size > limit_bytes:
             _remove(part)
             raise GifTooLarge(size, limit_bytes, fit_seconds=max(1.0, duration * limit_bytes * 0.9 / size))
@@ -254,7 +258,7 @@ def export_gif(
     if progress_cb:
         progress_cb(1.0)
     ow, oh = _output_dims(w, h, aspect, position, long_edge, edges)
-    return ExportResult(final_path, size, ow, oh, False, thumb, gif_note(size, long_edge, gif_fps))
+    return ExportResult(final_path, size, ow, oh, False, thumb, gif_note(size, ow, gif_fps, loop))
 
 
 def detect_edges(ffmpeg: str, src: str, width: int, height: int, times: list[float],

@@ -25,9 +25,10 @@ from .settings import PLUGIN_ID
 from .tags.pipeline import MAX_TAG_LEN, MAX_TAGS
 
 IN_FLIGHT = ("exporting", "sending")
-EDITABLE = {"tags", "caption", "blog_id", "action", "crop", "in_s", "out_s", "mute", "flip", "format", "codec", "max_edge"}
+EDITABLE = {"tags", "caption", "blog_id", "action", "crop", "in_s", "out_s", "mute", "flip", "format", "codec", "max_edge", "loop"}
 FORMATS = ("video", "gif")
 CODECS = ("h264", "hevc")
+LOOPS = ("forward", "boomerang")
 MAX_EDGES = (None, 1280, 854)  # as the source, 720p, 480p
 MAX_CLIP_SECONDS = services.MAX_CLIP_SECONDS
 ASPECTS = ("original", "9:16", "4:5", "1:1")
@@ -110,7 +111,9 @@ def op_item_update(ctx: Context) -> dict[str, Any]:
         changes["max_edge"] = int(changes["max_edge"]) if changes["max_edge"] else None
         if changes["max_edge"] not in MAX_EDGES:
             raise UserError("Unknown picture size.")
-    if {"in_s", "out_s", "mute", "flip", "format", "codec", "max_edge"} & set(changes):
+    if "loop" in changes and changes["loop"] not in LOOPS:
+        raise UserError("Unknown loop.")
+    if {"in_s", "out_s", "mute", "flip", "format", "codec", "max_edge", "loop"} & set(changes):
         if item["kind"] != "clip":
             raise UserError("Only clips can be trimmed, muted, flipped or made into GIFs.")
         in_s = round(float(changes["in_s"]), 3) if "in_s" in changes else float(item["in_s"] or 0)
@@ -123,8 +126,9 @@ def op_item_update(ctx: Context) -> dict[str, Any]:
             raise UserError(f"Clips can be at most {MAX_CLIP_SECONDS // 60} minutes long.")
         changes.update(in_s=in_s, out_s=out_s, mute=bool(changes.get("mute", item["mute"])),
                        flip=bool(changes.get("flip", item["flip"])), format=changes.get("format", item["format"]),
-                       codec=changes.get("codec", item["codec"]), max_edge=changes.get("max_edge", item["max_edge"]))
-        keys = ("in_s", "out_s", "mute", "flip", "format", "codec", "max_edge")
+                       codec=changes.get("codec", item["codec"]), max_edge=changes.get("max_edge", item["max_edge"]),
+                       loop=changes.get("loop", item["loop"]))
+        keys = ("in_s", "out_s", "mute", "flip", "format", "codec", "max_edge", "loop")
         if tuple(changes[k] for k in keys) != tuple(item[k] for k in keys):
             changes.update(output_path=None, output_bytes=None, output_mime=None, output_note=None,
                            size_guard_retried=False)  # export again

@@ -375,6 +375,19 @@ class VideoTest(RealMediaTest):
         plain = self.make_source(self.path("plain.mp4"), seconds=1)
         self.assertFalse(fc.has_edges(detect_edges(FFMPEG, plain, 640, 360, [0.5])))
 
+    def test_boomerang_gif_plays_forward_then_back(self):
+        from imaglr_integration.media.video_export import VideoSettings, export_gif
+        src = self.make_source(self.path("src.mp4"), seconds=2, size="640x360", rate=10, audio=False)
+        settings = VideoSettings(FFMPEG, FFPROBE)
+        fwd = export_gif(src, self.out, title="f", in_s=0, out_s=1, settings=settings, target_bytes=10**8, limit_bytes=10**8)
+        frames_f = int(ffprobe(fwd.path, "-count_frames", "-show_streams")["streams"][0]["nb_read_frames"])
+        boom = export_gif(src, self.path("boom"), title="b", in_s=0, out_s=1, settings=settings, target_bytes=10**8, limit_bytes=10**8,
+                          loop="boomerang")
+        frames_b = int(ffprobe(boom.path, "-count_frames", "-show_streams")["streams"][0]["nb_read_frames"])
+        self.assertEqual(frames_b, 2 * frames_f - 1)  # back again, without repeating the turning frame
+        self.assertTrue(boom.note.endswith("· boomerang"), boom.note)
+        self.assertEqual(fwd.width, 640)  # under the 698 px rung: never upscaled
+
     def test_failure_leaves_no_part(self):
         src = self.make_source(self.path("src.mp4"), seconds=2)
         info = probe(FFPROBE, src)

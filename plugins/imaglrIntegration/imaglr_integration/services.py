@@ -315,7 +315,8 @@ def _state(item: dict[str, Any]) -> dict[str, Any]:
     return {k: item[k] for k in ("id", "kind", "status", "progress", "error_code", "error_detail", "blog_id",
                                  "action")} | {"title": item["source_title"], "tag_count": len(item["tags"]),
                                               "send_format": item["format"], "send_codec": item["codec"],
-                                              "max_edge": item["max_edge"], "output_note": item["output_note"]}
+                                              "max_edge": item["max_edge"], "loop": item["loop"],
+                                              "output_note": item["output_note"]}
 
 
 def post_card(post: dict[str, Any], member_cards: list[dict[str, Any]]) -> dict[str, Any]:

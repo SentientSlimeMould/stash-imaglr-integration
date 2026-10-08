@@ -19,6 +19,7 @@ export interface Card {
   send_format?: "video" | "gif"; // clips: how it will be sent
   send_codec?: "h264" | "hevc";
   max_edge?: number | null; // picture size as a long edge; null = as the source
+  loop?: "forward" | "boomerang"; // GIFs: forward, or forward then back
   output_note?: string | null; // after preparing: e.g. "GIF · 9.4 MB · 480 px · 10 fps"
   thumb: string | null; // relative to Stash's base URL
   width?: number | null;
@@ -93,7 +94,9 @@ export interface FileCard extends Card {
   format: "video" | "gif";
   codec: "h264" | "hevc";
   max_edge: number | null; // picture size as a long edge (1280 = 720p, 854 = 480p); null = as the source
+  loop: "forward" | "boomerang";
   output_note: string | null; // what the prepared file turned out to be, e.g. "GIF · 9.4 MB · 480 px · 10 fps"
+  output_mime: string | null; // of the prepared file, e.g. "image/gif"
   stash_marker_id: string | null;
   stash_scene_id: string | null;
   stash_image_id: string | null;
@@ -121,6 +124,7 @@ export interface ItemDetail {
     format: "video" | "gif";
     codec: "h264" | "hevc";
     max_edge: number | null;
+    loop: "forward" | "boomerang";
     output_note: string | null;
     hdr_warning: boolean;
     tags_auto: boolean; // tags still follow Stash and the tag rules (never edited)

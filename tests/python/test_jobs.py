@@ -9,7 +9,7 @@ from contextlib import redirect_stderr
 from unittest import mock
 
 from imaglr_integration import blogs, items, jobs, log, services
-from imaglr_integration.context import Context
+from imaglr_integration.context import Context, UserError
 from imaglr_integration.imaglr import DraftResult, ImaglrError, UploadCancelled
 from imaglr_integration.media.ffmpeg_run import FfmpegError
 from imaglr_integration.settings import Settings
@@ -343,7 +343,7 @@ class GifTest(unittest.TestCase):
             r = export_gif("/src.mp4", self.tmp.name, title="t", in_s=0, out_s=8, settings=VideoSettings("ff", "fp"),
                            target_bytes=2000, limit_bytes=10000)
         self.assertEqual(r.bytes, 1500)
-        self.assertEqual(r.note, "GIF · 0.0 MB · 480 px · 12 fps")
+        self.assertEqual(r.note, "GIF · 0.0 MB · 480 px wide · 12 fps")
         self.assertEqual(len([c for c in calls if "-loop" in c]), 3)
         self.assertTrue(r.path.endswith(".gif"))
 
@@ -354,7 +354,7 @@ class GifTest(unittest.TestCase):
         with run_patch, probe_patch:
             r = export_gif("/src.mp4", self.tmp.name, title="t", in_s=0, out_s=8, settings=VideoSettings("ff", "fp"),
                            target_bytes=2000, limit_bytes=5500)
-        self.assertEqual((r.bytes, r.note), (5000, "GIF · 0.0 MB · 320 px · 8 fps"))
+        self.assertEqual((r.bytes, r.note), (5000, "GIF · 0.0 MB · 320 px wide · 8 fps"))
 
     def test_too_large_even_at_the_bottom_says_how_short_it_must_be(self):
         from imaglr_integration.media.video_export import GifTooLarge, VideoSettings, export_gif
@@ -378,6 +378,19 @@ class GifTest(unittest.TestCase):
         self.assertIn("max_colors=64", vf)
         self.assertIn("-an", cmd)
         self.assertEqual(cmd[-3:], ["-f", "gif", "/o.gif.part"])
+        self.assertNotIn("reverse", vf)
+        boom = fc.build_gif_cmd("ff", "/in.mp4", "/o.gif.part", 2, 6, 1920, 1080, long_edge=480, gif_fps=10, colors=64, loop="boomerang")
+        bvf = boom[boom.index("-filter_complex") + 1]
+        self.assertIn("split[f][r];[r]reverse,trim=start_frame=1[rv];[f][rv]concat=n=2:v=1:a=0,split[a][b]", bvf)
+
+    def test_gif_rungs_are_widths_and_portrait_gets_the_taller_cap(self):
+        from imaglr_integration.media import ffmpeg_cmd as fc
+
+        self.assertEqual(fc.GIF_LADDER[0][0], 698)  # imaglr's feed width
+        self.assertEqual(fc.gif_long_edge_cap(1920, 1080, "original", 0.5, 698), 698)
+        self.assertEqual(fc.gif_long_edge_cap(1080, 1920, "original", 0.5, 698), round(698 * 1920 / 1080))
+        # cropped to a portrait preset, a landscape source is treated as the portrait it becomes
+        self.assertEqual(fc.gif_long_edge_cap(1920, 1080, "9:16", 0.5, 698), round(698 * 1080 / 606))
 
 
 def glob_parts(folder):
@@ -401,7 +414,7 @@ class GifSendTest(SendHarness):
             path = os.path.join(out_dir, "c.gif")
             with open(path, "wb") as f:
                 f.write(b"g" * 100)
-            return gif_result or ExportResult(path, 100, 480, 270, False, None, "GIF · 0.0 MB · 480 px · 12 fps")
+            return gif_result or ExportResult(path, 100, 480, 270, False, None, "GIF · 0.0 MB · 480 px wide · 12 fps")
 
         def fake_export_clip(src, out_dir, **a):
             os.makedirs(out_dir, exist_ok=True)
@@ -419,7 +432,7 @@ class GifSendTest(SendHarness):
         item, client = self.send_clip(item["id"])
         self.assertEqual(item["status"], "sent")
         self.assertEqual(client.calls[0][1], ["c.gif"])
-        self.assertEqual(item["output_note"], "GIF · 0.0 MB · 480 px · 12 fps")
+        self.assertEqual(item["output_note"], "GIF · 0.0 MB · 480 px wide · 12 fps")
         self.assertEqual(item["output_mime"], "image/gif")
 
     def test_gif_that_cannot_fit_fails_with_advice(self):
@@ -559,3 +572,39 @@ class SharedBudgetSendTest(SendHarness):
             item, _ = self.send(a["id"])
         self.assertEqual((item["status"], item["error_code"]), ("failed", "no_hevc"))
         self.assertIn("Choose H.264", item["error_detail"])
+
+
+class GifPreviewOpTest(SendHarness):
+    """gif_preview makes the clip's GIF now, as the send would, and reports where the editor can show it."""
+
+    def test_preview_prepares_the_gif_and_reports_it(self):
+        from imaglr_integration import clip_ops
+        from imaglr_integration.media.video_export import ExportResult
+        clip = items.create_item(self.db, kind="clip", stash_image_id="801", source_title="Clip", in_s=0.0, out_s=5.0, format="gif")
+
+        def fake_export_gif(src, out_dir, **a):
+            os.makedirs(out_dir, exist_ok=True)
+            path = os.path.join(out_dir, "c.gif")
+            with open(path, "wb") as f:
+                f.write(b"g" * 100)
+            return ExportResult(path, 100, 480, 270, False, None, "GIF · 0.0 MB · 480 px wide · 12 fps")
+
+        ctx = Context({"args": {"mode": "gif_preview", "item_id": clip["id"]}, "server_connection": {"PluginDir": self.tmp.name}})
+        ctx._db = self.db
+        with mock.patch.object(jobs, "export_gif", fake_export_gif), \
+             mock.patch.object(jobs, "clip_source", lambda c, m: ("/src.mp4", None)), \
+             mock.patch.object(jobs, "media_tools", lambda c: ("ff", "fp")), \
+             mock.patch.object(clip_ops.plugin_settings, "load", lambda s: Settings()):
+            out = clip_ops.op_gif_preview(ctx)
+        self.assertEqual(out["note"], "GIF · 0.0 MB · 480 px wide · 12 fps")
+        self.assertTrue(out["url"].endswith("/c.gif"))
+        prepared = items.get_item(self.db, clip["id"])
+        self.assertEqual((prepared["output_mime"], prepared["output_bytes"]), ("image/gif", 100))
+
+    def test_preview_needs_a_gif_clip(self):
+        from imaglr_integration import clip_ops
+        video = items.create_item(self.db, kind="clip", stash_image_id="801", source_title="Clip", in_s=0.0, out_s=5.0, format="video")
+        ctx = Context({"args": {"mode": "gif_preview", "item_id": video["id"]}})
+        ctx._db = self.db
+        with self.assertRaises(UserError):
+            clip_ops.op_gif_preview(ctx)

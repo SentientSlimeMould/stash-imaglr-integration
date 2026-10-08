@@ -144,6 +144,10 @@ MIGRATIONS = [
     ALTER TABLE items ADD COLUMN codec TEXT NOT NULL DEFAULT 'h264';
     ALTER TABLE items ADD COLUMN max_edge INTEGER;
     """,
+    # v9: how a GIF loops: forward, or boomerang (forward then back)
+    """
+    ALTER TABLE items ADD COLUMN loop TEXT NOT NULL DEFAULT 'forward';
+    """,
 ]
 
 

@@ -388,4 +388,17 @@
   .imaglr-fold-label {
     font-weight: 600;
   }
+  .imaglr-preview .imaglr-gif-preview {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+  .imaglr-gif-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin: 0.5rem 0;
+  }
 }
