@@ -5,6 +5,7 @@ your [imaglr](https://imaglr.com) blogs.
 
 - **Share Images:** add the tag `imaglr` to an image, or multi-select them in any image list and choose **⋯ → Add to imaglr**. 
 - **Share Clips:** create a scene marker in Stash and tag it `imaglr`. You can fine-tune the edit if needed before sending.
+- **Share a whole scene:** tag the scene `imaglr` and it joins the Clips tab over its full length, no marker needed. Trim it in the editor like any clip.
 - **GIF or video:** each clip can go out as an animated GIF, which plays straight away in feeds, or as a video. The plugin shrinks a GIF step by step until it fits imaglr's limit.
 - **Tags:** Tags for your imaglr posts are suggested from your Stash tags (including performers, studio and galleries). These can be edited before sending.
 - **Tag Mapping:** Set up rules on your Stash tags to automatically translate them to one or many corresponding Imaglr tags. 
@@ -87,7 +88,7 @@ picture size for clips, and how long prepared files are kept.
 
 ## Use
 
-- **Queue things in Stash.** Tag images or scene markers `imaglr`. In any image list (including a gallery's
+- **Queue things in Stash.** Tag images, scene markers or whole scenes `imaglr`. In any image list (including a gallery's
   Images tab) you can also tick images and choose **⋯ → Add to imaglr**, or **⋯ → Add to imaglr as one post** for
   up to 10 images in a single post.
 - **Open imaglr → Clips or Images.** Search, filter, sort and select items. Select several
@@ -144,7 +145,8 @@ your Stash library, other files or your machine.
   them).
 - If you stop a send from Stash's Tasks page on macOS or Windows, the ffmpeg process may continue to run on until 
   it finishes.
-- The page shows at most 1000 tagged images and 500 tagged markers at a time; send some before tagging more.
+- The page shows at most 1000 tagged images, 500 tagged markers and 500 tagged scenes at a time; send some before
+  tagging more.
 - The plugin's `data` folder holds a SQLite database, which doesn't always work reliably on network shares (SMB/NFS).
   Keep Stash's plugins directory on a local disk, as Stash itself needs for its own database.
   The plugin's own **Stop sending** button stops cleanly everywhere.
