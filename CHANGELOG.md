@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The crop can now **trim the edges** of a clip or image, for black borders the aspect presets couldn't
+  remove: top, bottom, left and right in percent, with a **Detect borders** button that asks ffmpeg where
+  the picture is (sampled across a clip's range). The aspect preset and its position apply inside what is
+  left, the preview shows the result, and stills grabbed from a clip get the same controls.
 - Videos are now sized for imaglr's real upload limit. Its API refuses any request over 100 MB (the
   documentation's 500 MB per video cannot be reached), so a long clip used to encode to several hundred MB and
   then fail. A clip is now encoded to fit 100 MB, the files of a multi-file post share that limit, and a long

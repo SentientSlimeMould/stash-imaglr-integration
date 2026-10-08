@@ -4,6 +4,15 @@
 export type Status = "pending" | "exporting" | "ready" | "sending" | "sent" | "failed";
 export type Aspect = "original" | "9:16" | "4:5" | "1:1";
 
+/** Fractions (0..1) of the picture cut off each side, e.g. black bars. */
+export interface CropEdges { top: number; right: number; bottom: number; left: number }
+
+export interface Crop {
+  aspect: Aspect;
+  position: number; // 0..1 along the axis the aspect crops
+  edges?: CropEdges | null; // trimmed first; the aspect applies inside what is left
+}
+
 /** A tile on the Clips or Images tab: a Stash marker/image plus the plugin's item state, if any. */
 export interface Candidate {
   title: string;

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Operations for clips: saving a still from a clip."""
+"""Operations for clips and pictures: saving a still from a clip, finding black borders to trim."""
 
 from __future__ import annotations
 
@@ -27,6 +27,19 @@ def op_still_create(ctx: Context) -> dict[str, Any]:
     return {"item_id": still["id"], "thumb": services.prepared_url(still["id"], frame)}  # type: ignore[index]
 
 
+def op_crop_detect(ctx: Context) -> dict[str, Any]:
+    """Edge trims that cut the black borders off an item's picture (a clip is sampled across its range).
+    Nothing is saved: the editor shows the result and the user decides."""
+    item = repo.get_item(ctx.db, ctx.arg("item_id"))
+    if item is None or item["kind"] == "set":
+        raise UserError("That item no longer exists. Refresh the page.")
+    try:
+        return {"edges": jobs.detect_borders(ctx, item)}
+    except jobs.JobFailed as e:
+        raise UserError(e.detail) from None
+
+
 OPERATIONS = {
     "still_create": op_still_create,
+    "crop_detect": op_crop_detect,
 }

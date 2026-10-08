@@ -27,7 +27,10 @@ from .media.image_plan import plan_image
 from .media.image_process import ImageTooLarge, process_image
 from .media.metadata_strip import StripError
 from .media.naming import slugify
-from .media.video_export import GifTooLarge, UnsupportedMedia, VideoSettings, export_clip, export_gif, gif_to_mp4, grab_frame
+from .media import ffmpeg_cmd as fc
+from .media.probe import probe
+from .media.video_export import (GifTooLarge, UnsupportedMedia, VideoSettings, detect_edges, export_clip, export_gif,
+                                 gif_to_mp4, grab_frame)
 from .stash import HttpStream, LocalFile, StashError, api
 from .stash.paths import image_source, scene_source
 from .tags.caption import caption_to_html
@@ -141,17 +144,19 @@ def _process_picture(ctx, member, path, out_dir, tools, should_cancel) -> dict[s
     crop = member["crop"] or {}
     aspect = crop.get("aspect") or "original"
     position = float(crop.get("position", 0.5))
+    edges = fc.clean_edges(crop.get("edges"))
     base_name = slugify(os.path.splitext(member["source_title"])[0] or f"image-{member['id']}")
     try:
         info = inspect_image(path, ffprobe)
-        plan = plan_image(info, None if aspect == "original" else aspect, int(IMAGE_LIMIT * SAFETY))
+        plan = plan_image(info, None if aspect == "original" else aspect, int(IMAGE_LIMIT * SAFETY), edges)
         if plan.action == "to_video":
             result = gif_to_mp4(path, out_dir, base_name, VideoSettings(ffmpeg, ffprobe), aspect=aspect,
-                                position=position, should_cancel=should_cancel)
+                                position=position, should_cancel=should_cancel, edges=edges)
             output, size, mime = result.path, result.bytes, "video/mp4"
         else:
             result = process_image(path, out_dir, base_name, plan, info, aspect, position,
-                                   int(IMAGE_LIMIT * SAFETY), ffmpeg=ffmpeg, should_cancel=should_cancel)
+                                   int(IMAGE_LIMIT * SAFETY), ffmpeg=ffmpeg, should_cancel=should_cancel,
+                                   crop_edges=edges)
             output, size, mime = result.path, result.bytes, result.mime
     except ImageTooLarge as e:
         raise JobFailed("file_too_large", f"{member['source_title']}: {e}") from None
@@ -198,6 +203,7 @@ def prepare_clip(ctx: Context, member: dict[str, Any], tools: tuple[str, str], s
     config = config or plugin_settings.Settings()
     src, headers = clip_source(ctx, member)
     crop = member["crop"] or {}
+    edges = fc.clean_edges(crop.get("edges"))
     if member["format"] == "gif":
         try:
             result = export_gif(
@@ -207,7 +213,7 @@ def prepare_clip(ctx: Context, member: dict[str, Any], tools: tuple[str, str], s
                 target_bytes=int(config.gif_target_mb * 1024 * 1024),
                 limit_bytes=int(plugin_settings.GIF_HARD_LIMIT_MB * 1024 * 1024 * SAFETY),
                 aspect=crop.get("aspect") or "original", position=float(crop.get("position", 0.5)),
-                flip=bool(member["flip"]), progress_cb=progress, should_cancel=should_cancel,
+                flip=bool(member["flip"]), progress_cb=progress, should_cancel=should_cancel, edges=edges,
             )
         except GifTooLarge as e:
             if not gif_fallback:
@@ -237,7 +243,7 @@ def prepare_clip(ctx: Context, member: dict[str, Any], tools: tuple[str, str], s
             settings=video_settings, headers=headers,
             aspect=crop.get("aspect") or "original", position=float(crop.get("position", 0.5)),
             mute=bool(member["mute"]), flip=bool(member["flip"]), progress_cb=progress, should_cancel=should_cancel,
-            bitrate_scale=bitrate_scale, previous_bytes=previous_bytes,
+            bitrate_scale=bitrate_scale, previous_bytes=previous_bytes, edges=edges,
         )
     except (UnsupportedMedia, ValueError) as e:
         raise JobFailed("unsupported_video", f"{member['source_title']}: {e}") from None
@@ -248,6 +254,45 @@ def prepare_clip(ctx: Context, member: dict[str, Any], tools: tuple[str, str], s
     return repo.update_item(ctx.db, member["id"], output_path=result.path, output_bytes=result.bytes,
                             output_mime="video/mp4", output_note=result.note, hdr_warning=result.hdr,
                             error_code=None, error_detail=None)  # type: ignore[return-value]
+
+
+def picture_source(ctx: Context, item: dict[str, Any]) -> tuple[str, dict[str, str] | None]:
+    """Whatever ffmpeg can read this item's picture from: a clip's video, an image's file or URL, a still's
+    grabbed frame."""
+    if item["kind"] == "clip":
+        return clip_source(ctx, item)
+    if item["kind"] == "still":
+        if not item["source_path"] or not os.path.isfile(item["source_path"]):
+            raise JobFailed("source_missing", "This still's frame is missing. Save the still again from its clip.")
+        return item["source_path"], None
+    image = api.find_image(ctx.stash, item["stash_image_id"])
+    if image is None:
+        raise JobFailed("source_deleted", f"{item['source_title']} no longer exists in Stash.")
+    source = image_source(image)
+    if isinstance(source, LocalFile):
+        return source.path, None
+    if isinstance(source, HttpStream):
+        return source.url, api.auth_headers(ctx.stash)
+    raise JobFailed("source_missing", f"Stash has no file for {item['source_title']}.")
+
+
+def detect_borders(ctx: Context, item: dict[str, Any]) -> dict[str, float]:
+    """Edge trims that cut the black borders off this item's picture, sampled across a clip's range."""
+    ffmpeg, ffprobe = media_tools(ctx)
+    src, headers = picture_source(ctx, item)
+    try:
+        info = probe(ffprobe, src, headers)
+        w, h = info.display_size
+        if not w or not h:
+            raise JobFailed("unsupported_video", "Couldn't read the picture's size.")
+        if item["kind"] == "clip":
+            a, b = float(item["in_s"] or 0), float(item["out_s"] or 0)
+            times = [a + (b - a) * f for f in (0.1, 0.35, 0.6, 0.85)] if b > a else [a]
+        else:
+            times = [0.0]
+        return detect_edges(ffmpeg, src, w, h, times, headers)
+    except FfmpegError as e:
+        raise JobFailed("ffmpeg_failed", f"Couldn't look for borders: {e}") from None
 
 
 def grab_still(ctx: Context, clip: dict[str, Any], t: float, still_id: str) -> str:

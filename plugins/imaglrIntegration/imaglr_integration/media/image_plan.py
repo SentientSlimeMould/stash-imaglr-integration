@@ -32,8 +32,10 @@ class ImagePlan:
         return {"action": self.action, "out_format": self.out_format, "steps": self.steps}
 
 
-def plan_image(info: ImageInfo, crop_aspect: str | None, limit_bytes: int) -> ImagePlan:
-    cropping = bool(crop_aspect and crop_aspect != "original")
+def plan_image(info: ImageInfo, crop_aspect: str | None, limit_bytes: int,
+               crop_edges: dict[str, float] | None = None) -> ImagePlan:
+    trimming = bool(crop_edges) and any(float(v) > 0 for v in crop_edges.values())  # type: ignore[union-attr]
+    cropping = bool(crop_aspect and crop_aspect != "original") or trimming
     needs_rotate = info.orientation not in (1, 0)
     over = info.bytes > limit_bytes
 
@@ -49,7 +51,9 @@ def plan_image(info: ImageInfo, crop_aspect: str | None, limit_bytes: int) -> Im
     steps: list[str] = []
     if needs_rotate:
         steps.append(f"rotate (EXIF orientation {info.orientation})")
-    if cropping:
+    if trimming:
+        steps.append("trim edges")
+    if crop_aspect and crop_aspect != "original":
         steps.append(f"crop {crop_aspect}")
 
     if info.format in ACCEPTED:

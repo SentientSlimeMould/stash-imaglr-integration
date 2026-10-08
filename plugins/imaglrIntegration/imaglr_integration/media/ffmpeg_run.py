@@ -218,6 +218,24 @@ def run_tool(cmd: list[str], timeout: float = 60) -> bytes:
     return out
 
 
+def run_capture(cmd: list[str], timeout: float = 60) -> tuple[bytes, bytes, int]:
+    """Run a short command and return (stdout, stderr, exit code); for tools whose answer is on stderr, such
+    as ffmpeg's cropdetect. A bad exit is the caller's to judge."""
+    proc = subprocess.Popen(
+        cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **_spawn_kwargs()
+    )
+    try:
+        out, err = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _stop(proc)
+        proc.communicate()
+        raise FfmpegError(f"{os.path.basename(cmd[0])} timed out after {timeout:.0f} s") from None
+    except BaseException:
+        _stop(proc)
+        raise
+    return out, err, proc.returncode
+
+
 @functools.lru_cache(maxsize=None)
 def encoders(ffmpeg: str) -> frozenset:
     """Names of the encoders this ffmpeg build has (e.g. whether libwebp is present)."""

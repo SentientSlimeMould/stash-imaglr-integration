@@ -154,16 +154,40 @@
 
   // src/ui/lib/crop.ts
   var ASPECTS = { original: null, "9:16": 9 / 16, "4:5": 4 / 5, "1:1": 1 };
-  function normCrop(srcW, srcH, aspect, position) {
+  var EDGE_NAMES = ["top", "bottom", "left", "right"];
+  var MAX_EDGE_PERCENT = 45;
+  function emptyEdges() {
+    return { top: 0, right: 0, bottom: 0, left: 0 };
+  }
+  function hasEdges(edges) {
+    return !!edges && EDGE_NAMES.some((n) => (edges[n] ?? 0) > 0);
+  }
+  function insetRect(edges) {
+    const e = edges ?? emptyEdges();
+    const clamp = (v) => Math.min(MAX_EDGE_PERCENT / 100, Math.max(0, v || 0));
+    const l = clamp(e.left), t = clamp(e.top);
+    const w = Math.max(0.1, 1 - l - clamp(e.right)), h = Math.max(0.1, 1 - t - clamp(e.bottom));
+    return { x: l, y: t, w, h };
+  }
+  function normCrop(srcW, srcH, aspect, position, edges) {
+    const box = insetRect(edges);
+    const trimmed = box.x > 0 || box.y > 0 || box.w < 1 || box.h < 1;
     const a = ASPECTS[aspect];
-    if (a == null || srcW <= 0 || srcH <= 0) return { x: 0, y: 0, w: 1, h: 1, axis: "none" };
-    const s = srcW / srcH;
-    if (Math.abs(s - a) < 1e-6) return { x: 0, y: 0, w: 1, h: 1, axis: "none" };
+    if (a == null || srcW <= 0 || srcH <= 0) return { ...box, axis: "none", cropped: trimmed };
+    const s = srcW * box.w / (srcH * box.h);
+    if (Math.abs(s - a) < 1e-6) return { ...box, axis: "none", cropped: trimmed };
     let w = 1, h = 1;
     if (a < s) w = a / s;
     else h = s / a;
     const p = Math.min(1, Math.max(0, position));
-    return { x: (1 - w) * p, y: (1 - h) * p, w, h, axis: w < 1 ? "x" : h < 1 ? "y" : "none" };
+    return {
+      x: box.x + (1 - w) * p * box.w,
+      y: box.y + (1 - h) * p * box.h,
+      w: w * box.w,
+      h: h * box.h,
+      axis: w < 1 ? "x" : h < 1 ? "y" : "none",
+      cropped: true
+    };
   }
   function displayedRect(cw, ch, srcW, srcH) {
     if (srcW <= 0 || srcH <= 0 || cw <= 0 || ch <= 0) return { dx: 0, dy: 0, dw: cw, dh: ch };
@@ -171,10 +195,101 @@
     const dw = srcW * scale, dh = srcH * scale;
     return { dx: (cw - dw) / 2, dy: (ch - dh) / 2, dw, dh };
   }
-  function overlayRect(cw, ch, srcW, srcH, aspect, position) {
+  function overlayRect(cw, ch, srcW, srcH, aspect, position, edges) {
     const { dx, dy, dw, dh } = displayedRect(cw, ch, srcW, srcH);
-    const n = normCrop(srcW, srcH, aspect, position);
-    return { left: dx + n.x * dw, top: dy + n.y * dh, width: n.w * dw, height: n.h * dh, axis: n.axis };
+    const n = normCrop(srcW, srcH, aspect, position, edges);
+    return { left: dx + n.x * dw, top: dy + n.y * dh, width: n.w * dw, height: n.h * dh, axis: n.axis, cropped: n.cropped };
+  }
+
+  // src/ui/editor/CropControls.tsx
+  var LABELS = { top: "Top", bottom: "Bottom", left: "Left", right: "Right" };
+  function CropControls({ crop, disabled, itemId, onChange }) {
+    const { Button, ButtonGroup, Form } = PluginApi.libraries.Bootstrap;
+    const Toast = PluginApi.hooks.useToast();
+    const [detecting, setDetecting] = react_default.useState(false);
+    const edges = crop.edges ?? emptyEdges();
+    const percent = (name) => Math.round((edges[name] ?? 0) * 100);
+    function setEdge(name, value) {
+      const v = Math.min(MAX_EDGE_PERCENT, Math.max(0, Math.round(Number.isFinite(value) ? value : 0))) / 100;
+      onChange({ ...crop, edges: { ...edges, [name]: v } });
+    }
+    async function detect() {
+      setDetecting(true);
+      try {
+        const r = await runOperation("crop_detect", { item_id: itemId });
+        if (!hasEdges(r.edges)) Toast.success("No borders found.");
+        onChange({ ...crop, edges: hasEdges(r.edges) ? r.edges : null });
+      } catch (e) {
+        Toast.error(e);
+      } finally {
+        setDetecting(false);
+      }
+    }
+    return /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Crop"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(ASPECTS).map((a) => /* @__PURE__ */ react_default.createElement(
+      Button,
+      {
+        key: a,
+        variant: crop.aspect === a ? "primary" : "secondary",
+        disabled,
+        onClick: () => onChange({ ...crop, aspect: a })
+      },
+      a === "original" ? "Original" : a
+    )))), crop.aspect !== "original" ? /* @__PURE__ */ react_default.createElement(
+      Form.Control,
+      {
+        type: "range",
+        min: 0,
+        max: 1,
+        step: 0.01,
+        value: crop.position,
+        disabled,
+        "aria-label": "Crop position",
+        className: "mt-2",
+        onChange: (e) => onChange({ ...crop, position: Number(e.target.value) })
+      }
+    ) : null, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-edges-header" }, /* @__PURE__ */ react_default.createElement("span", { className: "text-muted small" }, "Trim edges (%)"), /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-edges-actions" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "link", size: "sm", className: "p-0 imaglr-touch", disabled: disabled || detecting, onClick: detect }, detecting ? "Looking for borders\u2026" : "Detect borders"), hasEdges(edges) ? /* @__PURE__ */ react_default.createElement(
+      Button,
+      {
+        variant: "link",
+        size: "sm",
+        className: "p-0 imaglr-touch",
+        disabled,
+        onClick: () => onChange({ ...crop, edges: null })
+      },
+      "Reset"
+    ) : null)), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-edges" }, EDGE_NAMES.map((name) => /* @__PURE__ */ react_default.createElement("div", { key: name, className: "imaglr-edge" }, /* @__PURE__ */ react_default.createElement(Form.Label, { className: "imaglr-edge-label", htmlFor: `imaglr-edge-${name}` }, LABELS[name]), /* @__PURE__ */ react_default.createElement(
+      Button,
+      {
+        variant: "secondary",
+        disabled: disabled || percent(name) <= 0,
+        "aria-label": `${LABELS[name]}: trim less`,
+        onClick: () => setEdge(name, percent(name) - 1)
+      },
+      "\u2212"
+    ), /* @__PURE__ */ react_default.createElement(
+      Form.Control,
+      {
+        id: `imaglr-edge-${name}`,
+        className: "text-input imaglr-edge-input",
+        type: "number",
+        inputMode: "numeric",
+        min: 0,
+        max: MAX_EDGE_PERCENT,
+        step: 1,
+        value: percent(name),
+        disabled,
+        onChange: (e) => setEdge(name, Number(e.target.value))
+      }
+    ), /* @__PURE__ */ react_default.createElement(
+      Button,
+      {
+        variant: "secondary",
+        disabled: disabled || percent(name) >= MAX_EDGE_PERCENT,
+        "aria-label": `${LABELS[name]}: trim more`,
+        onClick: () => setEdge(name, percent(name) + 1)
+      },
+      "+"
+    )))));
   }
 
   // src/ui/lib/send.ts
@@ -370,7 +485,7 @@
       }
     ), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-time-buttons" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onNudge(-1), "aria-label": `${label} back 1 second` }, "\u22121s"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onNudge(-0.1), "aria-label": `${label} back a tenth` }, "\u22120.1"), /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", disabled, onClick: onSet }, "Set here"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onNudge(0.1), "aria-label": `${label} forward a tenth` }, "+0.1"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onNudge(1), "aria-label": `${label} forward 1 second` }, "+1s")));
   }
-  function ClipPanel({ sceneId, imageId, value, disabled, gifTargetMb, onChange, onSaveStill }) {
+  function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTargetMb, onChange, onSaveStill }) {
     const { Button, ButtonGroup, Form } = PluginApi.libraries.Bootstrap;
     const video = react_default.useRef(null);
     const box = react_default.useRef(null);
@@ -407,7 +522,7 @@
       setLooping(true);
       v.play().catch(() => void 0);
     }
-    const rect = overlayRect(size.w, size.h, size.vw, size.vh, value.crop.aspect, value.crop.position);
+    const rect = overlayRect(size.w, size.h, size.vw, size.vh, value.crop.aspect, value.crop.position, value.crop.edges);
     return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-clip" }, error ? /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-danger" }, "Can't play this video: ", error) : null, /* @__PURE__ */ react_default.createElement("div", { ref: box, className: "imaglr-preview imaglr-video" }, playback ? /* @__PURE__ */ react_default.createElement(
       "video",
       {
@@ -428,7 +543,7 @@
         },
         onPause: () => setLooping(false)
       }
-    ) : null, rect.axis !== "none" ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-crop", style: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } }) : null), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-clip-summary" }, /* @__PURE__ */ react_default.createElement("span", null, fmtTime(value.inS), " \u2192 ", fmtTime(value.outS), " \xB7 ", /* @__PURE__ */ react_default.createElement("strong", null, (value.outS - value.inS).toFixed(1), " s")), /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-clip-actions" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: playClip }, "Play clip"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onSaveStill(now()) }, "Save still"))), /* @__PURE__ */ react_default.createElement(
+    ) : null, rect.cropped ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-crop", style: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } }) : null), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-clip-summary" }, /* @__PURE__ */ react_default.createElement("span", null, fmtTime(value.inS), " \u2192 ", fmtTime(value.outS), " \xB7 ", /* @__PURE__ */ react_default.createElement("strong", null, (value.outS - value.inS).toFixed(1), " s")), /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-clip-actions" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: playClip }, "Play clip"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onSaveStill(now()) }, "Save still"))), /* @__PURE__ */ react_default.createElement(
       TimeRow,
       {
         label: "In",
@@ -448,29 +563,7 @@
         onNudge: (d) => trim(value.inS, value.outS + d, "out"),
         onType: (t) => trim(value.inS, t, "out")
       }
-    ), /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Crop"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(ASPECTS).map((a) => /* @__PURE__ */ react_default.createElement(
-      Button,
-      {
-        key: a,
-        variant: value.crop.aspect === a ? "primary" : "secondary",
-        disabled,
-        onClick: () => onChange({ ...value, crop: { ...value.crop, aspect: a } })
-      },
-      a === "original" ? "Original" : a
-    )))), value.crop.aspect !== "original" ? /* @__PURE__ */ react_default.createElement(
-      Form.Control,
-      {
-        type: "range",
-        min: 0,
-        max: 1,
-        step: 0.01,
-        value: value.crop.position,
-        disabled,
-        "aria-label": "Crop position",
-        className: "mt-2",
-        onChange: (e) => onChange({ ...value, crop: { ...value.crop, position: Number(e.target.value) } })
-      }
-    ) : null), /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Format"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, ["video", "gif"].map((f) => /* @__PURE__ */ react_default.createElement(
+    ), /* @__PURE__ */ react_default.createElement(CropControls, { crop: value.crop, disabled, itemId, onChange: (crop) => onChange({ ...value, crop }) }), /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Format"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, ["video", "gif"].map((f) => /* @__PURE__ */ react_default.createElement(
       Button,
       {
         key: f,
@@ -621,7 +714,7 @@
 
   // src/ui/editor/Editor.tsx
   var BUSY = ["exporting", "sending"];
-  function CropPreview({ file, aspect, position }) {
+  function CropPreview({ file, crop }) {
     const box = react_default.useRef(null);
     const [size, setSize] = react_default.useState({ w: 0, h: 0, sw: file.width ?? 0, sh: file.height ?? 0 });
     function measure(img) {
@@ -640,9 +733,9 @@
       window.addEventListener("resize", onResize);
       return () => window.removeEventListener("resize", onResize);
     }, []);
-    const rect = overlayRect(size.w, size.h, size.sw, size.sh, aspect, position);
+    const rect = overlayRect(size.w, size.h, size.sw, size.sh, crop.aspect, crop.position, crop.edges);
     const src = file.image ?? file.thumb;
-    return /* @__PURE__ */ react_default.createElement("div", { ref: box, className: "imaglr-preview" }, src ? /* @__PURE__ */ react_default.createElement("img", { src: baseUrl() + src, alt: "", onLoad: (e) => measure(e.currentTarget) }) : null, rect.axis !== "none" ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-crop", style: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } }) : null);
+    return /* @__PURE__ */ react_default.createElement("div", { ref: box, className: "imaglr-preview" }, src ? /* @__PURE__ */ react_default.createElement("img", { src: baseUrl() + src, alt: "", onLoad: (e) => measure(e.currentTarget) }) : null, rect.cropped ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-crop", style: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } }) : null);
   }
   function FileStrip({ files, disabled, onArrange }) {
     const { Link } = PluginApi.libraries.ReactRouterDOM;
@@ -805,6 +898,7 @@
       /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: () => void 0, keyboard: false, size: "lg", dialogClassName: "imaglr-editor", scrollable: true }, /* @__PURE__ */ react_default.createElement(Modal.Header, null, /* @__PURE__ */ react_default.createElement(Modal.Title, null, "Post to imaglr ", /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, STATUS_LABELS[item.status]))), /* @__PURE__ */ react_default.createElement(Modal.Body, null, /* @__PURE__ */ react_default.createElement("dl", { className: "row imaglr-item-facts" }, /* @__PURE__ */ react_default.createElement("dt", { className: "col-3 col-sm-2" }, kindLabel), /* @__PURE__ */ react_default.createElement("dd", { className: "col-9 col-sm-10" }, itemName)), item.error_detail && !BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, item.error_detail) : null, BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement("div", { className: "mb-3" }, /* @__PURE__ */ react_default.createElement(ProgressBar, { now: Math.round(item.progress * 100), label: STATUS_LABELS[item.status] })) : null, item.hdr_warning ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info" }, "This video is HDR. Colours may look flatter on imaglr (HDR isn't converted).") : null, isClip ? /* @__PURE__ */ react_default.createElement(
         ClipPanel,
         {
+          itemId: item.id,
           sceneId: files[0].stash_scene_id,
           imageId: files[0].stash_marker_id ? null : files[0].stash_image_id,
           value: { ...trim, crop },
@@ -816,29 +910,7 @@
           },
           onSaveStill: saveStill
         }
-      ) : single ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(CropPreview, { file: files[0], aspect: crop.aspect, position: crop.position }), /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mt-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Crop"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(ASPECTS).map((a) => /* @__PURE__ */ react_default.createElement(
-        Button,
-        {
-          key: a,
-          variant: crop.aspect === a ? "primary" : "secondary",
-          disabled: locked,
-          onClick: () => edit(setCrop)({ ...crop, aspect: a })
-        },
-        a === "original" ? "Original" : a
-      )))), crop.aspect !== "original" ? /* @__PURE__ */ react_default.createElement(
-        Form.Control,
-        {
-          type: "range",
-          min: 0,
-          max: 1,
-          step: 0.01,
-          value: crop.position,
-          disabled: locked,
-          "aria-label": "Crop position",
-          className: "mt-2",
-          onChange: (e) => edit(setCrop)({ ...crop, position: Number(e.target.value) })
-        }
-      ) : null)) : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("p", { className: "text-muted mb-1" }, "Files in this post, in order:"), /* @__PURE__ */ react_default.createElement(FileStrip, { files, disabled: locked, onArrange: arrange }), locked ? null : /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0 mb-2 imaglr-touch", onClick: () => arrange([]) }, "Split into separate posts")), /* @__PURE__ */ react_default.createElement(
+      ) : single ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(CropPreview, { file: files[0], crop }), /* @__PURE__ */ react_default.createElement(CropControls, { crop, disabled: locked, itemId: item.id, onChange: edit(setCrop) })) : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("p", { className: "text-muted mb-1" }, "Files in this post, in order:"), /* @__PURE__ */ react_default.createElement(FileStrip, { files, disabled: locked, onArrange: arrange }), locked ? null : /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0 mb-2 imaglr-touch", onClick: () => arrange([]) }, "Split into separate posts")), /* @__PURE__ */ react_default.createElement(
         TagField,
         {
           tags,

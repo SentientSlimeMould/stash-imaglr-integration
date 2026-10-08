@@ -343,3 +343,43 @@
 .imaglr-plan-gifs {
   margin: 0.5rem 0 0.75rem;
 }
+.imaglr-edges-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.imaglr-edges-actions {
+  display: inline-flex;
+  gap: 1rem;
+}
+.imaglr-edges {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem 1rem;
+  margin-top: 0.25rem;
+}
+.imaglr-edge {
+  display: grid;
+  grid-template-columns: 3.5rem auto 1fr auto;
+  align-items: center;
+  gap: 0.25rem;
+}
+.imaglr-edge-label {
+  margin: 0;
+}
+.imaglr-edge .btn {
+  min-height: 44px;
+  min-width: 44px;
+}
+.imaglr-edge-input {
+  min-width: 3.5rem;
+  text-align: center;
+}
+@media (max-width: 575.98px) {
+  .imaglr-edges {
+    grid-template-columns: 1fr;
+  }
+}

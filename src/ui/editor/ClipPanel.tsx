@@ -3,11 +3,12 @@
 import React from "react";
 import { gql } from "../api.ts";
 import { clampTrim, pickStream, sameOrigin, type SceneStream, type VideoInfo } from "../lib/clip.ts";
-import { ASPECTS, overlayRect } from "../lib/crop.ts";
+import { overlayRect } from "../lib/crop.ts";
+import { CropControls } from "./CropControls.tsx";
 import { describeGifEstimate, LONG_GIF_SECONDS } from "../lib/gif.ts";
 import { longVideoNotice } from "../lib/video.ts";
 import { fmtTime, parseTime } from "../lib/format.ts";
-import type { Aspect } from "../lib/types.ts";
+import type { Crop } from "../lib/types.ts";
 
 const SCENE_PLAYBACK = `query($id: ID!) { findScene(id: $id) {
   paths { stream screenshot } sceneStreams { url mime_type label }
@@ -55,10 +56,11 @@ export interface ClipState {
   mute: boolean;
   flip: boolean; // mirror left-to-right
   format: ClipFormat; // sent as a video, or as an animated GIF
-  crop: { aspect: Aspect; position: number };
+  crop: Crop;
 }
 
 interface Props {
+  itemId: string;
   sceneId: string | null;
   imageId: string | null;
   value: ClipState;
@@ -100,7 +102,7 @@ function TimeRow({ label, value, disabled, onSet, onNudge, onType }: {
   );
 }
 
-export function ClipPanel({ sceneId, imageId, value, disabled, gifTargetMb, onChange, onSaveStill }: Props) {
+export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTargetMb, onChange, onSaveStill }: Props) {
   const { Button, ButtonGroup, Form } = PluginApi.libraries.Bootstrap;
   const video = React.useRef<HTMLVideoElement>(null);
   const box = React.useRef<HTMLDivElement>(null);
@@ -144,7 +146,7 @@ export function ClipPanel({ sceneId, imageId, value, disabled, gifTargetMb, onCh
     v.play().catch(() => undefined); // autoplay refusals and interrupted loads are not errors
   }
 
-  const rect = overlayRect(size.w, size.h, size.vw, size.vh, value.crop.aspect, value.crop.position);
+  const rect = overlayRect(size.w, size.h, size.vw, size.vh, value.crop.aspect, value.crop.position, value.crop.edges);
 
   return (
     <div className="imaglr-clip">
@@ -163,7 +165,7 @@ export function ClipPanel({ sceneId, imageId, value, disabled, gifTargetMb, onCh
             }}
             onPause={() => setLooping(false)} />
         ) : null}
-        {rect.axis !== "none" ? (
+        {rect.cropped ? (
           <div className="imaglr-crop" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />
         ) : null}
       </div>
@@ -187,25 +189,7 @@ export function ClipPanel({ sceneId, imageId, value, disabled, gifTargetMb, onCh
         onNudge={(d) => trim(value.inS, value.outS + d, "out")}
         onType={(t) => trim(value.inS, t, "out")} />
 
-      <Form.Group className="mt-2">
-        <Form.Label>Crop</Form.Label>
-        <div>
-          <ButtonGroup className="imaglr-segmented">
-            {(Object.keys(ASPECTS) as Aspect[]).map((a) => (
-              <Button key={a} variant={value.crop.aspect === a ? "primary" : "secondary"} disabled={disabled}
-                onClick={() => onChange({ ...value, crop: { ...value.crop, aspect: a } })}>
-                {a === "original" ? "Original" : a}
-              </Button>
-            ))}
-          </ButtonGroup>
-        </div>
-        {value.crop.aspect !== "original" ? (
-          <Form.Control type="range" min={0} max={1} step={0.01} value={value.crop.position} disabled={disabled}
-            aria-label="Crop position" className="mt-2"
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-              onChange({ ...value, crop: { ...value.crop, position: Number(e.target.value) } })} />
-        ) : null}
-      </Form.Group>
+      <CropControls crop={value.crop} disabled={disabled} itemId={itemId} onChange={(crop) => onChange({ ...value, crop })} />
       <Form.Group className="mt-2">
         <Form.Label>Format</Form.Label>
         <div>
