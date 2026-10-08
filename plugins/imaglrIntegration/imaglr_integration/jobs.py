@@ -256,43 +256,51 @@ def prepare_clip(ctx: Context, member: dict[str, Any], tools: tuple[str, str], s
                             error_code=None, error_detail=None)  # type: ignore[return-value]
 
 
-def picture_source(ctx: Context, item: dict[str, Any]) -> tuple[str, dict[str, str] | None]:
-    """Whatever ffmpeg can read this item's picture from: a clip's video, an image's file or URL, a still's
-    grabbed frame."""
-    if item["kind"] == "clip":
-        return clip_source(ctx, item)
+def picture_file(ctx: Context, item: dict[str, Any], work_dir: str) -> str:
+    """A local copy of a picture item's file (an image's, or a still's grabbed frame), fetched from Stash when
+    it only streams it (e.g. inside a zip)."""
     if item["kind"] == "still":
         if not item["source_path"] or not os.path.isfile(item["source_path"]):
             raise JobFailed("source_missing", "This still's frame is missing. Save the still again from its clip.")
-        return item["source_path"], None
+        return item["source_path"]
     image = api.find_image(ctx.stash, item["stash_image_id"])
     if image is None:
         raise JobFailed("source_deleted", f"{item['source_title']} no longer exists in Stash.")
     source = image_source(image)
     if isinstance(source, LocalFile):
-        return source.path, None
+        return source.path
     if isinstance(source, HttpStream):
-        return source.url, api.auth_headers(ctx.stash)
+        os.makedirs(work_dir, exist_ok=True)
+        path = os.path.join(work_dir, "source")
+        api.download(ctx.stash, source.url, path)
+        return path
     raise JobFailed("source_missing", f"Stash has no file for {item['source_title']}.")
 
 
 def detect_borders(ctx: Context, item: dict[str, Any]) -> dict[str, float]:
-    """Edge trims that cut the black borders off this item's picture, sampled across a clip's range."""
+    """Edge trims that cut the black borders off this item's picture: a clip is sampled across its range from
+    its video; a picture is looked at once, from a local copy."""
     ffmpeg, ffprobe = media_tools(ctx)
-    src, headers = picture_source(ctx, item)
+    work_dir = os.path.join(prepared_dir(ctx, item["id"]), "detect")
     try:
-        info = probe(ffprobe, src, headers)
-        w, h = info.display_size
-        if not w or not h:
-            raise JobFailed("unsupported_video", "Couldn't read the picture's size.")
         if item["kind"] == "clip":
+            src, headers = clip_source(ctx, item)
+            w, h = probe(ffprobe, src, headers).display_size
             a, b = float(item["in_s"] or 0), float(item["out_s"] or 0)
             times = [a + (b - a) * f for f in (0.1, 0.35, 0.6, 0.85)] if b > a else [a]
         else:
+            src, headers = picture_file(ctx, item, work_dir), None
+            w, h = inspect_image(src, ffprobe).display_size
             times = [0.0]
+        if not w or not h:
+            raise JobFailed("unsupported_video", "Couldn't read the picture's size.")
         return detect_edges(ffmpeg, src, w, h, times, headers)
-    except FfmpegError as e:
-        raise JobFailed("ffmpeg_failed", f"Couldn't look for borders: {e}") from None
+    except (FfmpegError, ImageFormatError) as e:
+        log.warning(f"border detection failed for {item['id']}: {e}")
+        raise JobFailed("ffmpeg_failed", "Couldn't look for borders: Stash's ffmpeg can't read this picture. "
+                        "Set the trims by hand instead.") from None
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
 
 
 def grab_still(ctx: Context, clip: dict[str, Any], t: float, still_id: str) -> str:
