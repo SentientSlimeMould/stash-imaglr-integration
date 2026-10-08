@@ -186,6 +186,35 @@ def image_swap_tags(client: StashClient, image_id: str, queue_tag: Tag, done_tag
 
 
 # ---- scenes ------------------------------------------------------------------------------
+def queued_scenes(client: StashClient, tag_id: str, limit: int = 500) -> list[Scene]:
+    """Scenes carrying the queue tag, newest first: each is shared whole, without a marker."""
+    out: list[Scene] = []
+    page = 1
+    while len(out) < limit:
+        data = client.gql(q.FIND_QUEUED_SCENES, {"tagId": tag_id, "page": page, "perPage": PAGE_SIZE})
+        res = data.get("findScenes") or {}
+        batch = [Scene.parse(s) for s in res.get("scenes") or []]
+        out.extend(batch)
+        if len(batch) < PAGE_SIZE or len(out) >= int(res.get("count") or 0):
+            break
+        page += 1
+    return out[:limit]
+
+
+def scenes_add_tags(client: StashClient, scene_ids: list[str], tag_ids: list[str]) -> None:
+    client.gql(q.BULK_SCENE_ADD_TAGS, {"ids": scene_ids, "add": tag_ids})
+
+
+def scenes_remove_tags(client: StashClient, scene_ids: list[str], tag_ids: list[str]) -> None:
+    client.gql(q.BULK_SCENE_REMOVE_TAGS, {"ids": scene_ids, "remove": tag_ids})
+
+
+def scene_swap_tags(client: StashClient, scene_id: str, queue_tag: Tag, done_tag: Tag) -> None:
+    """Add the done tag first, so a failure half-way never leaves the scene with neither tag."""
+    scenes_add_tags(client, [scene_id], [done_tag.id])
+    scenes_remove_tags(client, [scene_id], [queue_tag.id])
+
+
 def find_scenes(client: StashClient, text: str, page: int = 1, per_page: int = 20) -> tuple[int, list[Scene]]:
     data = client.gql(q.FIND_SCENES, {"q": text, "page": page, "perPage": per_page})
     res = data.get("findScenes") or {}

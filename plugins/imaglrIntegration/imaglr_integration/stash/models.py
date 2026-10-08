@@ -86,6 +86,7 @@ class Scene:
     files: list[SceneFile] = field(default_factory=list)
     stream_url: str | None = None
     screenshot_url: str | None = None
+    preview_url: str | None = None  # Stash's generated preview video, if any
     tags: list[Tag] = field(default_factory=list)
     performers: list[str] = field(default_factory=list)
     studio: str | None = None
@@ -119,6 +120,7 @@ class Scene:
             files=[SceneFile.parse(f) for f in (d.get("files") or []) if f],
             stream_url=paths.get("stream"),
             screenshot_url=paths.get("screenshot"),
+            preview_url=paths.get("preview"),
             tags=_tags(d.get("tags")),
             performers=_names(d.get("performers")),
             studio=(d.get("studio") or {}).get("name"),

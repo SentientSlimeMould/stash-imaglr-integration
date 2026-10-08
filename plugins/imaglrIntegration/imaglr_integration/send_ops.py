@@ -29,7 +29,7 @@ EDITABLE = {"tags", "caption", "blog_id", "action", "crop", "in_s", "out_s", "mu
 FORMATS = ("video", "gif")
 CODECS = ("h264", "hevc")
 MAX_EDGES = (None, 1280, 854)  # as the source, 720p, 480p
-MAX_CLIP_SECONDS = 600
+MAX_CLIP_SECONDS = services.MAX_CLIP_SECONDS
 ASPECTS = ("original", "9:16", "4:5", "1:1")
 
 RUN_TASK = """

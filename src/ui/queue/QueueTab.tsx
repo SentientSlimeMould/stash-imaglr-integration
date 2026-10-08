@@ -25,7 +25,8 @@ function cardDetail(card: Card): string {
     if (card.output_note) return card.output_note; // e.g. "GIF · 9.4 MB · 480 px · 10 fps"
     const how = card.send_format === "gif" ? "GIF"
       : [card.send_codec === "hevc" ? "H.265" : null, card.max_edge ? edgeLabel(card.max_edge) : null].filter(Boolean).join(" ");
-    return [`${(card.duration ?? 0).toFixed(1)} s`, fmtDims(card.width, card.height), how || null].filter(Boolean).join(" · ");
+    return [card.whole_scene ? "whole scene" : null, `${(card.duration ?? 0).toFixed(1)} s`, fmtDims(card.width, card.height), how || null]
+      .filter(Boolean).join(" · ");
   }
   return [card.format?.toUpperCase(), fmtDims(card.width, card.height), card.animated ? "animated" : null]
     .filter(Boolean)

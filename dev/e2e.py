@@ -130,6 +130,29 @@ def main(port, fake_port):
     check(SENT_TAG in marker_tags and QUEUE_TAG not in marker_tags, f"marker tags swapped to {SENT_TAG}")
     listed = plugin.op("sent_list", page=1, per_page=10)
     check({sent_image["id"], sent_clip["id"]} <= {i["id"] for i in listed["items"]}, f"Sent tab lists both ({listed['total']} total)")
+
+    print("share a whole scene (no marker)")
+    scenes = stash.gql("{ findScenes(filter: {per_page: 50, sort: \"path\"}) { scenes { id title tags { id name } files { duration } } } }")["findScenes"]["scenes"]
+    check(scenes, "Stash has scenes")
+    scene = next((s for s in scenes if SENT_TAG not in {t["name"] for t in s["tags"]}), None)
+    if scene is None:  # every scene was sent by an earlier run: recycle the first
+        scene = scenes[0]
+        stash.gql("mutation($ids: [ID!]!, $t: [ID!]) { bulkSceneUpdate(input: {ids: $ids, tag_ids: {ids: $t, mode: REMOVE}}) { id } }",
+                  ids=[scene["id"]], t=[tags[SENT_TAG]])
+    plugin.op("add_scenes", scene_ids=[scene["id"]])
+    queue = plugin.op("queue")["items"]
+    whole = next((c for c in queue if c["kind"] == "clip" and c.get("whole_scene") and c.get("stash_scene_id") == scene["id"]), None)
+    check(whole is not None, f"queue shows the whole scene ({whole['id'] if whole else '-'}) spanning {whole['duration'] if whole else 0:.1f} s")
+    check(not whole.get("stash_marker_id"), "it has no marker behind it")
+    plugin.op("item_update", item_id=whole["id"], changes={"in_s": 0.0, "out_s": min(4.0, whole["duration"])})
+    plugin.op("send", item_id=whole["id"], blog_id=blog["id"], action="draft")
+    sent_scene = plugin.wait_sent(whole["id"])
+    check(sent_scene["sent_as"] == "draft" and sent_scene["draft_id"], f"whole scene sent as draft {sent_scene['draft_id']}")
+    scene_tags = {t["name"] for t in stash.gql(
+        "query($id: ID!) { findScene(id: $id) { tags { name } } }", id=scene["id"])["findScene"]["tags"]}
+    check(SENT_TAG in scene_tags and QUEUE_TAG not in scene_tags, f"scene tags swapped to {SENT_TAG}")
+    markers_after = stash.gql("{ findSceneMarkers(filter: {per_page: 1}) { count } }")["findSceneMarkers"]["count"]
+    check(markers_after == len(markers), "no marker was created")
     print("e2e: all checks passed")
 
 
