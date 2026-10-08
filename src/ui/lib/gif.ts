@@ -10,6 +10,8 @@ export const LONG_GIF_SECONDS = 15;
 const MB_PER_SECOND = { low: 1.2, high: 3.0 };
 
 export type GifLoop = "forward" | "boomerang";
+export type AnimatedFormat = "gif" | "webp";
+const WEBP_FACTOR = 0.35; // an animated WebP of the same clip is usually a third to a half of the GIF's size
 
 export const GIF_FEED_WIDTH = 698; // imaglr's feed width: the ladder's top rung
 /** The GIF picture sizes offered: the feed width, or smaller; widths in px (null = the feed width). */
@@ -34,8 +36,8 @@ export function gifSeconds(seconds: number, loop: GifLoop = "forward"): number {
 }
 
 /** [low, high] MB for a clip of this length at the first rung it may use. */
-export function estimateGifMb(seconds: number, loop: GifLoop = "forward", width: number | null = null): [number, number] {
-  const s = gifSeconds(seconds, loop) * widthFactor(width);
+export function estimateGifMb(seconds: number, loop: GifLoop = "forward", width: number | null = null, format: AnimatedFormat = "gif"): [number, number] {
+  const s = gifSeconds(seconds, loop) * widthFactor(width) * (format === "webp" ? WEBP_FACTOR : 1);
   return [s * MB_PER_SECOND.low, s * MB_PER_SECOND.high];
 }
 
@@ -44,7 +46,7 @@ function roundMb(n: number): number {
 }
 
 /** "roughly 15–25 MB" with the band rounded to friendly numbers. */
-export function describeGifEstimate(seconds: number, loop: GifLoop = "forward", width: number | null = null): string {
-  const [lo, hi] = estimateGifMb(seconds, loop, width).map(roundMb);
+export function describeGifEstimate(seconds: number, loop: GifLoop = "forward", width: number | null = null, format: AnimatedFormat = "gif"): string {
+  const [lo, hi] = estimateGifMb(seconds, loop, width, format).map(roundMb);
   return lo === hi ? `roughly ${lo} MB` : `roughly ${lo}–${hi} MB`;
 }

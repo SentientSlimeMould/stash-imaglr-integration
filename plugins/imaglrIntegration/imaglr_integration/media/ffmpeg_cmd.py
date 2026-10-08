@@ -192,6 +192,55 @@ GIF_LADDER: tuple[tuple[int, int, int], ...] = (
     (320, 8, 64),
 )
 GIF_LOOPS = ("forward", "boomerang")
+# Animated WebP ladder, best first: (width px, frames per second, libwebp quality 0-100). WebP keeps full colour
+# and is usually a third to a half of a GIF's size, so the same clip fits with room to spare.
+WEBP_LADDER: tuple[tuple[int, int, int], ...] = (
+    (698, 15, 80),
+    (560, 12, 75),
+    (480, 12, 70),
+    (400, 10, 65),
+    (320, 8, 60),
+)
+
+
+def animation_filters(width: int, height: int, aspect: str, position: float, long_edge: int, fps: int,
+                      flip: bool = False, edges: dict[str, float] | None = None, loop: str = "forward") -> str:
+    """The frame chain a GIF or WebP starts from: frame-rate cap, crop, scale, flip, and for a boomerang the
+    frames played forward then backward (without repeating the turning frame)."""
+    chain = build_filter_chain(width, height, aspect, position, long_edge, 0, flip, edges)
+    vf = f"fps={fps}" + ("," + chain if chain else "")
+    if loop == "boomerang":
+        vf += ",split[f][r];[r]reverse,trim=start_frame=1[rv];[f][rv]concat=n=2:v=1:a=0"
+    return vf
+
+
+def build_webp_cmd(
+    ffmpeg: str,
+    src: str,
+    out: str,
+    in_s: float,
+    out_s: float,
+    width: int,
+    height: int,
+    *,
+    long_edge: int,
+    fps: int,
+    quality: int,
+    aspect: str = "original",
+    position: float = 0.5,
+    flip: bool = False,
+    headers: dict[str, str] | None = None,
+    edges: dict[str, float] | None = None,
+    loop: str = "forward",
+) -> list[str]:
+    """One-pass animated WebP (libwebp_anim), looping forever, no sound."""
+    duration = max(0.1, out_s - in_s)
+    vf = animation_filters(width, height, aspect, position, long_edge, fps, flip, edges, loop)
+    cmd = _base(ffmpeg)
+    cmd += _headers_arg(headers)
+    cmd += ["-ss", f"{in_s:.3f}", "-t", f"{duration:.3f}", "-i", src, "-an", "-filter_complex", vf]
+    cmd += ["-c:v", "libwebp_anim", "-q:v", str(quality), "-compression_level", "4", "-loop", "0", "-f", "webp", out]
+    return cmd
 
 
 def gif_long_edge_cap(width: int, height: int, aspect: str, position: float, rung_width: int,
@@ -228,10 +277,7 @@ def build_gif_cmd(
     (stats_mode=diff favours what moves) and ordered dithering with per-frame rectangles of change. A
     boomerang plays the frames forward then backward (without repeating the turning frame)."""
     duration = max(0.1, out_s - in_s)
-    chain = build_filter_chain(width, height, aspect, position, long_edge, 0, flip, edges)
-    vf = f"fps={gif_fps}" + ("," + chain if chain else "")
-    if loop == "boomerang":
-        vf += ",split[f][r];[r]reverse,trim=start_frame=1[rv];[f][rv]concat=n=2:v=1:a=0"
+    vf = animation_filters(width, height, aspect, position, long_edge, gif_fps, flip, edges, loop)
     vf += (f",split[a][b];[a]palettegen=max_colors={colors}:stats_mode=diff[p];"
            f"[b][p]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle")
     cmd = _base(ffmpeg)

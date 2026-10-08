@@ -16,7 +16,7 @@ export interface Card {
   blog_id: number | null;
   action: SendAction | null;
   tag_count: number;
-  send_format?: "video" | "gif"; // clips: how it will be sent
+  send_format?: "video" | "gif" | "webp"; // clips: how it will be sent
   send_codec?: "h264" | "hevc";
   max_edge?: number | null; // picture size as a long edge; null = as the source
   loop?: "forward" | "boomerang"; // GIFs: forward, or forward then back
@@ -92,7 +92,7 @@ export interface FileCard extends Card {
   out_s: number | null;
   mute: boolean;
   flip: boolean;
-  format: "video" | "gif";
+  format: "video" | "gif" | "webp";
   codec: "h264" | "hevc";
   max_edge: number | null; // picture size as a long edge (1280 = 720p, 854 = 480p); null = as the source
   loop: "forward" | "boomerang";
@@ -123,7 +123,7 @@ export interface ItemDetail {
     out_s: number | null;
     mute: boolean;
     flip: boolean;
-    format: "video" | "gif";
+    format: "video" | "gif" | "webp";
     codec: "h264" | "hevc";
     max_edge: number | null;
     loop: "forward" | "boomerang";

@@ -393,6 +393,24 @@ class GifTest(unittest.TestCase):
         bvf = boom[boom.index("-filter_complex") + 1]
         self.assertIn("split[f][r];[r]reverse,trim=start_frame=1[rv];[f][rv]concat=n=2:v=1:a=0,split[a][b]", bvf)
 
+    def test_webp_command_and_ladder(self):
+        from imaglr_integration.media import ffmpeg_cmd as fc
+        from imaglr_integration.media.video_export import VideoSettings, export_webp
+
+        cmd = fc.build_webp_cmd("ff", "/in.mp4", "/o.webp.part", 2, 6, 1920, 1080, long_edge=480, fps=12, quality=70, loop="boomerang")
+        s = " ".join(cmd)
+        self.assertIn("-c:v libwebp_anim -q:v 70 -compression_level 4 -loop 0 -f webp /o.webp.part", s)
+        self.assertIn("reverse,trim=start_frame=1", cmd[cmd.index("-filter_complex") + 1])
+        self.assertNotIn("palettegen", s)
+        self.assertEqual(fc.WEBP_LADDER[0][0], 698)
+        run_patch, probe_patch, calls = self.fake_ffmpeg([5000, 1500])
+        with run_patch, probe_patch:
+            r = export_webp("/src.mp4", self.tmp.name, title="t", in_s=0, out_s=8, settings=VideoSettings("ff", "fp"),
+                            target_bytes=2000, limit_bytes=10000)
+        self.assertEqual(r.note, "WebP · 0.0 MB · 560 px wide · 12 fps")
+        self.assertTrue(r.path.endswith(".webp"))
+        self.assertEqual(len([c for c in calls if "libwebp_anim" in c]), 2)
+
     def test_gif_rungs_are_widths_and_portrait_gets_the_taller_cap(self):
         from imaglr_integration.media import ffmpeg_cmd as fc
 
@@ -582,6 +600,33 @@ class SharedBudgetSendTest(SendHarness):
             item, _ = self.send(a["id"])
         self.assertEqual((item["status"], item["error_code"]), ("failed", "no_hevc"))
         self.assertIn("Choose H.264", item["error_detail"])
+
+
+class WebpSendTest(SendHarness):
+    def test_webp_clip_is_uploaded_as_webp_and_needs_the_encoder(self):
+        from imaglr_integration.media.video_export import ExportResult
+        clip = items.create_item(self.db, kind="clip", stash_image_id="801", source_title="Clip", in_s=0.0, out_s=5.0, format="webp")
+
+        def fake_export_webp(src, out_dir, **a):
+            os.makedirs(out_dir, exist_ok=True)
+            path = os.path.join(out_dir, "c.webp")
+            with open(path, "wb") as f:
+                f.write(b"w" * 100)
+            return ExportResult(path, 100, 698, 392, False, None, "WebP · 0.0 MB · 698 px wide · 15 fps")
+
+        with mock.patch.object(jobs, "export_webp", fake_export_webp), \
+             mock.patch.object(jobs, "export_gif", lambda *a, **k: self.fail("GIF export must not run")), \
+             mock.patch.object(jobs, "webp_available", lambda ff: True), \
+             mock.patch.object(jobs, "clip_source", lambda c, m: ("/src.mp4", None)):
+            item, client = self.send(clip["id"])
+        self.assertEqual(item["status"], "sent")
+        self.assertEqual(client.calls[0][1], ["c.webp"])
+        self.assertEqual(items.get_item(self.db, clip["id"])["output_mime"], "image/webp")
+        other = items.create_item(self.db, kind="clip", stash_image_id="802", source_title="Clip", in_s=0.0, out_s=5.0, format="webp")
+        with mock.patch.object(jobs, "webp_available", lambda ff: False), \
+             mock.patch.object(jobs, "clip_source", lambda c, m: ("/src.mp4", None)):
+            item, _ = self.send(other["id"])
+        self.assertEqual((item["status"], item["error_code"]), ("failed", "no_webp"))
 
 
 class GifPreviewOpTest(SendHarness):

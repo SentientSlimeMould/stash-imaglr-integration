@@ -35,8 +35,8 @@ def op_gif_preview(ctx: Context) -> dict[str, Any]:
     clip = repo.get_item(ctx.db, ctx.arg("item_id"))
     if clip is None or clip["kind"] != "clip":
         raise UserError("That clip no longer exists. Refresh the page.")
-    if clip["format"] != "gif":
-        raise UserError("Choose GIF under Format first.")
+    if clip["format"] not in jobs.ANIMATED:
+        raise UserError("Choose GIF or WebP under Format first.")
     if clip["status"] in services.BUSY_STATUSES:
         raise UserError("This clip is being sent.")
     try:

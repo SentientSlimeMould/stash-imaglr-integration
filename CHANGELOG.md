@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **WebP** joins Video and GIF as a Format for clips: an animated WebP plays automatically in the feed like a GIF,
+  has no sound, and is usually a third to a half of the GIF's size, so it loads faster. Same loop, picture size,
+  preview and size ladder as GIF. (Needs an ffmpeg with the animated WebP encoder, which Stash's has.)
 - **Preview a GIF before sending.** In the clip editor, **Preview GIF** makes the GIF exactly as it would be sent
   and shows it looping in place of the video, with its size, width and frame rate. Sending then uploads that
   very file. Any edit that changes the picture clears the preview, so what you see is always current.

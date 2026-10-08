@@ -94,7 +94,7 @@ export function Editor({ itemId, onClose }: Props) {
   const [tags, setTags] = React.useState<string[]>([]);
   const [caption, setCaption] = React.useState("");
   const [crop, setCrop] = React.useState<Crop>({ aspect: "original", position: 0.5 });
-  const [trim, setTrim] = React.useState<{ inS: number; outS: number; mute: boolean; flip: boolean; format: "video" | "gif"; codec: "h264" | "hevc"; maxEdge: number | null; loop: "forward" | "boomerang"; gifWidth: number | null }>(
+  const [trim, setTrim] = React.useState<{ inS: number; outS: number; mute: boolean; flip: boolean; format: "video" | "gif" | "webp"; codec: "h264" | "hevc"; maxEdge: number | null; loop: "forward" | "boomerang"; gifWidth: number | null }>(
     { inS: 0, outS: 0, mute: false, flip: false, format: "video", codec: "h264", maxEdge: null, loop: "forward", gifWidth: null });
   const [blogId, setBlogId] = React.useState<number | null>(null);
   const [action, setAction] = React.useState<SendAction | null>(null);
@@ -302,7 +302,7 @@ export function Editor({ itemId, onClose }: Props) {
             value={{ ...trim, crop }}
             disabled={locked}
             gifTargetMb={detail.gif_target_mb}
-            gifPreview={!dirty && trim.format === "gif" && files[0].output_mime === "image/gif" && files[0].prepared
+            gifPreview={!dirty && trim.format !== "video" && files[0].output_mime === `image/${trim.format}` && files[0].prepared
               // the file keeps its name across re-makes, so the item's update time keeps the browser from showing a stale copy
               ? { url: `${files[0].prepared}?v=${encodeURIComponent(item.updated_at)}`, note: files[0].output_note } : null}
             makingGif={makingGif}

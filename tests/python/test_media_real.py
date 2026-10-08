@@ -388,6 +388,19 @@ class VideoTest(RealMediaTest):
         self.assertTrue(boom.note.endswith("· boomerang"), boom.note)
         self.assertEqual(fwd.width, 640)  # under the 698 px rung: never upscaled
 
+    def test_animated_webp_export(self):
+        if not has_encoder("libwebp_anim"):
+            self.skipTest("this ffmpeg has no animated WebP encoder")
+        from imaglr_integration.media.video_export import VideoSettings, export_webp
+        src = self.make_source(self.path("src.mp4"), seconds=2, size="640x360", rate=10, audio=False)
+        res = export_webp(src, self.out, title="w", in_s=0, out_s=1, settings=VideoSettings(FFMPEG, FFPROBE),
+                          target_bytes=10**8, limit_bytes=10**8, loop="boomerang")
+        head = read(res.path)[:64]
+        self.assertEqual((head[:4], head[8:12]), (b"RIFF", b"WEBP"))
+        self.assertIn(b"ANIM", head)
+        self.assertTrue(res.note.startswith("WebP · ") and res.note.endswith("· boomerang"), res.note)
+        self.assertEqual(res.width, 640)
+
     def test_failure_leaves_no_part(self):
         src = self.make_source(self.path("src.mp4"), seconds=2)
         info = probe(FFPROBE, src)

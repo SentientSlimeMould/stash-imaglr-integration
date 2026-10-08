@@ -27,7 +27,7 @@ from .tags.pipeline import MAX_TAG_LEN, MAX_TAGS
 IN_FLIGHT = ("exporting", "sending")
 EDITABLE = {"tags", "caption", "blog_id", "action", "crop", "in_s", "out_s", "mute", "flip", "format", "codec", "max_edge", "loop",
             "gif_width"}
-FORMATS = ("video", "gif")
+FORMATS = ("video", "gif", "webp")
 CODECS = ("h264", "hevc")
 LOOPS = ("forward", "boomerang")
 MAX_EDGES = (None, 1280, 854)  # as the source, 720p, 480p
@@ -234,7 +234,7 @@ def plan_send_all(ctx: Context, item_ids: list[str]) -> list[dict[str, Any]]:
                 entry.update(blog_id=blog["id"], blog=blog["name"] or f"Blog {blog['id']}",
                              action="draft" if action == "publish" else action, downgraded=action == "publish")
                 members = repo.set_members(ctx.db, item_id) if item["kind"] == "set" else [item]
-                gifs = [m for m in members if m["kind"] == "clip" and m["format"] == "gif"]
+                gifs = [m for m in members if m["kind"] == "clip" and m["format"] in ("gif", "webp")]  # animated: no sound, image limit
                 if gifs:
                     entry["gif"] = True
                     entry["long_gif"] = any(((m["out_s"] or 0) - (m["in_s"] or 0)) > LONG_GIF_SECONDS for m in gifs)

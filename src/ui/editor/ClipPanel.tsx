@@ -49,7 +49,8 @@ async function loadPlayback(sceneId: string | null, imageId: string | null): Pro
   };
 }
 
-export type ClipFormat = "video" | "gif";
+export type ClipFormat = "video" | "gif" | "webp";
+const FORMAT_LABELS: Record<ClipFormat, string> = { video: "Video", gif: "GIF", webp: "WebP" };
 
 export interface ClipState {
   inS: number;
@@ -115,10 +116,11 @@ function TimeRow({ label, value, disabled, onSet, onNudge, onType }: {
 
 /** The Format section's header while it is collapsed: what the clip will be sent as, and its likely size. */
 export function formatHeader(v: ClipState, estimate: { short: string; warn: boolean }, edge: number): { text: string; warn: boolean } {
-  if (v.format === "gif") {
+  if (v.format !== "video") {
     const loop = v.loop === "boomerang" ? " · boomerang" : "";
     const size = v.gifWidth ? ` · ${v.gifWidth} px` : "";
-    return { text: `GIF${loop}${size} · ${describeGifEstimate(v.outS - v.inS, v.loop, v.gifWidth)}`, warn: gifSeconds(v.outS - v.inS, v.loop) > LONG_GIF_SECONDS };
+    return { text: `${FORMAT_LABELS[v.format]}${loop}${size} · ${describeGifEstimate(v.outS - v.inS, v.loop, v.gifWidth, v.format)}`,
+      warn: gifSeconds(v.outS - v.inS, v.loop) > LONG_GIF_SECONDS };
   }
   const parts = ["Video", CODEC_LABELS[v.codec], edgeLabel(edge), v.mute ? "no sound" : "", estimate.short];
   return { text: parts.filter(Boolean).join(" · "), warn: estimate.warn };
@@ -200,19 +202,19 @@ export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTarget
           <div className="imaglr-crop" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />
         ) : null}
       </div>
-      {value.format === "gif" ? (
+      {value.format !== "video" ? (
         <div className="imaglr-gif-bar">
           {gifPreview ? (
-            <span className="small text-muted">This is the GIF that will be sent: {gifPreview.note}</span>
+            <span className="small text-muted">This is the {FORMAT_LABELS[value.format]} that will be sent: {gifPreview.note}</span>
           ) : (
-            <span className="small text-muted">Make the GIF now to see exactly what will be sent.</span>
+            <span className="small text-muted">Make the {FORMAT_LABELS[value.format]} now to see exactly what will be sent.</span>
           )}
           <span className="imaglr-clip-actions">
             {gifPreview ? (
-              <Button variant="secondary" onClick={() => setShowGif(!showGif)}>{showGif ? "Show video" : "Show GIF"}</Button>
+              <Button variant="secondary" onClick={() => setShowGif(!showGif)}>{showGif ? "Show video" : `Show ${FORMAT_LABELS[value.format]}`}</Button>
             ) : null}
             <Button variant={gifPreview ? "secondary" : "primary"} disabled={disabled || makingGif} onClick={onPreviewGif}>
-              {makingGif ? "Making the GIF…" : gifPreview ? "Make it again" : "Preview GIF"}
+              {makingGif ? `Making the ${FORMAT_LABELS[value.format]}…` : gifPreview ? "Make it again" : `Preview ${FORMAT_LABELS[value.format]}`}
             </Button>
           </span>
         </div>
@@ -243,20 +245,21 @@ export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTarget
         <Form.Group className="mt-2">
           <div>
             <ButtonGroup className="imaglr-segmented">
-              {(["video", "gif"] as ClipFormat[]).map((f) => (
+              {(Object.keys(FORMAT_LABELS) as ClipFormat[]).map((f) => (
                 <Button key={f} variant={value.format === f ? "primary" : "secondary"} disabled={disabled}
                   onClick={() => onChange({ ...value, format: f })}>
-                  {f === "video" ? "Video" : "GIF"}
+                  {FORMAT_LABELS[f]}
                 </Button>
               ))}
             </ButtonGroup>
           </div>
           <div className="small text-muted mt-1">
-            GIFs play automatically in feeds. Videos are higher quality, are quicker to load and have sound, but
-            require the user to click play.
+            GIFs and WebPs play automatically in the feed and have no sound. A WebP is smaller than a GIF of the same
+            clip, so it loads faster; a GIF plays in absolutely everything. Videos are higher quality and keep their
+            sound, but require the user to click play.
           </div>
         </Form.Group>
-        {value.format === "gif" ? (
+        {value.format !== "video" ? (
           <>
             <Form.Group className="mt-2 mb-2">
               <Form.Label>Loop</Form.Label>
@@ -288,17 +291,17 @@ export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTarget
                   </ButtonGroup>
                 </div>
                 <div className="small text-muted mt-1">
-                  Original is the feed's width, 698 px. A smaller picture makes a much smaller GIF.
+                  Original is the feed's width, 698 px. A smaller picture makes a much smaller file.
                 </div>
               </Form.Group>
             ) : null}
             <div className="small text-muted mt-1">
-              This will be a GIF of {describeGifEstimate(value.outS - value.inS, value.loop, value.gifWidth)}. GIFs over about {gifTargetMb} MB are slow to
-              load, so the plugin will automatically lower the quality if it has to.
+              This will be a {FORMAT_LABELS[value.format]} of {describeGifEstimate(value.outS - value.inS, value.loop, value.gifWidth, value.format)}.
+              Files over about {gifTargetMb} MB are slow to load, so the plugin will automatically lower the quality if it has to.
             </div>
             {gifSeconds(value.outS - value.inS, value.loop) > LONG_GIF_SECONDS ? (
               <div className="small text-warning mt-1">
-                Long GIFs may need lower frame-rates and resolutions. {value.loop === "boomerang" ? "A boomerang plays twice as long, so clips" : "Clips"} below {value.loop === "boomerang" ? LONG_GIF_SECONDS / 2 : LONG_GIF_SECONDS} seconds work best.
+                Long {FORMAT_LABELS[value.format]}s may need lower frame-rates and resolutions. {value.loop === "boomerang" ? "A boomerang plays twice as long, so clips" : "Clips"} below {value.loop === "boomerang" ? LONG_GIF_SECONDS / 2 : LONG_GIF_SECONDS} seconds work best.
               </div>
             ) : null}
           </>

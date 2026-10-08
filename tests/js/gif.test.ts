@@ -37,3 +37,10 @@ test("a smaller GIF picture scales the estimate by area and is only offered belo
   assert.deepEqual(gifSizeChoicesFor(400).map((o) => o.label), ["Original", "320 px"]);
   assert.deepEqual(gifSizeChoicesFor(null).map((o) => o.label), ["Original", "480 px", "320 px"]);
 });
+
+test("a WebP of the same clip is estimated at about a third of the GIF", () => {
+  const [gLo, gHi] = estimateGifMb(10);
+  const [wLo, wHi] = estimateGifMb(10, "forward", null, "webp");
+  assert.ok(Math.abs(wLo / gLo - 0.35) < 1e-9 && Math.abs(wHi / gHi - 0.35) < 1e-9);
+  assert.equal(describeGifEstimate(10, "forward", null, "webp"), "roughly 4–10 MB");
+});
