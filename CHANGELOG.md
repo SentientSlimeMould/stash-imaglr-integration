@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.18 — 2026-10-08
 
 - **WebP** joins Video and GIF as a Format for clips: an animated WebP plays automatically in the feed like a GIF,
   has no sound, and is usually a third to a half of the GIF's size, so it loads faster. Same loop, picture size,
