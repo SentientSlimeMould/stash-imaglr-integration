@@ -14,7 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest import mock
 
 from imaglr_integration.imaglr import client as client_mod
-from imaglr_integration.imaglr.client import ImaglrClient, parse_draft_response
+from imaglr_integration.imaglr.client import ImaglrClient, UploadCancelled, parse_draft_response
 from imaglr_integration.imaglr.errors import ErrorClass, ImaglrError, classify, field_from_code
 
 
@@ -434,3 +434,89 @@ class BareTooLargeTest(unittest.TestCase):
         with self.assertRaises(ImaglrError) as ctx:
             _parse(413, {}, b"<html>Request Entity Too Large</html>")
         self.assertEqual(ctx.exception.klass, ErrorClass.TOO_LARGE)
+
+
+class ChunkedUploadTest(ServerTestCase):
+    """Files that would exceed the single-request limit go up in pieces through /uploads, in order, and the draft
+    references the upload ids. Pieces are exactly chunk_size bytes except the last; a failed piece is re-sent."""
+
+    def upload_reply(self, upload_id="u1", chunk_size=400):
+        return envelope({"upload": {"id": upload_id, "chunk_size": chunk_size, "total_chunks": 3, "status": "uploading"}})
+
+    def test_large_draft_goes_in_pieces_and_keeps_the_order(self):
+        client = ImaglrClient("sekret", "1.2.3", self.server.base_url, single_request_limit=1000)
+        big = self.write("big.mp4", bytes(range(256)) * 4)  # 1024 bytes: 3 pieces of 400, 400, 224
+        small = self.write("small.jpg", b"j" * 10)
+        self.server.reply(201, self.upload_reply("u-big"))
+        for _ in range(3):
+            self.server.reply(200)
+        self.server.reply(200, envelope({"upload": {"id": "u-big", "status": "ready"}}))
+        self.server.reply(201, self.upload_reply("u-small", chunk_size=400))
+        self.server.reply(200)
+        self.server.reply(200, envelope({"upload": {"id": "u-small", "status": "ready"}}))
+        self.server.reply(201, envelope({"post": {"id": 77, "url": "https://imaglr.example/post/77", "tags": ["a"]}}))
+        progress = []
+        result = client.create_draft([big, small], tags=["a"], body_html="<p>hi</p>", progress_cb=progress.append)
+        self.assertEqual(result.id, "77")
+        reqs = self.server.requests
+        self.assertEqual([(r["method"], r["path"]) for r in reqs], [
+            ("POST", "/api/v2/uploads"),
+            ("PUT", "/api/v2/uploads/u-big/chunks/0"), ("PUT", "/api/v2/uploads/u-big/chunks/1"), ("PUT", "/api/v2/uploads/u-big/chunks/2"),
+            ("POST", "/api/v2/uploads/u-big/complete"),
+            ("POST", "/api/v2/uploads"), ("PUT", "/api/v2/uploads/u-small/chunks/0"), ("POST", "/api/v2/uploads/u-small/complete"),
+            ("POST", "/api/v2/drafts"),
+        ])
+        self.assertIn(b"filename=big.mp4&size=1024", reqs[0]["body"])
+        self.assertEqual([len(r["body"]) for r in reqs[1:4]], [400, 400, 224])
+        self.assertEqual(reqs[1]["body"] + reqs[2]["body"] + reqs[3]["body"], bytes(range(256)) * 4)
+        self.assertEqual(reqs[1]["headers"]["Content-Type"], "application/octet-stream")
+        parts = parse_multipart(reqs[-1])
+        names = [h["Content-Disposition"].split('name="')[1].split('"')[0] for h, _ in parts]
+        self.assertEqual(names, ["body", "tags[]", "uploads[]", "uploads[]"])
+        self.assertEqual([c for _, c in parts[2:]], [b"u-big", b"u-small"])
+        self.assertFalse(any(h.get("Content-Type", "").startswith(("video/", "image/")) for h, _ in parts))
+        self.assertEqual(progress[-1], 1.0)
+        self.assertTrue(all(0 <= p <= 1 for p in progress) and progress == sorted(progress))
+
+    def test_small_draft_still_goes_in_one_request(self):
+        client = ImaglrClient("sekret", "1.2.3", self.server.base_url, single_request_limit=1000)
+        self.server.reply(201, envelope({"post": {"id": 5, "url": None, "tags": []}}))
+        client.create_draft([self.write("a.jpg", b"j" * 100)])
+        self.assertEqual([r["path"] for r in self.server.requests], ["/api/v2/drafts"])
+
+    def test_failed_piece_is_sent_again_then_given_up(self):
+        client = ImaglrClient("sekret", "1.2.3", self.server.base_url, single_request_limit=10)
+        path = self.write("v.mp4", b"v" * 500)
+        self.server.reply(201, self.upload_reply("u1", chunk_size=500))
+        self.server.reply(500, envelope(errors=[{"code": "server_error", "detail": "hiccup"}], status=500))
+        self.server.reply(200)
+        self.server.reply(200, envelope({"upload": {"id": "u1", "status": "ready"}}))
+        self.server.reply(201, envelope({"post": {"id": 9, "url": None, "tags": []}}))
+        client.create_draft([path])
+        self.assertEqual([r["path"] for r in self.server.requests][:3],
+                         ["/api/v2/uploads", "/api/v2/uploads/u1/chunks/0", "/api/v2/uploads/u1/chunks/0"])
+        self.server.requests.clear()
+        self.server.reply(201, self.upload_reply("u2", chunk_size=500))
+        for _ in range(3):
+            self.server.reply(500, envelope(errors=[{"code": "server_error", "detail": "down"}], status=500))
+        with self.assertRaises(ImaglrError) as cm:
+            client.create_draft([path])
+        self.assertEqual(cm.exception.code, "server_error")
+        self.assertEqual(len([r for r in self.server.requests if "chunks" in r["path"]]), 3)
+
+    def test_cancel_between_pieces_discards_the_upload(self):
+        client = ImaglrClient("sekret", "1.2.3", self.server.base_url, single_request_limit=10)
+        path = self.write("v.mp4", b"v" * 800)
+        self.server.reply(201, self.upload_reply("u1", chunk_size=400))
+        self.server.reply(200)  # piece 0
+        self.server.reply(200)  # the DELETE
+        calls = [0]
+
+        def should_cancel():
+            calls[0] += 1
+            return calls[0] >= 2  # after the first piece
+
+        with self.assertRaises(UploadCancelled):
+            client.create_draft([path], should_cancel=should_cancel)
+        self.assertEqual([(r["method"], r["path"]) for r in self.server.requests],
+                         [("POST", "/api/v2/uploads"), ("PUT", "/api/v2/uploads/u1/chunks/0"), ("DELETE", "/api/v2/uploads/u1")])

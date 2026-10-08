@@ -153,7 +153,7 @@
   }
 
   // src/ui/lib/video.ts
-  var VIDEO_CAP_MB = 100;
+  var VIDEO_CAP_MB = 500;
   var CODEC_LABELS = { h264: "H.264", hevc: "H.265" };
   var SIZE_OPTIONS = [
     { label: "Original", value: null },

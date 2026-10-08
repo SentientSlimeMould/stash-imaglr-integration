@@ -28,7 +28,7 @@ Instructions for AI coding agents (and a reminder for humans). The owner is the 
 - Keep the UI Stash-native (Stash's own components, markup and CSS classes; never re-implement a Stash feature)
   and treat phone use as a first-class requirement.
 - Python backend: standard library only, Python 3.9–3.14, Windows and macOS included. imaglr calls stay within the
-  five allowlisted routes.
+  allowlisted routes in the client (drafts, their follow-ups, and imaglr's chunked uploads for large files).
 - Tests before a release: `npm run typecheck`, `npm test`, `npm run test:py`, `npm run test:py:stash`, and
   `python3 dev/e2e.py 9931` against the local test Stash. CI gates publishing on the same.
 - Never mount the repository folder into Docker (it may live on a network share); the test instances use the local

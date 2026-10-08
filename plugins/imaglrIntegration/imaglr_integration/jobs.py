@@ -41,12 +41,9 @@ from .tags.caption import caption_to_html
 from .tags.pipeline import MAX_TAGS, dropped_tags
 
 IMAGE_LIMIT = 40 * 1024 * 1024  # imaglr: 40 MB per image
-# imaglr's documentation says 500 MB per video and roughly 900 MB per request, but its API sits behind an edge
-# that refuses any request body over 100 MiB with a bare 413 (measured 2026-10-08: 97 MiB accepted, 101 MiB
-# refused, two 55 MB files in one post refused). The post's files have to fit this together.
-REQUEST_LIMIT = 100 * 1024 * 1024
-VIDEO_LIMIT = REQUEST_LIMIT
-MIN_VIDEO_BYTES = 2 * 1024 * 1024  # below this share of the request a video isn't worth encoding
+VIDEO_LIMIT = 500 * 1024 * 1024  # imaglr: 500 MB per video
+# imaglr's edge refuses any single request over 100 MB; the client sends bigger drafts' files in pieces through
+# imaglr's chunked uploads, so the limits here are the per-file ceilings only.
 SAFETY = 0.95  # stay under the limits
 MAX_RATE_LIMIT_WAIT = 120  # longer waits fail the item with a retry button instead of blocking Stash's queue
 
@@ -350,17 +347,9 @@ def _is_video(member: dict[str, Any]) -> bool:
 
 
 def video_budget(members: list[dict[str, Any]]) -> int:
-    """Bytes each video in the post may take: the request limit less what the other files take, shared equally
-    among the videos. Raises when that is too little to be worth encoding."""
-    videos = [m for m in members if _is_video(m)]
-    if not videos:
-        return VIDEO_LIMIT
-    others = sum(m["output_bytes"] or 0 for m in members if not _is_video(m))
-    share = int((REQUEST_LIMIT * SAFETY - others) / len(videos))
-    if share < MIN_VIDEO_BYTES:
-        raise JobFailed("file_too_large", f"Together these files are over imaglr's {REQUEST_LIMIT // 1048576} MB "
-                        "per post. Split the post.")
-    return share
+    """Bytes each video in the post may take: imaglr's per-video ceiling. (Large drafts travel in pieces, so the
+    files of a post no longer have to fit one request together.)"""
+    return VIDEO_LIMIT
 
 
 # ---- sending --------------------------------------------------------------------------------
@@ -500,9 +489,6 @@ def run_send(ctx: Context, item_id: str, action: str | None = None, gif_fallback
             limit = VIDEO_LIMIT if (m["output_mime"] or "").startswith("video/") else IMAGE_LIMIT
             if m["output_bytes"] > limit:
                 raise JobFailed("file_too_large", f"{m['source_title']} is over imaglr's {limit // 1048576} MB upload limit.")
-        if sum(m["output_bytes"] for m in members) > REQUEST_LIMIT:
-            raise JobFailed("file_too_large", f"Together these files are over imaglr's {REQUEST_LIMIT // 1048576} MB "
-                            "per post. Split the post.")
 
         # 2. upload (40-95 %)
         repo.update_item(ctx.db, item_id, status="sending")

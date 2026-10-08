@@ -2,9 +2,12 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """A fake imaglr API v2 for local testing. Development only; never shipped with the plugin.
 
-Implements the five routes the plugin may call, with the same response envelope shape (error texts are
-this fake's own words; the plugin only ever branches on error codes):
-GET /user/info, GET /user/limits, POST /drafts, POST /drafts/{id}/publish, POST /drafts/{id}/queue.
+Implements the routes the plugin may call, with the same response envelope shape (error texts are this
+fake's own words; the plugin only ever branches on error codes): GET /user/info, GET /user/limits,
+POST /drafts, POST /drafts/{id}/publish, POST /drafts/{id}/queue, and imaglr's chunked uploads
+(POST /uploads, PUT /uploads/{id}/chunks/{index}, POST /uploads/{id}/complete, DELETE /uploads/{id}) with a
+small chunk size (CHUNK_SIZE below) so test files exercise them. A draft made from uploads[] is marked
+"chunked" in the listing.
 Anything else returns 404 and is logged loudly, so a stray call is easy to spot.
 
 Uploads are saved under <state dir>/drafts/<id>/ and listed at http://127.0.0.1:8900/.
@@ -40,6 +43,8 @@ STATE = sys.argv[2] if len(sys.argv) > 2 else "/tmp/fake-imaglr"
 LOCK = threading.Lock()
 SEEN_FIRST_POST = set()
 DRAFTS = {}  # id -> record
+UPLOADS = {}  # id -> {"filename", "size", "chunks": {index: bytes}, "total", "status"}
+CHUNK_SIZE = 512 * 1024  # imaglr's is 50 MB; small here so a few-MB test clip goes in several pieces
 
 
 def scenario(key):
@@ -126,9 +131,83 @@ class Handler(BaseHTTPRequestHandler):
         match = re.fullmatch(r"/api/v2/drafts/(\d+)/(publish|queue)", self.path)
         if match:
             return self.follow_up(name, match.group(1), match.group(2))
+        if self.path == "/api/v2/uploads":
+            return self.upload_start()
+        match = re.fullmatch(r"/api/v2/uploads/([A-Za-z0-9]+)/complete", self.path)
+        if match:
+            return self.upload_complete(match.group(1))
+        match = re.fullmatch(r"/api/v2/uploads/([A-Za-z0-9]+)/chunks/(\d+)", self.path)
+        if match:  # imaglr accepts POST for a chunk too
+            return self.upload_chunk(match.group(1), int(match.group(2)))
         self.not_allowed()
 
-    do_PATCH = do_PUT = do_DELETE = lambda self: (self.auth() is not None) and self.not_allowed()
+    def do_PUT(self):
+        if self.auth() is None:
+            return
+        match = re.fullmatch(r"/api/v2/uploads/([A-Za-z0-9]+)/chunks/(\d+)", self.path)
+        if match:
+            return self.upload_chunk(match.group(1), int(match.group(2)))
+        self.not_allowed()
+
+    def do_DELETE(self):
+        if self.auth() is None:
+            return
+        match = re.fullmatch(r"/api/v2/uploads/([A-Za-z0-9]+)", self.path)
+        if match:
+            with LOCK:
+                UPLOADS.pop(match.group(1), None)
+            return self.reply(200, {})
+        self.not_allowed()
+
+    do_PATCH = lambda self: (self.auth() is not None) and self.not_allowed()
+
+    # --- chunked uploads ---
+    def upload_view(self, upload_id):
+        u = UPLOADS[upload_id]
+        return {"upload": {"id": upload_id, "filename": u["filename"], "size": u["size"], "status": u["status"],
+                           "chunk_size": CHUNK_SIZE, "total_chunks": u["total"],
+                           "received_chunks": sorted(u["chunks"])}}
+
+    def upload_start(self):
+        raw = self.rfile.read(int(self.headers.get("Content-Length") or 0)).decode()
+        import urllib.parse
+        fields = dict(urllib.parse.parse_qsl(raw))
+        try:
+            size = int(fields.get("size") or 0)
+        except ValueError:
+            size = 0
+        if not fields.get("filename") or size <= 0:
+            return self.reply(422, errors=[("invalid_size", "filename and size are required.")])
+        with LOCK:
+            upload_id = f"u{len(UPLOADS) + 1:04d}"
+            UPLOADS[upload_id] = {"filename": fields["filename"], "size": size, "chunks": {}, "status": "uploading",
+                                  "total": max(1, -(-size // CHUNK_SIZE))}
+        self.reply(201, self.upload_view(upload_id))
+
+    def upload_chunk(self, upload_id, index):
+        raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        u = UPLOADS.get(upload_id)
+        if u is None:
+            return self.reply(404, errors=[("upload_not_found", "Unknown upload.")])
+        if index >= u["total"]:
+            return self.reply(422, errors=[("invalid_index", "Chunk index out of range.")])
+        expected = CHUNK_SIZE if index < u["total"] - 1 else u["size"] - CHUNK_SIZE * (u["total"] - 1)
+        if len(raw) != expected:
+            return self.reply(422, errors=[("invalid_chunk", f"Chunk {index} should be {expected} bytes, got {len(raw)}.")])
+        with LOCK:
+            u["chunks"][index] = raw
+        self.reply(200, self.upload_view(upload_id))
+
+    def upload_complete(self, upload_id):
+        self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        u = UPLOADS.get(upload_id)
+        if u is None:
+            return self.reply(404, errors=[("upload_not_found", "Unknown upload.")])
+        if len(u["chunks"]) != u["total"]:
+            return self.reply(422, errors=[("upload_incomplete", f"{len(u['chunks'])} of {u['total']} chunks received.")])
+        with LOCK:
+            u["status"] = "ready"
+        self.reply(200, self.upload_view(upload_id))
 
     def not_allowed(self):
         sys.stderr.write(f"fake-imaglr: !!! UNEXPECTED ROUTE {self.command} {self.path}\n")
@@ -154,13 +233,22 @@ class Handler(BaseHTTPRequestHandler):
         message = email.parser.BytesParser(policy=email.policy.HTTP).parsebytes(
             b"Content-Type: " + self.headers["Content-Type"].encode() + b"\r\n\r\n" + raw
         )
-        fields, files = {"tags[]": []}, []
+        fields, files, chunked = {"tags[]": []}, [], False
         for part in message.iter_parts():
             field = part.get_param("name", header="content-disposition")
             if part.get_filename():
                 files.append((part.get_filename(), part.get_content_type(), part.get_payload(decode=True)))
             elif field == "tags[]":
                 fields["tags[]"].append(part.get_content())
+            elif field == "uploads[]":  # a completed chunked upload, referenced by id
+                u = UPLOADS.get(part.get_content().strip())
+                if u is None or u["status"] != "ready":
+                    return self.reply(422, errors=[("invalid_uploads", "Unknown or incomplete upload id.")])
+                data = b"".join(u["chunks"][i] for i in range(u["total"]))
+                files.append((u["filename"], "application/octet-stream", data))
+                chunked = True
+                with LOCK:
+                    UPLOADS.pop(part.get_content().strip(), None)  # consumed
             else:
                 fields[field] = part.get_content()
         if not files and not fields.get("body"):
@@ -180,6 +268,7 @@ class Handler(BaseHTTPRequestHandler):
                 "id": int(draft_id), "blog": profile_for(name)["name"], "state": "draft",
                 "body": fields.get("body"), "tags_sent": fields["tags[]"], "tags": tags,
                 "files": [{"name": f, "type": t, "bytes": len(c)} for f, t, c in files],
+                "chunked": chunked,
             }
             DRAFTS[draft_id] = record
             with open(os.path.join(folder, "draft.json"), "w") as f:
@@ -212,7 +301,8 @@ class Handler(BaseHTTPRequestHandler):
                 for n, f in enumerate(r["files"], 1)
             )
             rows.append(
-                f"<tr><td>{draft_id}</td><td>{html.escape(r['blog'])}</td><td>{r['state']}</td><td>{files}</td>"
+                f"<tr><td>{draft_id}</td><td>{html.escape(r['blog'])}</td><td>{r['state']}"
+                f"{' (chunked)' if r.get('chunked') else ''}</td><td>{files}</td>"
                 f"<td>{html.escape(', '.join(r['tags']))}</td><td>{html.escape(r['body'] or '')}</td></tr>"
             )
         page = (

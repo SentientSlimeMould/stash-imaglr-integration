@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Allowlist guarantee: the imaglr client can reach exactly five endpoints (spec Amendment 6).
+"""Allowlist guarantee: the imaglr client can reach exactly the listed endpoints (spec Amendment 6, extended
+on 2026-10-08 with imaglr's chunked uploads for files over the edge's 100 MB request limit).
 
-Drafts first, then optionally queue or publish them. Never editing or deleting posts, scheduling, or
-changing queue settings.
+Drafts first, then optionally queue or publish them; large files in pieces through /uploads. Never editing or
+deleting posts, scheduling, or changing queue settings.
 """
 
 from __future__ import annotations
@@ -16,7 +17,8 @@ from imaglr_integration.imaglr import client as mod
 from imaglr_integration.imaglr.client import ALLOWED_ENDPOINTS, DisallowedEndpoint, ImaglrClient
 from tests.python.test_imaglr_client import FakeImaglr
 
-ALLOWED_ROUTES = {"/user/info", "/user/limits", "/drafts", "/drafts/{id}/publish", "/drafts/{id}/queue"}
+ALLOWED_ROUTES = {"/user/info", "/user/limits", "/drafts", "/drafts/{id}/publish", "/drafts/{id}/queue",
+                  "/uploads", "/uploads/{id}/chunks/{index}", "/uploads/{id}/complete", "/uploads/{id}"}
 FORBIDDEN = [
     "/posts", "/schedule", "/settings", "/reorder", "/pages", "/submissions", "/accept", "/delete", "/follow",
     "/like", "/reblog", "/repost", "/blocks", "/draft\"", "/queue/",
@@ -24,7 +26,7 @@ FORBIDDEN = [
 
 
 class AllowlistTest(unittest.TestCase):
-    def test_allowlist_is_exactly_five(self):
+    def test_allowlist_is_exactly_these(self):
         self.assertEqual(
             ALLOWED_ENDPOINTS,
             frozenset(
@@ -34,6 +36,10 @@ class AllowlistTest(unittest.TestCase):
                     ("POST", "/drafts"),
                     ("POST", "/drafts/{id}/publish"),
                     ("POST", "/drafts/{id}/queue"),
+                    ("POST", "/uploads"),
+                    ("PUT", "/uploads/{id}/chunks/{index}"),
+                    ("POST", "/uploads/{id}/complete"),
+                    ("DELETE", "/uploads/{id}"),
                 }
             ),
         )
@@ -59,7 +65,7 @@ class AllowlistTest(unittest.TestCase):
 
     def test_public_methods_are_the_permitted_operations(self):
         public = {n for n, v in vars(ImaglrClient).items() if callable(v) and not n.startswith("_")}
-        self.assertEqual(public, {"user_info", "user_limits", "create_draft", "publish_draft", "queue_draft"})
+        self.assertEqual(public, {"user_info", "user_limits", "create_draft", "publish_draft", "queue_draft", "upload_in_pieces"})
 
     def test_only_client_module_knows_the_api_url(self):
         root = os.path.dirname(os.path.dirname(os.path.abspath(mod.__file__)))

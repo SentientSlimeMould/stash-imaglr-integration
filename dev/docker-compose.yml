@@ -17,6 +17,9 @@ x-stash: &stash
     # Development only: where the plugin sends imaglr API calls. Defaults to the fake server;
     # run `IMAGLR_API_BASE=https://imaglr.com/api/v2 docker compose up -d` for a real-imaglr checkpoint.
     IMAGLR_API_BASE: ${IMAGLR_API_BASE:-http://fake-imaglr:8900/api/v2}
+    # Development only, honoured only alongside IMAGLR_API_BASE: drafts whose files total more than this many
+    # bytes go up in pieces, so the test clips exercise imaglr's chunked uploads against the fake.
+    IMAGLR_SINGLE_REQUEST_LIMIT: "1048576"
 
 services:
   # Oldest supported release.
