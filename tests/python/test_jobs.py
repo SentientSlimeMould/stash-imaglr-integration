@@ -486,3 +486,76 @@ class GifSendTest(SendHarness):
                 jobs.run_send(self.ctx, item["id"], None, format_override="video")
         sent = items.get_item(self.db, item["id"])
         self.assertEqual((sent["status"], sent["format"], sent["output_mime"]), ("sent", "gif", "video/mp4"))
+
+
+class VideoBudgetTest(unittest.TestCase):
+    """The post's files share imaglr's 100 MiB request limit; videos get what the others leave."""
+
+    def member(self, kind="clip", fmt="video", output_bytes=None):
+        return {"kind": kind, "format": fmt, "output_bytes": output_bytes, "output_path": None, "output_mime": None}
+
+    def test_single_video_gets_the_whole_request(self):
+        self.assertEqual(jobs.video_budget([self.member()]), int(jobs.REQUEST_LIMIT * jobs.SAFETY))
+
+    def test_videos_share_what_images_and_gifs_leave(self):
+        members = [self.member("image", "video", 10 * 1048576), self.member(fmt="gif", output_bytes=15 * 1048576),
+                   self.member(), self.member()]
+        self.assertEqual(jobs.video_budget(members), int((jobs.REQUEST_LIMIT * jobs.SAFETY - 25 * 1048576) / 2))
+
+    def test_no_videos_means_no_sharing(self):
+        self.assertEqual(jobs.video_budget([self.member("image", output_bytes=5)]), jobs.VIDEO_LIMIT)
+
+    def test_too_many_files_for_one_post_is_refused_with_advice(self):
+        members = [self.member("image", "video", 38 * 1048576)] * 2 + [self.member()] * 10
+        with self.assertRaises(jobs.JobFailed) as cm:
+            jobs.video_budget(members)
+        self.assertIn("Split the post", cm.exception.detail)
+
+    def test_a_file_prepared_for_a_bigger_limit_is_not_reused(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "c.mp4")
+            with open(path, "wb") as f:
+                f.write(b"v" * 300)
+            m = {"kind": "clip", "format": "video", "output_mime": "video/mp4", "output_path": path, "output_bytes": 300}
+            self.assertTrue(jobs._is_prepared(m))
+            self.assertTrue(jobs._is_prepared(m, 300))
+            self.assertFalse(jobs._is_prepared(m, 299))
+
+
+class SharedBudgetSendTest(SendHarness):
+    """run_send with a post of two video clips: each export is asked to fit half the request."""
+
+    def test_two_videos_in_one_post_each_get_half(self):
+        a = items.create_item(self.db, kind="clip", stash_image_id="801", source_title="A", in_s=0.0, out_s=5.0, format="video")
+        b = items.create_item(self.db, kind="clip", stash_image_id="802", source_title="B", in_s=0.0, out_s=5.0, format="video",
+                              codec="hevc", max_edge=1280)
+        post = services.create_post(self.db, [a["id"], b["id"]])
+        asked = []
+
+        def fake_export_clip(src, out_dir, **kw):
+            from imaglr_integration.media.video_export import ExportResult
+            asked.append((kw["settings"].max_video_mb, kw["settings"].codec, kw["settings"].max_long_edge))
+            os.makedirs(out_dir, exist_ok=True)
+            path = os.path.join(out_dir, "c.mp4")
+            with open(path, "wb") as f:
+                f.write(b"v" * 100)
+            return ExportResult(path, 100, 1920, 1080, False, None, "H.265 · 0.0 MB · 1280 px")
+
+        with mock.patch.object(jobs, "export_clip", fake_export_clip), \
+             mock.patch.object(jobs, "clip_source", lambda c, m: ("/src.mp4", None)), \
+             mock.patch.object(jobs, "hevc_available", lambda ff: True), \
+             mock.patch.object(jobs.api, "marker_swap_tags", lambda *a: None, create=True):
+            item, client = self.send(post["id"])
+        half = int(jobs.REQUEST_LIMIT * jobs.SAFETY / 2) / 1048576
+        self.assertEqual(asked, [(half, "h264", 1920), (half, "hevc", 1280)])
+        self.assertEqual(items.get_item(self.db, a["id"])["output_note"], "H.265 · 0.0 MB · 1280 px")
+
+    def test_hevc_without_the_encoder_fails_with_advice(self):
+        a = items.create_item(self.db, kind="clip", stash_image_id="801", source_title="A", in_s=0.0, out_s=5.0, format="video",
+                              codec="hevc")
+        with mock.patch.object(jobs, "export_clip", lambda *a_, **k: self.fail("must not encode")), \
+             mock.patch.object(jobs, "clip_source", lambda c, m: ("/src.mp4", None)), \
+             mock.patch.object(jobs, "hevc_available", lambda ff: False):
+            item, _ = self.send(a["id"])
+        self.assertEqual((item["status"], item["error_code"]), ("failed", "no_hevc"))
+        self.assertIn("Choose H.264", item["error_detail"])

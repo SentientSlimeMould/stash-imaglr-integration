@@ -162,3 +162,27 @@ class BitrateBoundsTest(unittest.TestCase):
 
         # a 10 MiB, 10 s file with 128 kbps audio: about 8064 kbps of video; 90 % of that
         self.assertEqual(fc.kbps_for_size(10 * 1024 * 1024, 10.0, 128, 0.9), int((8192 - 128) * 0.9))
+
+
+class CodecTest(unittest.TestCase):
+    """The user's codec choice in the command, and the typical-bitrate table the estimate and the export share."""
+
+    def test_typical_bitrates(self):
+        self.assertEqual(fc.typical_kbps("h264", 1920), 6000)
+        self.assertEqual(fc.typical_kbps("hevc", 1920), 3600)
+        self.assertEqual(fc.typical_kbps("h264", 1000), 1500)  # the next rung down
+        self.assertEqual(fc.typical_kbps("h264", 320), 900)  # below the table: its smallest rung
+
+    def test_hevc_command(self):
+        cmd = fc.build_clip_cmd(FF, "/in.mkv", "/out.mp4.part", 0, 10, 1920, 1080, 30, preset="medium", codec="hevc",
+                                max_long_edge=1280)
+        s = " ".join(cmd)
+        self.assertIn("-c:v libx265 -tag:v hvc1 -preset medium -pix_fmt yuv420p -x265-params log-level=error", s)
+        self.assertNotIn("libx264", s)
+        self.assertNotIn("-profile:v", s)
+        self.assertIn("scale=1280:720", s)
+        first, second = fc.build_two_pass_cmds(1500, "/tmp/log", ffmpeg=FF, src="/in", out="/o.part", in_s=0, out_s=10,
+                                               width=1920, height=1080, fps=30, codec="hevc")
+        self.assertIn("libx265", " ".join(first))
+        self.assertIn("-pass 2", " ".join(second))
+        self.assertIn("-b:v 1500k", " ".join(second))

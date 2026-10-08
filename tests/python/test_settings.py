@@ -40,6 +40,26 @@ class SettingsTest(unittest.TestCase):
         self.assertEqual(declared, sorted(declared))
         self.assertEqual(sorted(declared), sorted(settings._FIELDS))
 
+    def test_yaml_descriptions_are_plain_scalars(self):
+        """A description starting with a quote mark is a quoted YAML scalar, and any text after the closing quote
+        breaks the whole manifest, so Stash can't load the plugin at all."""
+        with open(YML, encoding="utf-8") as f:
+            for line in f:
+                m = re.match(r"\s*(?:description|displayName):\s*(.*)$", line)
+                if m:
+                    self.assertFalse(m.group(1).startswith(('"', "'")), line.strip())
+
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ClipDefaultsTest(unittest.TestCase):
+    def test_codec_and_picture_size_defaults(self):
+        from imaglr_integration import settings as s
+        self.assertEqual((s.parse({}).clips_hevc, s.parse({}).clip_max_edge), (False, None))
+        self.assertTrue(s.parse({"videoClipsAsHevc": True}).clips_hevc)
+        self.assertEqual(s.parse({"videoClipSize": "720"}).clip_max_edge, 1280)
+        self.assertEqual(s.parse({"videoClipSize": " 480p "}).clip_max_edge, 854)
+        self.assertIsNone(s.parse({"videoClipSize": "1080"}).clip_max_edge)
+        self.assertIsNone(s.parse({"videoClipSize": "huge"}).clip_max_edge)

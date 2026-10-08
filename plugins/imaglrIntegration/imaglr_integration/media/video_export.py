@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from .. import log
 from . import ffmpeg_cmd as fc
-from .ffmpeg_run import FfmpegError, finalise_part, run_ffmpeg
+from .ffmpeg_run import FfmpegError, encoders, finalise_part, run_ffmpeg
 from .naming import output_name
 from .probe import ProbeInfo, is_hdr, probe
 
@@ -31,7 +31,12 @@ class VideoSettings:
     preset: str = "medium"
     crf: int = 20
     max_long_edge: int = 1920
-    max_video_mb: float = 500
+    max_video_mb: float = 100  # imaglr's API refuses a request over 100 MiB (measured 2026-10-08), whatever its docs say
+    codec: str = "h264"  # or "hevc": the user's choice for the clip
+
+
+def hevc_available(ffmpeg: str) -> bool:
+    return "libx265" in encoders(ffmpeg)
 
 
 @dataclass
@@ -88,9 +93,12 @@ def export_clip(
     probe_info: ProbeInfo | None = None,
     previous_bytes: int | None = None,
 ) -> ExportResult:
-    """Cut [in_s, out_s] of src to an MP4 in out_dir. bitrate_scale forces the two-pass encode at that
-    fraction of the target bitrate (used to retry after imaglr rejects a file as too large); with
-    previous_bytes, the target is also at most that fraction of the rejected file's size."""
+    """Cut [in_s, out_s] of src to an MP4 in out_dir with the codec and picture size in `settings`, under
+    settings.max_video_mb. A clip that fits at the usual quality (CRF) is one encode; otherwise it is encoded
+    two-pass at the bitrate that fits, and a clip that obviously can't fit skips the first encode. The result's
+    `note` says what came out. bitrate_scale forces the two-pass encode at that fraction of the target bitrate
+    (used to retry after imaglr rejects a file as too large); with previous_bytes, the target is also at most
+    that fraction of the rejected file's size."""
     os.makedirs(out_dir, exist_ok=True)
     info = probe_info or probe(settings.ffprobe, src, headers)
     w, h = info.display_size
@@ -123,23 +131,31 @@ def export_clip(
         crf=settings.crf,
         max_long_edge=settings.max_long_edge,
         headers=headers,
+        codec=settings.codec,
     )
     run = dict(output=part, duration_s=duration, progress_cb=progress_cb, should_cancel=should_cancel)
     limit_bytes = int(settings.max_video_mb * 1024 * 1024 * 0.95)
+    ow, oh = _output_dims(w, h, aspect, position, settings.max_long_edge)
 
-    if bitrate_scale is None:
+    # The bitrate the limit allows for this length of clip. A clip that obviously can't fit at the usual
+    # quality skips the first encode instead of wasting it to find out.
+    audio_kbps = 0 if (mute or not info.has_audio) else fc.AUDIO_KBPS
+    kbps = fc.target_kbps(settings.max_video_mb, duration, audio_kbps, bitrate_scale or 1.0)
+    if previous_bytes:
+        kbps = min(kbps, fc.kbps_for_size(previous_bytes, duration, audio_kbps, bitrate_scale or 1.0))
+    hopeless = kbps < fc.typical_kbps(settings.codec, max(ow, oh)) * 0.7
+
+    if bitrate_scale is None and not hopeless:
         run_ffmpeg(fc.build_clip_cmd(**common), progress_range=(0.0, 0.95), **run)
         size = os.path.getsize(part)
         if size > limit_bytes:
             log.info(f"output {size} bytes exceeds the limit; re-encoding two-pass")
             _remove(part)
             bitrate_scale = 1.0
-    if bitrate_scale is not None:
-        audio_kbps = 0 if (mute or not info.has_audio) else fc.AUDIO_KBPS
-        kbps = fc.target_kbps(settings.max_video_mb, duration, audio_kbps, bitrate_scale)
-        if previous_bytes:
-            kbps = min(kbps, fc.kbps_for_size(previous_bytes, duration, audio_kbps, bitrate_scale))
-        passlog = os.path.join(out_dir, "x264pass")
+    if bitrate_scale is not None or hopeless:
+        if hopeless:
+            log.info(f"{duration:.0f} s clip won't fit at the usual quality; encoding at {kbps} kbps")
+        passlog = os.path.join(out_dir, "passlog")
         first, second = fc.build_two_pass_cmds(kbps, passlog, **common)
         try:
             run_ffmpeg(first, progress_range=(0.0, 0.45), **run)
@@ -149,6 +165,7 @@ def export_clip(
                 _remove(f)
     final_path = finalise_part(part)
     size = os.path.getsize(final_path)
+    note = video_note(settings.codec, size, max(ow, oh))
     thumb: str | None = os.path.join(out_dir, "thumb.jpg")
     try:
         cmd = fc.build_thumb_cmd(settings.ffmpeg, final_path, thumb, min(1.0, duration / 2))
@@ -158,8 +175,12 @@ def export_clip(
         thumb = None
     if progress_cb:
         progress_cb(1.0)
-    ow, oh = _output_dims(w, h, aspect, position, settings.max_long_edge)
-    return ExportResult(final_path, size, ow, oh, hdr, thumb)
+    return ExportResult(final_path, size, ow, oh, hdr, thumb, note)
+
+
+def video_note(codec: str, size: int, long_edge: int) -> str:
+    """What the clip turned out to be, e.g. "H.265 · 92.1 MB · 1280 px"."""
+    return f"{fc.CODEC_LABELS.get(codec, codec)} · {size / 1048576:.1f} MB · {long_edge} px"
 
 
 def gif_note(size: int, long_edge: int, fps: int) -> str:

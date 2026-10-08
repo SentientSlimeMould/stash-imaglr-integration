@@ -421,3 +421,8 @@
 .imaglr-plan-gifs {
   margin: 0.5rem 0 0.75rem;
 }
+
+/* Clip editor: the collapsed "More options" (codec, picture size, flip) */
+.imaglr-more {
+  margin-top: 0.5rem;
+}

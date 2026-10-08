@@ -34,9 +34,17 @@ settings:
     displayName: Tags never suggested
     description: Comma-separated regular expressions; matching Stash tags are not suggested for imaglr. Leave empty for "^AI_".
     type: STRING
+  videoClipSize:
+    displayName: Clip picture size by default
+    description: Enter 720 or 480 to start new clips at that size; leave empty to keep the source's size (up to 1080p). Each clip can still be changed in the editor. Smaller pictures make smaller files and encode faster.
+    type: STRING
   videoClipsAsGif:
     displayName: Clips as GIF by default
     description: New clips are sent as animated GIFs (they play instantly in feeds) instead of videos. Each clip can still be switched in the editor.
+    type: BOOLEAN
+  videoClipsAsHevc:
+    displayName: Clips as H.265 by default
+    description: New clips are encoded as H.265 instead of H.264. About 40 % smaller at the same quality, slower to encode, and it plays in Safari, Chrome and Edge but not every browser. Each clip can still be switched in the editor.
     type: BOOLEAN
   videoDefaultClipSeconds:
     displayName: Default clip length (seconds)

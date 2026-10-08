@@ -14,6 +14,23 @@ ASPECTS: dict[str, float | None] = {"original": None, "9:16": 9 / 16, "4:5": 4 /
 AUDIO_KBPS = 128
 MAX_FPS = 60.0
 MIN_KBPS = 200
+
+# The user chooses the codec and the picture size for each clip; the plugin only fits the file under the
+# upload limit by bitrate. These are the bitrates (kbps) a CRF-20 encode of ordinary footage tends to come out
+# at for each long edge, used to skip a first encode that would certainly be over the limit, and (mirrored in
+# the editor, src/ui/lib/video.ts) to estimate sizes and warn when the budget is too thin for the picture.
+VIDEO_CODECS = ("h264", "hevc")
+CODEC_LABELS = {"h264": "H.264", "hevc": "H.265"}
+PICTURE_SIZES = (1280, 854)  # the "720p" and "480p" choices, as long edges; None means as the source (up to 1080p)
+TYPICAL_KBPS: dict[int, int] = {1920: 6000, 1280: 3000, 854: 1500, 640: 900}
+HEVC_FACTOR = 0.6  # H.265 needs about this much of H.264's bitrate for the same look
+
+
+def typical_kbps(codec: str, long_edge: int) -> int:
+    """What a CRF-20 encode of this codec at this picture size tends to need."""
+    rung = max((e for e in TYPICAL_KBPS if e <= long_edge), default=min(TYPICAL_KBPS))
+    kbps = TYPICAL_KBPS[rung]
+    return int(kbps * HEVC_FACTOR) if codec == "hevc" else kbps
 # ffmpeg's mjpeg -q:v 2 with 4:2:0 chroma matches libjpeg quality 92 (4:2:0) on PSNR, measured on ffmpeg 8.
 JPEG_QSCALE = 2
 
@@ -159,6 +176,7 @@ def build_clip_cmd(
     headers: dict[str, str] | None = None,
     two_pass: tuple[int, int] | None = None,  # (pass number, target kbps)
     passlog: str | None = None,
+    codec: str = "h264",
 ) -> list[str]:
     duration = max(0.1, out_s - in_s)
     cmd = _base(ffmpeg)
@@ -170,7 +188,12 @@ def build_clip_cmd(
     vf = build_filter_chain(width, height, aspect, position, max_long_edge, fps, flip)
     if vf:
         cmd += ["-vf", vf]
-    cmd += ["-c:v", "libx264", "-profile:v", "high", "-preset", preset, "-pix_fmt", "yuv420p"]
+    if codec == "hevc":
+        # hvc1 is the tag Safari and QuickTime need; x265's own log is silenced (ffmpeg's -loglevel doesn't reach it)
+        cmd += ["-c:v", "libx265", "-tag:v", "hvc1", "-preset", preset, "-pix_fmt", "yuv420p",
+                "-x265-params", "log-level=error"]
+    else:
+        cmd += ["-c:v", "libx264", "-profile:v", "high", "-preset", preset, "-pix_fmt", "yuv420p"]
     if two_pass:
         pass_no, kbps = two_pass
         cmd += ["-b:v", f"{kbps}k", "-maxrate", f"{kbps}k", "-bufsize", f"{2 * kbps}k", "-pass", str(pass_no)]

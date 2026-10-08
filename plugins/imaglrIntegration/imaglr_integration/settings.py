@@ -25,6 +25,8 @@ class Settings:
     prepared_retention_days: int = 14
     clips_as_gif: bool = False  # new clips start as animated GIFs instead of videos
     gif_target_mb: float = 20.0  # the GIF export aims under this; imaglr's hard limit is 40 MB
+    clips_hevc: bool = False  # new clips start as H.265 instead of H.264
+    clip_max_edge: int | None = None  # new clips' picture size as a long edge (1280 = 720p, 854 = 480p); None = as the source
 
 
 # Stash setting name -> (field, converter). Keep in step with `settings:` in imaglrIntegration.yml.
@@ -33,13 +35,24 @@ _FIELDS = {
     "tagSent": ("done_tag", str),
     "tagsKeepCapitals": ("keep_tag_case", bool),
     "tagsNeverSuggested": ("exclude_patterns", str),
+    "videoClipSize": ("clip_max_edge", "size"),
     "videoClipsAsGif": ("clips_as_gif", bool),
+    "videoClipsAsHevc": ("clips_hevc", bool),
     "videoDefaultClipSeconds": ("default_clip_seconds", float),
     "videoGifTargetMb": ("gif_target_mb", float),
     "workingFilesKeepDays": ("prepared_retention_days", int),
 }
 
 GIF_HARD_LIMIT_MB = 40  # imaglr's ceiling for an image upload, which a GIF is
+PICTURE_SIZES = {"1080": None, "720": 1280, "480": 854}  # the setting's words -> a long edge in px
+
+
+def parse_size(value: Any) -> int | None:
+    """"720" or "720p" -> 1280; anything else, including "1080", means as the source."""
+    key = str(value).strip().lower().rstrip("p")
+    if key not in PICTURE_SIZES:
+        raise ValueError(value)
+    return PICTURE_SIZES[key]
 
 
 class SettingsError(ValueError):
@@ -53,6 +66,9 @@ def parse(raw: dict[str, Any] | None) -> Settings:
         if value is None or (isinstance(value, str) and not value.strip()):
             continue
         try:
+            if convert == "size":
+                values[field] = parse_size(value)
+                continue
             if convert is int:
                 value = float(value)  # "14.0" from a text field
             values[field] = convert(value.strip() if isinstance(value, str) else value)

@@ -139,6 +139,11 @@ MIGRATIONS = [
     ALTER TABLE items ADD COLUMN format TEXT NOT NULL DEFAULT 'video';
     ALTER TABLE items ADD COLUMN output_note TEXT;
     """,
+    # v8: the user's codec (h264 | hevc) and picture size (long edge in px; NULL = as the source, up to 1080p)
+    """
+    ALTER TABLE items ADD COLUMN codec TEXT NOT NULL DEFAULT 'h264';
+    ALTER TABLE items ADD COLUMN max_edge INTEGER;
+    """,
 ]
 
 
