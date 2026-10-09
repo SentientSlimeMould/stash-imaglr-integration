@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.21 — 2026-10-09
 
 - Format options reordered: the size estimate is a labelled line under Picture size, the cover's instructions sit
   above its button, and Remove sound closes the section.
