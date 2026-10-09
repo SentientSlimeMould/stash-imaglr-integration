@@ -7,6 +7,7 @@ your [imaglr](https://imaglr.com) blogs.
 - **Share Clips:** create a scene marker in Stash and tag it `imaglr`. You can fine-tune the edit if needed before sending.
 - **Share a whole scene:** tag the scene `imaglr` and it joins the Clips tab over its full length, no marker needed. Trim it in the editor like any clip.
 - **Video, WebP or GIF:** each clip can go out as a video, or as an animated WebP or GIF, which play straight away in feeds. The plugin shrinks a WebP or GIF step by step until it fits imaglr's limit, and you can preview exactly what will be sent.
+- **A cover for a video:** choose the frame imaglr shows before a video plays. imaglr takes that picture from about a second in, so the sent clip opens on your frame for a moment, then plays.
 - **Tags:** Tags for your imaglr posts are suggested from your Stash tags (including performers, studio and galleries). These can be edited before sending.
 - **Tag Mapping:** Set up rules on your Stash tags to automatically translate them to one or many corresponding Imaglr tags. 
 - **Draft, Queue or Publish immediately:** You can set a default upload action for each blog you want to send to and alter that if needed any time you send.
@@ -95,8 +96,8 @@ picture size for clips, and how long prepared files are kept.
   cards and choose **Make one post** to combine clips and images into one post.
 - **Tap a card to edit it:** crop, including trimming the edges off black borders (there's a button that finds
   them); for clips, set in and out points (written back to the Stash marker), output as video, WebP or GIF, choose
-  the codec and picture size (and for WebP and GIF the loop, size and frame rate, with a preview of the result), remove
-  the sound or save a still; edit tags and caption; choose the blog and what
+  the codec and picture size (and for WebP and GIF the loop, size and frame rate, with a preview of the result), set a
+  cover frame, remove the sound or save a still; edit tags and caption; choose the blog and what
   happens when sent. Then press the send button.
 - **Send all** sends every item shown (or the ticked ones) using each item's settings. It never publishes
   straight away: items set to Publish now are saved as drafts instead.
