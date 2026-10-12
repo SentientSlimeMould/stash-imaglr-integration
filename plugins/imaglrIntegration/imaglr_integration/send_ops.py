@@ -18,6 +18,7 @@ from . import settings as plugin_settings
 from . import items as repo
 from .cleanup import cleanup_prepared
 from .media import ffmpeg_cmd as fc
+from .media.video_export import xfade_available
 from .context import Context, UserError
 from .db import now_iso
 from .stash import api
@@ -30,7 +31,7 @@ EDITABLE = {"tags", "caption", "blog_id", "action", "crop", "in_s", "out_s", "mu
 MAX_ANIMATION_FPS = 60
 FORMATS = ("video", "gif", "webp")
 CODECS = ("h264", "hevc")
-LOOPS = ("forward", "boomerang")
+LOOPS = ("forward", "boomerang", "crossfade")
 MAX_EDGES = (None, 1280, 854)  # as the source, 720p, 480p
 MAX_CLIP_SECONDS = services.MAX_CLIP_SECONDS
 ASPECTS = ("original", "9:16", "4:5", "1:1")
@@ -115,6 +116,13 @@ def op_item_update(ctx: Context) -> dict[str, Any]:
             raise UserError("Unknown picture size.")
     if "loop" in changes and changes["loop"] not in LOOPS:
         raise UserError("Unknown loop.")
+    if changes.get("loop") == "crossfade" and item["loop"] != "crossfade":
+        try:
+            can = xfade_available(jobs.media_tools(ctx)[0])
+        except jobs.JobFailed as e:
+            raise UserError(e.detail) from None
+        if not can:
+            raise UserError("Stash's ffmpeg can't crossfade (it has no xfade filter). Choose Forward or Boomerang.")
     if "gif_width" in changes:
         changes["gif_width"] = int(changes["gif_width"]) if changes["gif_width"] else None
         if changes["gif_width"] is not None and changes["gif_width"] not in {r[0] for r in fc.GIF_LADDER[1:]}:

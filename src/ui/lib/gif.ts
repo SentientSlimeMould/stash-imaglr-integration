@@ -9,7 +9,8 @@ export const LONG_GIF_SECONDS = 15;
 
 const MB_PER_SECOND = { low: 1.2, high: 3.0 };
 
-export type GifLoop = "forward" | "boomerang";
+export type GifLoop = "forward" | "boomerang" | "crossfade";
+const GIF_CROSSFADE_FACTOR = 1.2; // a dissolve fights a 256-colour palette: crossfaded GIFs grow about this much
 export type AnimatedFormat = "gif" | "webp";
 const WEBP_FACTOR = 0.35; // an animated WebP of the same clip is usually a third to a half of the GIF's size
 
@@ -43,15 +44,28 @@ function widthFactor(width: number | null): number {
   return (w * w) / (GIF_FEED_WIDTH * GIF_FEED_WIDTH);
 }
 
-/** How long the GIF plays for: a boomerang runs the clip forward then back. */
-export function gifSeconds(seconds: number, loop: GifLoop = "forward"): number {
-  return Math.max(0, seconds) * (loop === "boomerang" ? 2 : 1);
+/** How long the crossfade dissolve lasts, as the backend computes it (media/ffmpeg_cmd.crossfade_frames): a sixth of
+ *  the clip, within 0.5-1 s, whole frames at `fps`, never more than a third of the frames. */
+export function crossfadeSeconds(seconds: number, fps: number = LADDER_FPS): number {
+  const x = Math.min(1, Math.max(0.5, seconds / 6));
+  const total = Math.round(seconds * fps);
+  const frames = Math.max(1, Math.min(Math.round(x * fps), Math.max(1, Math.floor(total / 3))));
+  return frames / fps;
+}
+
+/** How long the GIF plays for: a boomerang runs the clip forward then back; a crossfade is one dissolve shorter. */
+export function gifSeconds(seconds: number, loop: GifLoop = "forward", fps: number | null = null): number {
+  const s = Math.max(0, seconds);
+  if (loop === "boomerang") return s * 2;
+  if (loop === "crossfade") return Math.max(0, s - crossfadeSeconds(s, fps ?? LADDER_FPS));
+  return s;
 }
 
 /** [low, high] MB for a clip of this length at the first rung it may use. */
 export function estimateGifMb(seconds: number, loop: GifLoop = "forward", width: number | null = null, format: AnimatedFormat = "gif",
                               fps: number | null = null): [number, number] {
-  const s = gifSeconds(seconds, loop) * widthFactor(width) * (format === "webp" ? WEBP_FACTOR : 1) * ((fps ?? LADDER_FPS) / LADDER_FPS);
+  const s = gifSeconds(seconds, loop, fps) * widthFactor(width) * (format === "webp" ? WEBP_FACTOR : 1) * ((fps ?? LADDER_FPS) / LADDER_FPS)
+    * (loop === "crossfade" && format === "gif" ? GIF_CROSSFADE_FACTOR : 1);
   return [s * MB_PER_SECOND.low, s * MB_PER_SECOND.high];
 }
 

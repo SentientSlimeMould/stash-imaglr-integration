@@ -149,6 +149,12 @@ def main(port, fake_port):
     check(whole is not None, f"queue shows the whole scene ({whole['id'] if whole else '-'}) spanning {whole['duration'] if whole else 0:.1f} s")
     check(not whole.get("stash_marker_id"), "it has no marker behind it")
     plugin.op("item_update", item_id=whole["id"], changes={"in_s": 0.0, "out_s": min(4.0, whole["duration"]), "cover_t": 2.0})
+    for search in ("near", "from_in"):  # the seamless-loop finder runs through Stash's ffmpeg; it may find nothing in this footage
+        found = plugin.op("loop_find", item_id=whole["id"], search=search)["candidates"]
+        check(isinstance(found, list) and all(c["out_s"] - c["in_s"] >= 1.0 and c["quality"] for c in found),
+              f"loop finder ({search}) answered with {len(found)} candidate(s)")
+    unchanged = plugin.op("item_detail", item_id=whole["id"])["item"]
+    check((unchanged["in_s"], unchanged["out_s"]) == (0.0, min(4.0, whole["duration"])), "the finder saved nothing")
     plugin.op("send", item_id=whole["id"], blog_id=blog["id"], action="draft")
     sent_scene = plugin.wait_sent(whole["id"])
     check(sent_scene["sent_as"] == "draft" and sent_scene["draft_id"], f"whole scene sent as draft {sent_scene['draft_id']}")

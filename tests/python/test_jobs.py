@@ -631,6 +631,59 @@ class WebpSendTest(SendHarness):
         self.assertEqual((item["status"], item["error_code"]), ("failed", "no_webp"))
 
 
+class LoopFindOpTest(SendHarness):
+    """loop_find decodes two windows through the clip's own crop and scores them; nothing is saved."""
+
+    def test_find_loops_decodes_windows_and_scores_them(self):
+        import math
+        from imaglr_integration.media import loop_find as lf
+        from imaglr_integration.media.probe import ProbeInfo
+        clip = items.create_item(self.db, kind="clip", stash_image_id="801", source_title="Clip", in_s=2.0, out_s=5.5, format="gif",
+                                 crop={"aspect": "1:1", "position": 0.5})
+        commands = []
+
+        def fake_capture(cmd, timeout=60):  # frames whose brightness cycles every 1.2 s
+            commands.append(cmd)
+            start, dur = float(cmd[cmd.index("-ss") + 1]), float(cmd[cmd.index("-t") + 1])
+            vf = cmd[cmd.index("-vf") + 1]
+            fps = int(vf.split(",")[0].split("=")[1])
+            w, h = (int(v) for v in vf.split("scale=")[1].split(":")[:2])
+            n = int(round(dur * fps))
+            raw = b"".join(bytes([int(128 + 100 * math.sin(2 * math.pi * (start + i / fps) / 1.2))]) * (w * h) for i in range(n))
+            return raw, b"", 0
+        ctx = Context({"args": {"mode": "loop_find", "item_id": clip["id"], "search": "near"}})
+        ctx._db = self.db
+        with mock.patch.object(jobs, "clip_source", lambda c, m: ("/src.mp4", None)), \
+             mock.patch.object(jobs, "media_tools", lambda c: ("ff", "fp")), \
+             mock.patch.object(jobs, "probe", lambda fp, src, headers: ProbeInfo(1920, 1080, 25.0, 60.0)), \
+             mock.patch.object(jobs, "run_capture", fake_capture):
+            from imaglr_integration import clip_ops
+            out = clip_ops.op_loop_find(ctx)
+        self.assertEqual(len(commands), 3)  # the In window, the Out window, the coarse bridge
+        self.assertTrue(all("crop=1080:1080:420:0" in c[c.index("-vf") + 1] for c in commands))  # the clip's own crop
+        self.assertTrue(out["candidates"])
+        for c in out["candidates"]:
+            cycles = (c["out_s"] - c["in_s"]) / 1.2
+            self.assertAlmostEqual(cycles, round(cycles), delta=(1 / lf.PROBE_FPS) / 1.2 + 1e-9, msg=c)
+            self.assertEqual(set(c), {"in_s", "out_s", "score", "seam", "quality"})
+        self.assertEqual(items.get_item(self.db, clip["id"])["in_s"], 2.0)  # nothing saved
+
+    def test_loop_find_refuses_what_it_cannot_search(self):
+        from imaglr_integration import clip_ops
+        image = items.create_item(self.db, kind="image", stash_image_id="5")
+        busy = items.create_item(self.db, kind="clip", stash_image_id="801", in_s=0.0, out_s=5.0, status="exporting")
+        clip = items.create_item(self.db, kind="clip", stash_image_id="801", in_s=0.0, out_s=5.0)
+        for item_id, search in ((image["id"], "near"), (busy["id"], "near"), (clip["id"], "everywhere")):
+            ctx = Context({"args": {"mode": "loop_find", "item_id": item_id, "search": search}})
+            ctx._db = self.db
+            with self.assertRaises(UserError):
+                clip_ops.op_loop_find(ctx)
+        ctx = Context({"args": {"mode": "loop_find", "item_id": clip["id"]}})
+        ctx._db = self.db
+        with mock.patch.object(jobs, "find_loops", lambda c, i, m: [{"in_s": 0.0, "out_s": 1.0, "score": 0.1, "seam": 0.1, "quality": "seamless"}]):
+            self.assertEqual(len(clip_ops.op_loop_find(ctx)["candidates"]), 1)  # the search defaults to "near"
+
+
 class GifPreviewOpTest(SendHarness):
     """gif_preview makes the clip's GIF now, as the send would, and reports where the editor can show it."""
 

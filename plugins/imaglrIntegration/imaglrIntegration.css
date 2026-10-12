@@ -245,7 +245,9 @@
   gap: 0.5rem;
 }
 .imaglr-clip-actions .btn,
-.imaglr-time-buttons .btn {
+.imaglr-time-buttons .btn,
+.imaglr-loop-candidates .btn,
+.imaglr-cover-row > .btn {
   min-height: 44px;
 }
 .imaglr-time-row {
@@ -409,5 +411,13 @@
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
+  }
+  .imaglr-loop-candidates {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .imaglr-loop-candidates .btn {
+    text-align: left;
   }
 }

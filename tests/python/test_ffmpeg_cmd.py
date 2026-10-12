@@ -108,6 +108,35 @@ class ClipCmdTest(unittest.TestCase):
             self.assertIn(part, s)
 
 
+class LoopTest(unittest.TestCase):
+    def test_loop_probe_decodes_tiny_grey_frames_through_the_clips_own_chain(self):
+        cmd = fc.build_loop_probe_cmd(FF, "/in.mp4", 2.5, 4.0, 1920, 1080, fps=15, size=(64, 36), aspect="1:1", flip=True,
+                                      edges={"top": 0.1, "right": 0, "bottom": 0, "left": 0}, headers={"ApiKey": "k"})
+        s = " ".join(cmd)
+        self.assertIn("-ss 2.500 -t 4.000 -i /in.mp4 -an -vf", s)
+        vf = cmd[cmd.index("-vf") + 1]
+        self.assertTrue(vf.startswith("fps=15,crop="), vf)
+        self.assertTrue(vf.endswith(",hflip,scale=64:36:flags=area,format=gray"), vf)
+        self.assertEqual(cmd[-3:], ["-f", "rawvideo", "pipe:1"])
+        self.assertNotIn("-progress", cmd)
+        self.assertIn("-headers", cmd)
+        plain = fc.build_loop_probe_cmd(FF, "/in.mp4", 0, 1, 640, 360, fps=5, size=(32, 18))
+        self.assertEqual(plain[plain.index("-vf") + 1], "fps=5,scale=32:18:flags=area,format=gray")
+
+    def test_crossfade_dissolves_the_end_into_the_start(self):
+        # 4 s at 15 fps: 60 frames; the dissolve is a sixth (0.667 s) = 10 frames; the result is 50 frames
+        self.assertEqual(fc.crossfade_frames(4.0, 15), 10)
+        self.assertEqual(fc.crossfade_frames(12.0, 15), 15)  # capped at a second
+        self.assertEqual(fc.crossfade_frames(1.2, 10), 4)  # half a second would be 5 of 12 frames: at most a third
+        cmd = fc.build_gif_cmd(FF, "/in.mp4", "/o.gif.part", 10, 14, 1920, 1080, long_edge=698, gif_fps=15, colors=256, loop="crossfade")
+        vf = cmd[cmd.index("-filter_complex") + 1]
+        self.assertIn(",split[cb][ch];[cb]trim=start_frame=10,setpts=PTS-STARTPTS[body];[ch]trim=end_frame=10,setpts=PTS-STARTPTS[head];"
+                      "[body][head]xfade=transition=fade:duration=0.666667:offset=2.666667,split[a][b];[a]palettegen", vf)
+        webp = fc.build_webp_cmd(FF, "/in.mp4", "/o.webp.part", 10, 14, 1920, 1080, long_edge=698, fps=15, quality=80, loop="crossfade")
+        self.assertIn("xfade=transition=fade:duration=0.666667:offset=2.666667", webp[webp.index("-filter_complex") + 1])
+        self.assertNotIn("xfade", " ".join(fc.build_gif_cmd(FF, "/in.mp4", "/o", 10, 14, 1920, 1080, long_edge=698, gif_fps=15, colors=256)))
+
+
 class CoverTest(unittest.TestCase):
     def test_cover_opens_the_clip_through_the_same_chain_with_delayed_sound(self):
         cmd = fc.build_clip_cmd(FF, "/in.mp4", "/o.part", 10.0, 22.5, 1920, 1080, 29.97, aspect="1:1", cover_t=15.25)

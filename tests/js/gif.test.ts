@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { describeGifEstimate, estimateGifMb, gifSeconds, LONG_GIF_SECONDS } from "../../src/ui/lib/gif.ts";
+import { crossfadeSeconds, describeGifEstimate, estimateGifMb, gifSeconds, LONG_GIF_SECONDS } from "../../src/ui/lib/gif.ts";
 import { gifCounts } from "../../src/ui/lib/sendAll.ts";
 
 test("estimate scales with length and reads as a band", () => {
@@ -16,6 +16,19 @@ test("a boomerang plays twice as long, so weighs twice as much", () => {
   assert.equal(gifSeconds(5, "boomerang"), 10);
   assert.deepEqual(estimateGifMb(5, "boomerang"), estimateGifMb(10));
   assert.equal(describeGifEstimate(5, "boomerang"), describeGifEstimate(10));
+});
+
+test("a crossfade is one dissolve shorter, and a GIF of it weighs a fifth more", () => {
+  assert.equal(crossfadeSeconds(4), 10 / 15); // a sixth of the clip, whole frames at 15 fps
+  assert.equal(crossfadeSeconds(12), 1); // capped at a second
+  assert.equal(crossfadeSeconds(1.2, 10), 0.4); // never more than a third of the frames
+  assert.ok(Math.abs(gifSeconds(4, "crossfade") - (4 - 10 / 15)) < 1e-9);
+  const [webpLo] = estimateGifMb(4, "crossfade", null, "webp");
+  const [webpFwd] = estimateGifMb(4 - 10 / 15, "forward", null, "webp");
+  assert.ok(Math.abs(webpLo - webpFwd) < 1e-9);
+  const [gifLo] = estimateGifMb(4, "crossfade", null, "gif");
+  const [gifFwd] = estimateGifMb(4 - 10 / 15, "forward", null, "gif");
+  assert.ok(Math.abs(gifLo - gifFwd * 1.2) < 1e-9);
 });
 
 test("gif counts ignore skipped items", () => {

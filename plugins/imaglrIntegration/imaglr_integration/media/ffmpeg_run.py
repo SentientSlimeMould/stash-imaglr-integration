@@ -251,6 +251,22 @@ def encoders(ffmpeg: str) -> frozenset:
     return frozenset(names)
 
 
+@functools.lru_cache(maxsize=None)
+def filters(ffmpeg: str) -> frozenset:
+    """Names of the filters this ffmpeg build has (e.g. whether xfade is present)."""
+    try:
+        out = run_tool([ffmpeg, "-hide_banner", "-filters"], timeout=30).decode(errors="replace")
+    except (OSError, FfmpegError):
+        return frozenset()
+    names = set()
+    for line in out.splitlines():
+        parts = line.split()
+        # " TS. xfade  VV->V  Cross fade..." : a short flags token (T, S, C or .) then the name
+        if len(parts) >= 3 and 2 <= len(parts[0]) <= 3 and set(parts[0]) <= set("TSC.") and "->" in parts[2]:
+            names.add(parts[1])
+    return frozenset(names)
+
+
 def finalise_part(part: str) -> str:
     """Rename foo.mp4.part -> foo.mp4 atomically (replacing any previous foo.mp4)."""
     final = part[: -len(".part")] if part.endswith(".part") else part
