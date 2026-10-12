@@ -302,7 +302,9 @@
 }
 
 .imaglr-clip-actions .btn,
-.imaglr-time-buttons .btn {
+.imaglr-time-buttons .btn,
+.imaglr-loop-candidates .btn,
+.imaglr-cover-row > .btn {
   min-height: 44px;
 }
 
