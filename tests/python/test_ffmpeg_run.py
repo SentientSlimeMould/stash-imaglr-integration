@@ -149,6 +149,18 @@ class RunFfmpegTest(unittest.TestCase):
     def test_encoders_of_missing_binary_is_empty(self):
         self.assertEqual(ffmpeg_run.encoders(os.path.join(self.tmp, "no-such-ffmpeg")), frozenset())
 
+    def test_filters_are_read_from_the_listing(self):
+        from unittest import mock
+        listing = ("Filters:\n  T.. = Timeline support\n  .S. = Slice threading\n  ------\n"
+                   " TS aap               AA->A      Apply Affine Projection algorithm to first audio stream.\n"
+                   " .S xfade             VV->V      Cross fade one video with another video.\n"
+                   " ... fps              V->V       Force constant framerate.\n"
+                   " ..C scale            V->V       Scale the input video size and/or convert the image format.\n")
+        with mock.patch.object(ffmpeg_run, "run_tool", lambda cmd, timeout=60: listing.encode()):
+            names = ffmpeg_run.filters(os.path.join(self.tmp, "listing-ffmpeg"))
+        self.assertEqual(names, frozenset({"aap", "xfade", "fps", "scale"}))
+        self.assertEqual(ffmpeg_run.filters(os.path.join(self.tmp, "no-such-ffmpeg")), frozenset())
+
     def test_finalise_part(self):
         with open(self.out, "wb") as f:
             f.write(b"x")

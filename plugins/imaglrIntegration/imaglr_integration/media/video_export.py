@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from .. import log
 from . import ffmpeg_cmd as fc
-from .ffmpeg_run import FfmpegError, encoders, finalise_part, run_capture, run_ffmpeg
+from .ffmpeg_run import FfmpegError, encoders, filters, finalise_part, run_capture, run_ffmpeg
 from .naming import output_name
 from .probe import ProbeInfo, is_hdr, probe
 
@@ -190,13 +190,25 @@ def video_note(codec: str, size: int, long_edge: int, cover: bool = False) -> st
 
 
 def gif_note(size: int, width: int, fps: int, loop: str = "forward", fmt: str = "gif") -> str:
-    loop_part = " · boomerang" if loop == "boomerang" else ""
+    loop_part = f" · {loop}" if loop in ("boomerang", "crossfade") else ""
     label = "WebP" if fmt == "webp" else "GIF"
     return f"{label} · {size / 1048576:.1f} MB · {width} px wide · {fps} fps{loop_part}"
 
 
 def webp_available(ffmpeg: str) -> bool:
     return "libwebp_anim" in encoders(ffmpeg)
+
+
+def xfade_available(ffmpeg: str) -> bool:
+    """Whether this ffmpeg can dissolve one video into another (the crossfade loop); in ffmpeg since 4.3."""
+    return "xfade" in filters(ffmpeg)
+
+
+def frame_exact_out(in_s: float, out_s: float, fps: int) -> float:
+    """Out moved so the loop is a whole number of frames at this rate; otherwise a perfect join would get a
+    held or dropped frame."""
+    n = max(1, int(round((out_s - in_s) * fps)))
+    return in_s + n / fps
 
 
 def export_gif(src: str, out_dir: str, **kw) -> ExportResult:
@@ -256,11 +268,12 @@ def export_animation(
             fps = wanted_fps
         long_edge = fc.gif_long_edge_cap(w, h, aspect, position, rung_width, edges)
         common = dict(aspect=aspect, position=position, flip=flip, headers=headers, edges=edges, loop=loop)
+        rung_out = frame_exact_out(in_s, out_s, fps)  # a whole number of frames at this rung's rate
         if fmt == "webp":
-            cmd = fc.build_webp_cmd(settings.ffmpeg, src, part, in_s, out_s, w, h, long_edge=long_edge, fps=fps,
+            cmd = fc.build_webp_cmd(settings.ffmpeg, src, part, in_s, rung_out, w, h, long_edge=long_edge, fps=fps,
                                     quality=quality, **common)
         else:
-            cmd = fc.build_gif_cmd(settings.ffmpeg, src, part, in_s, out_s, w, h, long_edge=long_edge, gif_fps=fps,
+            cmd = fc.build_gif_cmd(settings.ffmpeg, src, part, in_s, rung_out, w, h, long_edge=long_edge, gif_fps=fps,
                                    colors=quality, **common)
         lo, hi = 0.9 * n / len(rungs), 0.9 * (n + 1) / len(rungs)
         run_ffmpeg(cmd, output=part, duration_s=duration, progress_cb=progress_cb, should_cancel=should_cancel,

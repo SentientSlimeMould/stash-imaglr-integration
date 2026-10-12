@@ -19,7 +19,7 @@ export interface Card {
   send_format?: "video" | "gif" | "webp"; // clips: how it will be sent
   send_codec?: "h264" | "hevc";
   max_edge?: number | null; // picture size as a long edge; null = as the source
-  loop?: "forward" | "boomerang"; // GIFs: forward, or forward then back
+  loop?: "forward" | "boomerang" | "crossfade"; // GIFs: forward, forward then back, or the end dissolved into the start
   gif_width?: number | null; // GIFs: picture width in px; null = the feed width
   gif_fps?: number | null; // GIFs and WebPs: frame rate; null = the ladder's own
   cover_t?: number | null; // videos: source time of the cover frame the clip opens on; null = none
@@ -98,7 +98,7 @@ export interface FileCard extends Card {
   format: "video" | "gif" | "webp";
   codec: "h264" | "hevc";
   max_edge: number | null; // picture size as a long edge (1280 = 720p, 854 = 480p); null = as the source
-  loop: "forward" | "boomerang";
+  loop: "forward" | "boomerang" | "crossfade";
   gif_width: number | null;
   gif_fps: number | null;
   cover_t: number | null;
@@ -131,7 +131,7 @@ export interface ItemDetail {
     format: "video" | "gif" | "webp";
     codec: "h264" | "hevc";
     max_edge: number | null;
-    loop: "forward" | "boomerang";
+    loop: "forward" | "boomerang" | "crossfade";
     gif_width: number | null;
     gif_fps: number | null;
     cover_t: number | null;

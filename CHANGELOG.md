@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **Find a seamless loop.** For a WebP or GIF, the clip editor can look near your In and Out (or forward from
+  In) for pairs where the loop joins without a jump, scored on the cropped picture with Stash's ffmpeg. Tap a
+  result to use it; nothing changes until you do. **Play the join** plays the last moment into the first.
+- **Crossfade loop.** A third loop choice dissolves the last moment into the first, for footage that never
+  repeats exactly. Needs ffmpeg's xfade filter (ffmpeg 4.3 or later).
+- WebPs and GIFs are now a whole number of frames at each quality rung, so a perfect join no longer gets a held
+  or dropped frame.
+
 ## 0.1.21 — 2026-10-09
 
 - Format options reordered: the size estimate is a labelled line under Picture size, the cover's instructions sit

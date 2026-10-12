@@ -125,6 +125,21 @@ class AutomaticTagsTest(unittest.TestCase):
             image = items.create_item(self.db, kind="image", stash_image_id="10")
             self.run_op("item_update", item_id=image["id"], changes={"flip": True})
 
+    def test_crossfade_loop_needs_xfade(self):
+        from unittest import mock
+        from imaglr_integration import jobs
+        clip = items.create_item(self.db, kind="clip", stash_image_id="9", in_s=0.0, out_s=5.0, format="gif")
+        with mock.patch.object(jobs, "media_tools", lambda c: ("ff", "fp")), \
+             mock.patch.object(send_ops, "xfade_available", lambda ff: False):
+            with self.assertRaises(UserError):
+                self.run_op("item_update", item_id=clip["id"], changes={"loop": "crossfade"})
+        with mock.patch.object(jobs, "media_tools", lambda c: ("ff", "fp")), \
+             mock.patch.object(send_ops, "xfade_available", lambda ff: True):
+            out = self.run_op("item_update", item_id=clip["id"], changes={"loop": "crossfade"})["item"]
+        self.assertEqual(out["loop"], "crossfade")
+        with self.assertRaises(UserError):
+            self.run_op("item_update", item_id=clip["id"], changes={"loop": "sideways"})
+
     def test_cover_time_is_kept_or_cleared(self):
         clip = items.create_item(self.db, kind="clip", stash_image_id="9",
                                  in_s=0.0, out_s=5.0)

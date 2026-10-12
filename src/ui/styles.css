@@ -506,3 +506,13 @@
   justify-content: space-between;
   gap: 0.5rem;
 }
+
+/* Clip editor: the seamless-loop candidates, one tappable row each */
+.imaglr-loop-candidates {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.imaglr-loop-candidates .btn {
+  text-align: left;
+}

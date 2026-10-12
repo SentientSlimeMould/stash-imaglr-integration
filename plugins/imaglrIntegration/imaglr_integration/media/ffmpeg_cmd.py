@@ -134,6 +134,21 @@ def build_cropdetect_cmd(ffmpeg: str, src: str, t: float, frames: int = 12,
     return cmd
 
 
+def build_loop_probe_cmd(ffmpeg: str, src: str, start: float, duration: float, width: int, height: int, *,
+                         fps: int, size: tuple[int, int], aspect: str = "original", position: float = 0.5,
+                         flip: bool = False, edges: dict[str, float] | None = None,
+                         headers: dict[str, str] | None = None) -> list[str]:
+    """Decode [start, start + duration] to tiny grey frames on stdout (rawvideo), for scoring loop joins in
+    Python: a fixed frame rate so the times sit on a grid, then the clip's own crop/edges/flip chain, so the
+    join is judged on the picture that will be sent."""
+    chain = build_filter_chain(width, height, aspect, position, max(width, height), 0, flip, edges)
+    vf = f"fps={fps}" + ("," + chain if chain else "") + f",scale={size[0]}:{size[1]}:flags=area,format=gray"
+    cmd = _base(ffmpeg, progress=False)
+    cmd += _headers_arg(headers)
+    cmd += ["-ss", f"{start:.3f}", "-t", f"{duration:.3f}", "-i", src, "-an", "-vf", vf, "-f", "rawvideo", "pipe:1"]
+    return cmd
+
+
 _CROPDETECT = re.compile(r"crop=(\d+):(\d+):(\d+):(\d+)")
 
 
@@ -194,7 +209,19 @@ GIF_LADDER: tuple[tuple[int, int, int], ...] = (
     (400, 10, 128),
     (320, 8, 64),
 )
-GIF_LOOPS = ("forward", "boomerang")
+GIF_LOOPS = ("forward", "boomerang", "crossfade")
+CROSSFADE_MIN, CROSSFADE_MAX, CROSSFADE_SHARE = 0.5, 1.0, 1 / 6  # the dissolve: a sixth of the clip, within 0.5-1 s
+
+
+def crossfade_frames(seconds: float, fps: int) -> int:
+    """How many frames the crossfade dissolve lasts at this rate: a sixth of the clip, between half a second and
+    a second, and never more than a third of the frames."""
+    x = min(CROSSFADE_MAX, max(CROSSFADE_MIN, seconds * CROSSFADE_SHARE))
+    return max(1, min(int(round(x * fps)), max(1, int(round(seconds * fps)) // 3)))
+
+
+def crossfade_seconds(seconds: float, fps: int) -> float:
+    return crossfade_frames(seconds, fps) / fps
 # Animated WebP ladder, best first: (width px, frames per second, libwebp quality 0-100). WebP keeps full colour
 # and is usually a third to a half of a GIF's size, so the same clip fits with room to spare.
 WEBP_LADDER: tuple[tuple[int, int, int], ...] = (
@@ -207,13 +234,22 @@ WEBP_LADDER: tuple[tuple[int, int, int], ...] = (
 
 
 def animation_filters(width: int, height: int, aspect: str, position: float, long_edge: int, fps: int,
-                      flip: bool = False, edges: dict[str, float] | None = None, loop: str = "forward") -> str:
-    """The frame chain a GIF or WebP starts from: frame-rate cap, crop, scale, flip, and for a boomerang the
-    frames played forward then backward (without repeating the turning frame)."""
+                      flip: bool = False, edges: dict[str, float] | None = None, loop: str = "forward",
+                      seconds: float | None = None) -> str:
+    """The frame chain a GIF or WebP starts from: frame-rate cap, crop, scale, flip, and then the loop: for a
+    boomerang the frames played forward then backward (without repeating the turning frame); for a crossfade
+    the last moment dissolved into the first, so the join is hidden (the result is one dissolve shorter)."""
     chain = build_filter_chain(width, height, aspect, position, long_edge, 0, flip, edges)
     vf = f"fps={fps}" + ("," + chain if chain else "")
     if loop == "boomerang":
         vf += ",split[f][r];[r]reverse,trim=start_frame=1[rv];[f][rv]concat=n=2:v=1:a=0"
+    elif loop == "crossfade":
+        total = max(2, int(round((seconds or 0) * fps)))
+        x = crossfade_frames(seconds or 0, fps)
+        # body = frames x..end; head = frames 0..x; the body's last x frames dissolve into the head
+        vf += (f",split[cb][ch];[cb]trim=start_frame={x},setpts=PTS-STARTPTS[body];"
+               f"[ch]trim=end_frame={x},setpts=PTS-STARTPTS[head];"
+               f"[body][head]xfade=transition=fade:duration={x / fps:.6f}:offset={(total - 2 * x) / fps:.6f}")
     return vf
 
 
@@ -238,7 +274,7 @@ def build_webp_cmd(
 ) -> list[str]:
     """One-pass animated WebP (libwebp_anim), looping forever, no sound."""
     duration = max(0.1, out_s - in_s)
-    vf = animation_filters(width, height, aspect, position, long_edge, fps, flip, edges, loop)
+    vf = animation_filters(width, height, aspect, position, long_edge, fps, flip, edges, loop, duration)
     cmd = _base(ffmpeg)
     cmd += _headers_arg(headers)
     cmd += ["-ss", f"{in_s:.3f}", "-t", f"{duration:.3f}", "-i", src, "-an", "-filter_complex", vf]
@@ -280,7 +316,7 @@ def build_gif_cmd(
     (stats_mode=diff favours what moves) and ordered dithering with per-frame rectangles of change. A
     boomerang plays the frames forward then backward (without repeating the turning frame)."""
     duration = max(0.1, out_s - in_s)
-    vf = animation_filters(width, height, aspect, position, long_edge, gif_fps, flip, edges, loop)
+    vf = animation_filters(width, height, aspect, position, long_edge, gif_fps, flip, edges, loop, duration)
     vf += (f",split[a][b];[a]palettegen=max_colors={colors}:stats_mode=diff[p];"
            f"[b][p]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle")
     cmd = _base(ffmpeg)

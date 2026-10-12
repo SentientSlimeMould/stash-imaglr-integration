@@ -410,4 +410,12 @@
     justify-content: space-between;
     gap: 0.5rem;
   }
+  .imaglr-loop-candidates {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .imaglr-loop-candidates .btn {
+    text-align: left;
+  }
 }

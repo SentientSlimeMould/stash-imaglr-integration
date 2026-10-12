@@ -388,6 +388,58 @@ class VideoTest(RealMediaTest):
         self.assertTrue(boom.note.endswith("· boomerang"), boom.note)
         self.assertEqual(fwd.width, 640)  # under the 698 px rung: never upscaled
 
+    def periodic_source(self, path, seconds=8, period=1.2):
+        """A pattern that repeats every `period` seconds (two waves whose product has half their period)."""
+        ff("-f", "lavfi", "-i", f"nullsrc=s=320x180:r=25:d={seconds},"
+           f"geq=lum='128+90*sin(2*PI*(X/40+T/{2 * period}))*cos(2*PI*(Y/60-T/{2 * period}))':cb=128:cr=128",
+           "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", path)
+        return path
+
+    def test_loop_finder_finds_whole_cycles_in_periodic_footage(self):
+        from imaglr_integration.media import loop_find as lf
+        from imaglr_integration.media.ffmpeg_run import run_capture
+        src = self.periodic_source(self.path("periodic.mp4"))
+
+        def decode(start, end, fps, size):
+            out, err, code = run_capture(fc.build_loop_probe_cmd(FFMPEG, src, start, end - start, 320, 180, fps=fps, size=size))
+            self.assertEqual(code, 0, err)
+            return lf.Window(start, lf.split_frames(out, size), fps)
+        (a0, a1), (b0, b1) = lf.search_windows("near", 2.0, 5.5, 8.0)
+        found = lf.find_candidates(decode(a0, a1, lf.PROBE_FPS, lf.PROBE_SIZE), decode(b0, b1, lf.PROBE_FPS, lf.PROBE_SIZE), 2.0, 5.5,
+                                   bridge=decode(a0, b1, lf.BRIDGE_FPS, lf.BRIDGE_SIZE))
+        self.assertTrue(found)
+        best = found[0]
+        cycles = (best.out_s - best.in_s) / 1.2
+        self.assertAlmostEqual(cycles, round(cycles), delta=(1 / lf.PROBE_FPS) / 1.2 + 1e-9, msg=best)
+        self.assertEqual(best.quality, "seamless", best)
+        # the user's own 3.5 s selection is not a whole number of cycles, and scores much worse than the find
+        a, b = decode(2.0, 2.4, lf.PROBE_FPS, lf.PROBE_SIZE), decode(5.5, 5.9, lf.PROBE_FPS, lf.PROBE_SIZE)
+        mask = lf.moving_mask(a.frames + b.frames)
+        own = lf.mad(lf.select(a.frames, mask)[0], lf.select(b.frames, mask)[0])
+        self.assertGreater(own, 4 * best.seam, (own, best.seam))
+
+    def test_animation_length_is_a_whole_number_of_frames(self):
+        from imaglr_integration.media.video_export import VideoSettings, export_gif, frame_exact_out
+        self.assertAlmostEqual(frame_exact_out(0.0, 1.03, 10), 1.0)
+        self.assertAlmostEqual(frame_exact_out(2.0, 2.98, 10), 3.0)
+        self.assertAlmostEqual(frame_exact_out(0.0, 0.01, 10), 0.1)  # never empty
+        src = self.make_source(self.path("src.mp4"), seconds=2, size="640x360", rate=10, audio=False)
+        res = export_gif(src, self.out, title="f", in_s=0, out_s=1.03, settings=VideoSettings(FFMPEG, FFPROBE),
+                         target_bytes=10**8, limit_bytes=10**8, fps=10)
+        frames = int(ffprobe(res.path, "-count_frames", "-show_streams")["streams"][0]["nb_read_frames"])
+        self.assertEqual(frames, 10)  # 1.03 s at 10 fps rounds to 10 frames, not 11
+
+    def test_crossfade_loop_is_one_dissolve_shorter(self):
+        from imaglr_integration.media.video_export import VideoSettings, export_gif, xfade_available
+        if not xfade_available(FFMPEG):
+            self.skipTest("this ffmpeg has no xfade filter")
+        src = self.make_source(self.path("src.mp4"), seconds=4, size="640x360", rate=10, audio=False)
+        res = export_gif(src, self.out, title="x", in_s=0, out_s=3, settings=VideoSettings(FFMPEG, FFPROBE),
+                         target_bytes=10**8, limit_bytes=10**8, loop="crossfade", fps=10)
+        frames = int(ffprobe(res.path, "-count_frames", "-show_streams")["streams"][0]["nb_read_frames"])
+        self.assertEqual(frames, 30 - fc.crossfade_frames(3.0, 10))  # 30 frames less a 5-frame dissolve
+        self.assertTrue(res.note.endswith("· crossfade"), res.note)
+
     def test_animated_webp_export(self):
         if not has_encoder("libwebp_anim"):
             self.skipTest("this ffmpeg has no animated WebP encoder")

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Clip editor: plays the source from Stash, loops between in and out, crop overlay, mute, save still.
 import React from "react";
-import { baseUrl, gql } from "../api.ts";
+import { baseUrl, gql, runOperation } from "../api.ts";
 import { clampTrim, pickStream, sameOrigin, type SceneStream, type VideoInfo } from "../lib/clip.ts";
 import { overlayRect } from "../lib/crop.ts";
 import { CropControls } from "./CropControls.tsx";
@@ -76,7 +76,24 @@ const FORMAT_HINTS: Record<ClipFormat, string> = {
   webp: "Plays automatically in the feed. Full colour and a third to a half of a GIF's size, so it loads faster and can be longer. No sound.",
 };
 
-const LOOP_LABELS: Record<GifLoop, string> = { forward: "Forward", boomerang: "Boomerang" };
+const LOOP_LABELS: Record<GifLoop, string> = { forward: "Forward", boomerang: "Boomerang", crossfade: "Crossfade" };
+const LOOP_HINTS: Record<GifLoop, string> = {
+  forward: "Plays the clip through, then starts again from In. Find a seamless loop looks for In and Out points near yours where the join hides.",
+  boomerang: "A boomerang plays the clip forward then backward, so it loops without a jump. It doubles the frames.",
+  crossfade: "Dissolves the last moment into the first, so footage that never repeats still loops without a jump.",
+};
+const SEARCH_LABELS = { near: "Near In and Out", from_in: "From In" } as const;
+type SearchMode = keyof typeof SEARCH_LABELS;
+const JOIN_LEAD_SECONDS = 1.5; // Play the join starts this long before Out
+
+/** An In/Out pair the backend found where the loop joins without a jump. */
+interface LoopCandidate { in_s: number; out_s: number; score: number; seam: number; quality: string }
+
+/** "+0.3 s" / "−0.5 s" / "±0 s": how far a candidate's point is from the user's own. */
+function delta(seconds: number): string {
+  const r = Math.round(seconds * 10) / 10;
+  return r === 0 ? "±0 s" : `${r > 0 ? "+" : "−"}${Math.abs(r).toFixed(1)} s`;
+}
 
 
 interface Props {
@@ -129,7 +146,7 @@ function TimeRow({ label, value, disabled, onSet, onNudge, onType }: {
 /** The Format section's header while it is collapsed: what the clip will be sent as, and its likely size. */
 export function formatHeader(v: ClipState, estimate: { short: string; warn: boolean }, edge: number): { text: string; warn: boolean } {
   if (v.format !== "video") {
-    const loop = v.loop === "boomerang" ? " · boomerang" : "";
+    const loop = v.loop === "boomerang" || v.loop === "crossfade" ? ` · ${v.loop}` : "";
     const size = v.gifWidth ? ` · ${v.gifWidth} px` : "";
     const fps = v.gifFps ? ` · ${v.gifFps} fps` : "";
     return { text: `${FORMAT_LABELS[v.format]}${loop}${size}${fps} · ${describeGifEstimate(v.outS - v.inS, v.loop, v.gifWidth, v.format, v.gifFps)}`,
@@ -149,8 +166,39 @@ export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTarget
   const [looping, setLooping] = React.useState(false);
   const [size, setSize] = React.useState({ w: 0, h: 0, vw: 0, vh: 0 });
   const [showGif, setShowGif] = React.useState(true); // when a GIF preview exists, show it rather than the video
+  const Toast = PluginApi.hooks.useToast();
+  const [searchMode, setSearchMode] = React.useState<SearchMode>("near");
+  const [finding, setFinding] = React.useState(false);
+  // loop candidates for the In/Out they were searched from; null = not looked (or stale), [] = none found
+  const [found, setFound] = React.useState<{ inS: number; outS: number; candidates: LoopCandidate[] } | null>(null);
   const valueRef = React.useRef(value);
   valueRef.current = value;
+  const cropKey = JSON.stringify(value.crop) + (value.flip ? "|flip" : "");
+
+  // Candidates go stale when the picture changes or the points move away from them (picking one keeps them,
+  // so the others can still be compared).
+  React.useEffect(() => {
+    setFound(null);
+  }, [cropKey]);
+  React.useEffect(() => {
+    setFound((f) => (f && !f.candidates.some((c) => Math.abs(c.in_s - value.inS) < 0.002 && Math.abs(c.out_s - value.outS) < 0.002) ? null : f));
+  }, [value.inS, value.outS]);
+
+  // Looping between In and Out: timeupdate fires only a few times a second, so where the browser can call
+  // back on every presented frame, wrap on that instead (Play clip and Play the join both benefit).
+  React.useEffect(() => {
+    const v = video.current as (HTMLVideoElement & { requestVideoFrameCallback?: (cb: () => void) => number;
+      cancelVideoFrameCallback?: (handle: number) => void }) | null;
+    if (!looping || !v || !v.requestVideoFrameCallback || !v.cancelVideoFrameCallback) return;
+    let handle = 0;
+    const check = () => {
+      const cur = valueRef.current;
+      if (v.currentTime >= cur.outS) v.currentTime = cur.inS;
+      handle = v.requestVideoFrameCallback!(check);
+    };
+    handle = v.requestVideoFrameCallback(check);
+    return () => v.cancelVideoFrameCallback!(handle);
+  }, [looping]);
 
   React.useEffect(() => {
     loadPlayback(sceneId, imageId).then(setPlayback, (e: Error) => setError(e.message));
@@ -183,6 +231,34 @@ export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTarget
     v.currentTime = value.inS;
     setLooping(true);
     v.play().catch(() => undefined); // autoplay refusals and interrupted loads are not errors
+  }
+
+  /** Play from just before Out, looping, so the join is what you see. */
+  function playJoin(inS = value.inS, outS = value.outS) {
+    const v = video.current;
+    if (!v) return;
+    setShowGif(false);
+    v.currentTime = Math.max(inS, outS - JOIN_LEAD_SECONDS);
+    setLooping(true);
+    v.play().catch(() => undefined);
+  }
+
+  async function findLoops() {
+    setFinding(true);
+    try {
+      const r = await runOperation<{ candidates: LoopCandidate[] }>("loop_find", { item_id: itemId, search: searchMode });
+      setFound({ inS: value.inS, outS: value.outS, candidates: r.candidates });
+    } catch (e) {
+      Toast.error(e);
+    } finally {
+      setFinding(false);
+    }
+  }
+
+  function pickLoop(c: LoopCandidate) {
+    const t = clampTrim(c.in_s, c.out_s, duration, "out");
+    onChange({ ...value, inS: t.inS, outS: t.outS });
+    playJoin(t.inS, t.outS);
   }
 
   const sourceEdge = Math.max(size.vw, size.vh) || null;
@@ -241,6 +317,7 @@ export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTarget
         </span>
         <span className="imaglr-clip-actions">
           <Button variant="secondary" onClick={playClip}>Play clip</Button>
+          {value.format !== "video" ? <Button variant="secondary" onClick={() => playJoin()}>Play the join</Button> : null}
           <Button variant="secondary" disabled={disabled} onClick={() => onSaveStill(now())}>Save still</Button>
         </span>
       </div>
@@ -284,9 +361,44 @@ export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTarget
                   ))}
                 </ButtonGroup>
               </div>
-              <div className="small text-muted mt-1">
-                A boomerang plays the clip forward then backward, so it loops without a jump. It doubles the frames.
-              </div>
+              <div className="small text-muted mt-1">{LOOP_HINTS[value.loop]}</div>
+              {value.loop === "forward" ? (
+                <div className="mt-2">
+                  <div className="imaglr-cover-row">
+                    <ButtonGroup className="imaglr-segmented">
+                      {(Object.keys(SEARCH_LABELS) as SearchMode[]).map((m) => (
+                        <Button key={m} variant={searchMode === m ? "primary" : "secondary"} disabled={disabled || finding}
+                          onClick={() => setSearchMode(m)}>
+                          {SEARCH_LABELS[m]}
+                        </Button>
+                      ))}
+                    </ButtonGroup>
+                    <Button variant="secondary" disabled={disabled || finding} onClick={findLoops}>
+                      {finding ? "Looking…" : "Find a seamless loop"}
+                    </Button>
+                  </div>
+                  <div className="small text-muted mt-1">
+                    {searchMode === "near"
+                      ? "Looks within 2 s of your In and Out for a pair where the frames match across the join."
+                      : "Keeps In close and tries every Out from a second later up to yours, for markers that only mark a start."}
+                    {" "}Nothing changes until you tap a result.
+                  </div>
+                  {found ? (found.candidates.length ? (
+                    <div className="imaglr-loop-candidates mt-2">
+                      {found.candidates.map((c) => {
+                        const current = Math.abs(c.in_s - value.inS) < 0.002 && Math.abs(c.out_s - value.outS) < 0.002;
+                        return (
+                          <Button key={`${c.in_s}-${c.out_s}`} variant={current ? "primary" : "secondary"} disabled={disabled} onClick={() => pickLoop(c)}>
+                            {(c.out_s - c.in_s).toFixed(1)} s · In {delta(c.in_s - found.inS)} · Out {delta(c.out_s - found.outS)} · {c.quality}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="small text-muted mt-2">No loop found near these points. Try From In, or the Crossfade loop.</div>
+                  )) : null}
+                </div>
+              ) : null}
             </Form.Group>
             {gifSizeChoices.length > 1 ? (
               <Form.Group className="mb-2">

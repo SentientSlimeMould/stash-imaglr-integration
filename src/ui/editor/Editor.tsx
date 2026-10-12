@@ -94,7 +94,7 @@ export function Editor({ itemId, onClose }: Props) {
   const [tags, setTags] = React.useState<string[]>([]);
   const [caption, setCaption] = React.useState("");
   const [crop, setCrop] = React.useState<Crop>({ aspect: "original", position: 0.5 });
-  const [trim, setTrim] = React.useState<{ inS: number; outS: number; mute: boolean; flip: boolean; format: "video" | "gif" | "webp"; codec: "h264" | "hevc"; maxEdge: number | null; loop: "forward" | "boomerang"; gifWidth: number | null; gifFps: number | null; coverT: number | null }>(
+  const [trim, setTrim] = React.useState<{ inS: number; outS: number; mute: boolean; flip: boolean; format: "video" | "gif" | "webp"; codec: "h264" | "hevc"; maxEdge: number | null; loop: "forward" | "boomerang" | "crossfade"; gifWidth: number | null; gifFps: number | null; coverT: number | null }>(
     { inS: 0, outS: 0, mute: false, flip: false, format: "video", codec: "h264", maxEdge: null, loop: "forward", gifWidth: null, gifFps: null, coverT: null });
   const [blogId, setBlogId] = React.useState<number | null>(null);
   const [action, setAction] = React.useState<SendAction | null>(null);

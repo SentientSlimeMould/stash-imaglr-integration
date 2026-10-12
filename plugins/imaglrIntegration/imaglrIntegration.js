@@ -490,6 +490,7 @@
   // src/ui/lib/gif.ts
   var LONG_GIF_SECONDS = 15;
   var MB_PER_SECOND = { low: 1.2, high: 3 };
+  var GIF_CROSSFADE_FACTOR = 1.2;
   var WEBP_FACTOR = 0.35;
   var GIF_FEED_WIDTH = 698;
   var GIF_SIZE_OPTIONS = [
@@ -513,11 +514,20 @@
     const w = Math.min(width ?? GIF_FEED_WIDTH, GIF_FEED_WIDTH);
     return w * w / (GIF_FEED_WIDTH * GIF_FEED_WIDTH);
   }
-  function gifSeconds(seconds, loop = "forward") {
-    return Math.max(0, seconds) * (loop === "boomerang" ? 2 : 1);
+  function crossfadeSeconds(seconds, fps = LADDER_FPS) {
+    const x = Math.min(1, Math.max(0.5, seconds / 6));
+    const total = Math.round(seconds * fps);
+    const frames = Math.max(1, Math.min(Math.round(x * fps), Math.max(1, Math.floor(total / 3))));
+    return frames / fps;
+  }
+  function gifSeconds(seconds, loop = "forward", fps = null) {
+    const s = Math.max(0, seconds);
+    if (loop === "boomerang") return s * 2;
+    if (loop === "crossfade") return Math.max(0, s - crossfadeSeconds(s, fps ?? LADDER_FPS));
+    return s;
   }
   function estimateGifMb(seconds, loop = "forward", width = null, format = "gif", fps = null) {
-    const s = gifSeconds(seconds, loop) * widthFactor(width) * (format === "webp" ? WEBP_FACTOR : 1) * ((fps ?? LADDER_FPS) / LADDER_FPS);
+    const s = gifSeconds(seconds, loop, fps) * widthFactor(width) * (format === "webp" ? WEBP_FACTOR : 1) * ((fps ?? LADDER_FPS) / LADDER_FPS) * (loop === "crossfade" && format === "gif" ? GIF_CROSSFADE_FACTOR : 1);
     return [s * MB_PER_SECOND.low, s * MB_PER_SECOND.high];
   }
   function roundMb(n) {
@@ -591,7 +601,18 @@
     gif: "Plays automatically in the feed. No sound, limited to 256 colours, and the largest file of the three, so short clips only.",
     webp: "Plays automatically in the feed. Full colour and a third to a half of a GIF's size, so it loads faster and can be longer. No sound."
   };
-  var LOOP_LABELS = { forward: "Forward", boomerang: "Boomerang" };
+  var LOOP_LABELS = { forward: "Forward", boomerang: "Boomerang", crossfade: "Crossfade" };
+  var LOOP_HINTS = {
+    forward: "Plays the clip through, then starts again from In. Find a seamless loop looks for In and Out points near yours where the join hides.",
+    boomerang: "A boomerang plays the clip forward then backward, so it loops without a jump. It doubles the frames.",
+    crossfade: "Dissolves the last moment into the first, so footage that never repeats still loops without a jump."
+  };
+  var SEARCH_LABELS = { near: "Near In and Out", from_in: "From In" };
+  var JOIN_LEAD_SECONDS = 1.5;
+  function delta(seconds) {
+    const r = Math.round(seconds * 10) / 10;
+    return r === 0 ? "\xB10 s" : `${r > 0 ? "+" : "\u2212"}${Math.abs(r).toFixed(1)} s`;
+  }
   function TimeRow({ label, value, disabled, onSet, onNudge, onType }) {
     const { Button, Form } = PluginApi.libraries.Bootstrap;
     const [text, setText] = react_default.useState(fmtTime(value));
@@ -614,7 +635,7 @@
   }
   function formatHeader(v, estimate, edge) {
     if (v.format !== "video") {
-      const loop = v.loop === "boomerang" ? " \xB7 boomerang" : "";
+      const loop = v.loop === "boomerang" || v.loop === "crossfade" ? ` \xB7 ${v.loop}` : "";
       const size = v.gifWidth ? ` \xB7 ${v.gifWidth} px` : "";
       const fps = v.gifFps ? ` \xB7 ${v.gifFps} fps` : "";
       return {
@@ -641,8 +662,31 @@
     const [looping, setLooping] = react_default.useState(false);
     const [size, setSize] = react_default.useState({ w: 0, h: 0, vw: 0, vh: 0 });
     const [showGif, setShowGif] = react_default.useState(true);
+    const Toast = PluginApi.hooks.useToast();
+    const [searchMode, setSearchMode] = react_default.useState("near");
+    const [finding, setFinding] = react_default.useState(false);
+    const [found, setFound] = react_default.useState(null);
     const valueRef = react_default.useRef(value);
     valueRef.current = value;
+    const cropKey = JSON.stringify(value.crop) + (value.flip ? "|flip" : "");
+    react_default.useEffect(() => {
+      setFound(null);
+    }, [cropKey]);
+    react_default.useEffect(() => {
+      setFound((f) => f && !f.candidates.some((c) => Math.abs(c.in_s - value.inS) < 2e-3 && Math.abs(c.out_s - value.outS) < 2e-3) ? null : f);
+    }, [value.inS, value.outS]);
+    react_default.useEffect(() => {
+      const v = video.current;
+      if (!looping || !v || !v.requestVideoFrameCallback || !v.cancelVideoFrameCallback) return;
+      let handle = 0;
+      const check = () => {
+        const cur = valueRef.current;
+        if (v.currentTime >= cur.outS) v.currentTime = cur.inS;
+        handle = v.requestVideoFrameCallback(check);
+      };
+      handle = v.requestVideoFrameCallback(check);
+      return () => v.cancelVideoFrameCallback(handle);
+    }, [looping]);
     react_default.useEffect(() => {
       loadPlayback(sceneId, imageId).then(setPlayback, (e) => setError(e.message));
     }, [sceneId, imageId]);
@@ -669,6 +713,30 @@
       v.currentTime = value.inS;
       setLooping(true);
       v.play().catch(() => void 0);
+    }
+    function playJoin(inS = value.inS, outS = value.outS) {
+      const v = video.current;
+      if (!v) return;
+      setShowGif(false);
+      v.currentTime = Math.max(inS, outS - JOIN_LEAD_SECONDS);
+      setLooping(true);
+      v.play().catch(() => void 0);
+    }
+    async function findLoops() {
+      setFinding(true);
+      try {
+        const r = await runOperation("loop_find", { item_id: itemId, search: searchMode });
+        setFound({ inS: value.inS, outS: value.outS, candidates: r.candidates });
+      } catch (e) {
+        Toast.error(e);
+      } finally {
+        setFinding(false);
+      }
+    }
+    function pickLoop(c) {
+      const t = clampTrim(c.in_s, c.out_s, duration, "out");
+      onChange({ ...value, inS: t.inS, outS: t.outS });
+      playJoin(t.inS, t.outS);
     }
     const sourceEdge = Math.max(size.vw, size.vh) || null;
     const sizeChoices = sizeChoicesFor(sourceEdge);
@@ -698,7 +766,7 @@
         },
         onPause: () => setLooping(false)
       }
-    ) : null, rect.cropped && !(gifPreview && showGif) ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-crop", style: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } }) : null), value.format !== "video" ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-gif-bar" }, gifPreview ? /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted" }, "This is the ", FORMAT_LABELS[value.format], " that will be sent: ", gifPreview.note) : /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted" }, "Make the ", FORMAT_LABELS[value.format], " now to see exactly what will be sent."), /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-clip-actions" }, gifPreview ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setShowGif(!showGif) }, showGif ? "Show video" : `Show ${FORMAT_LABELS[value.format]}`) : null, /* @__PURE__ */ react_default.createElement(Button, { variant: gifPreview ? "secondary" : "primary", disabled: disabled || makingGif, onClick: onPreviewGif }, makingGif ? `Making the ${FORMAT_LABELS[value.format]}\u2026` : gifPreview ? "Make it again" : `Preview ${FORMAT_LABELS[value.format]}`))) : null, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-clip-summary" }, /* @__PURE__ */ react_default.createElement("span", null, fmtTime(value.inS), " \u2192 ", fmtTime(value.outS), " \xB7 ", /* @__PURE__ */ react_default.createElement("strong", null, (value.outS - value.inS).toFixed(1), " s")), /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-clip-actions" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: playClip }, "Play clip"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onSaveStill(now()) }, "Save still"))), /* @__PURE__ */ react_default.createElement(
+    ) : null, rect.cropped && !(gifPreview && showGif) ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-crop", style: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } }) : null), value.format !== "video" ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-gif-bar" }, gifPreview ? /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted" }, "This is the ", FORMAT_LABELS[value.format], " that will be sent: ", gifPreview.note) : /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted" }, "Make the ", FORMAT_LABELS[value.format], " now to see exactly what will be sent."), /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-clip-actions" }, gifPreview ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setShowGif(!showGif) }, showGif ? "Show video" : `Show ${FORMAT_LABELS[value.format]}`) : null, /* @__PURE__ */ react_default.createElement(Button, { variant: gifPreview ? "secondary" : "primary", disabled: disabled || makingGif, onClick: onPreviewGif }, makingGif ? `Making the ${FORMAT_LABELS[value.format]}\u2026` : gifPreview ? "Make it again" : `Preview ${FORMAT_LABELS[value.format]}`))) : null, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-clip-summary" }, /* @__PURE__ */ react_default.createElement("span", null, fmtTime(value.inS), " \u2192 ", fmtTime(value.outS), " \xB7 ", /* @__PURE__ */ react_default.createElement("strong", null, (value.outS - value.inS).toFixed(1), " s")), /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-clip-actions" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: playClip }, "Play clip"), value.format !== "video" ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => playJoin() }, "Play the join") : null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onSaveStill(now()) }, "Save still"))), /* @__PURE__ */ react_default.createElement(
       TimeRow,
       {
         label: "In",
@@ -746,7 +814,19 @@
         onClick: () => onChange({ ...value, loop: l })
       },
       LOOP_LABELS[l]
-    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, "A boomerang plays the clip forward then backward, so it loops without a jump. It doubles the frames.")), gifSizeChoices.length > 1 ? /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mb-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Picture size"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, gifSizeChoices.map((o) => /* @__PURE__ */ react_default.createElement(
+    )))), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, LOOP_HINTS[value.loop]), value.loop === "forward" ? /* @__PURE__ */ react_default.createElement("div", { className: "mt-2" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-cover-row" }, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, Object.keys(SEARCH_LABELS).map((m) => /* @__PURE__ */ react_default.createElement(
+      Button,
+      {
+        key: m,
+        variant: searchMode === m ? "primary" : "secondary",
+        disabled: disabled || finding,
+        onClick: () => setSearchMode(m)
+      },
+      SEARCH_LABELS[m]
+    ))), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled: disabled || finding, onClick: findLoops }, finding ? "Looking\u2026" : "Find a seamless loop")), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-1" }, searchMode === "near" ? "Looks within 2 s of your In and Out for a pair where the frames match across the join." : "Keeps In close and tries every Out from a second later up to yours, for markers that only mark a start.", " ", "Nothing changes until you tap a result."), found ? found.candidates.length ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-loop-candidates mt-2" }, found.candidates.map((c) => {
+      const current = Math.abs(c.in_s - value.inS) < 2e-3 && Math.abs(c.out_s - value.outS) < 2e-3;
+      return /* @__PURE__ */ react_default.createElement(Button, { key: `${c.in_s}-${c.out_s}`, variant: current ? "primary" : "secondary", disabled, onClick: () => pickLoop(c) }, (c.out_s - c.in_s).toFixed(1), " s \xB7 In ", delta(c.in_s - found.inS), " \xB7 Out ", delta(c.out_s - found.outS), " \xB7 ", c.quality);
+    })) : /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mt-2" }, "No loop found near these points. Try From In, or the Crossfade loop.") : null) : null), gifSizeChoices.length > 1 ? /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mb-2" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Picture size"), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented" }, gifSizeChoices.map((o) => /* @__PURE__ */ react_default.createElement(
       Button,
       {
         key: o.label,
@@ -1858,7 +1938,7 @@
       if (card.output_note) return card.output_note;
       const how = card.send_format === "gif" || card.send_format === "webp" ? [
         card.send_format === "webp" ? "WebP" : "GIF",
-        card.loop === "boomerang" ? "boomerang" : null,
+        card.loop === "boomerang" || card.loop === "crossfade" ? card.loop : null,
         card.gif_width ? `${card.gif_width} px` : null,
         card.gif_fps ? `${card.gif_fps} fps` : null
       ].filter(Boolean).join(" ") : [card.send_codec === "hevc" ? "H.265" : null, card.max_edge ? edgeLabel(card.max_edge) : null].filter(Boolean).join(" ");

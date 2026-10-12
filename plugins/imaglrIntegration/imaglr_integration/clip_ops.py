@@ -60,8 +60,28 @@ def op_crop_detect(ctx: Context) -> dict[str, Any]:
         raise UserError(e.detail) from None
 
 
+def op_loop_find(ctx: Context) -> dict[str, Any]:
+    """In/Out pairs near the clip's own where a GIF or WebP would loop without a jump, best first. Nothing is
+    saved: the editor shows them and the user picks one (an ordinary trim) or none."""
+    clip = repo.get_item(ctx.db, ctx.arg("item_id"))
+    if clip is None or clip["kind"] != "clip":
+        raise UserError("That clip no longer exists. Refresh the page.")
+    if clip["status"] in services.BUSY_STATUSES:
+        raise UserError("This clip is being sent.")
+    mode = ctx.arg("search", str, required=False) or "near"
+    if mode not in LOOP_SEARCH_MODES:
+        raise UserError("Unknown search.")
+    try:
+        return {"candidates": jobs.find_loops(ctx, clip, mode)}
+    except jobs.JobFailed as e:
+        raise UserError(e.detail) from None
+
+
+LOOP_SEARCH_MODES = ("near", "from_in")
+
 OPERATIONS = {
     "still_create": op_still_create,
     "crop_detect": op_crop_detect,
     "gif_preview": op_gif_preview,
+    "loop_find": op_loop_find,
 }

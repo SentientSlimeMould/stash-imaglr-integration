@@ -21,7 +21,8 @@ from . import settings as plugin_settings
 from .context import Context
 from .db import now_iso
 from .imaglr import ErrorClass, ImaglrError, UploadCancelled
-from .media.ffmpeg_run import Cancelled, FfmpegError
+from .media import loop_find
+from .media.ffmpeg_run import Cancelled, FfmpegError, run_capture
 from .media.image_inspect import ImageFormatError, inspect_image
 from .media.image_plan import plan_image
 from .media.image_process import ImageTooLarge, process_image
@@ -317,6 +318,51 @@ def detect_borders(ctx: Context, item: dict[str, Any]) -> dict[str, float]:
                         "Set the trims by hand instead.") from None
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
+
+
+BRIDGE_MAX_SECONDS = 30.0  # the coarse pass over the whole range, for the cut check, is skipped beyond this
+
+
+def find_loops(ctx: Context, item: dict[str, Any], mode: str) -> list[dict[str, Any]]:
+    """In/Out pairs near the clip's own where it loops without a jump (see media/loop_find): two windows
+    decoded to tiny grey frames through the clip's own crop and flip, scored in Python. Nothing is saved."""
+    ffmpeg, ffprobe = media_tools(ctx)
+    src, headers = clip_source(ctx, item)
+    try:
+        info = probe(ffprobe, src, headers)
+    except FfmpegError as e:
+        log.warning(f"loop search failed for {item['id']}: {e}")
+        raise JobFailed("ffmpeg_failed", "Couldn't read this video.") from None
+    w, h = info.display_size
+    if not w or not h:
+        raise JobFailed("unsupported_video", "Couldn't read the picture's size.")
+    in_s, out_s = float(item["in_s"] or 0), float(item["out_s"] or 0)
+    crop = item["crop"] or {}
+    picture = dict(aspect=crop.get("aspect") or "original", position=float(crop.get("position", 0.5)),
+                   flip=bool(item["flip"]), edges=fc.clean_edges(crop.get("edges")), headers=headers)
+    (a0, a1), (b0, b1) = loop_find.search_windows(mode, in_s, out_s, info.duration or None)
+
+    def decode(start: float, end: float, fps: int, size: tuple[int, int]) -> loop_find.Window:
+        if end - start < 1 / fps:
+            return loop_find.Window(start, [], fps)
+        cmd = fc.build_loop_probe_cmd(ffmpeg, src, start, end - start, w, h, fps=fps, size=size, **picture)
+        out, err, code = run_capture(cmd, timeout=60)
+        if code != 0:
+            raise FfmpegError(f"ffmpeg exit {code}", code, err.decode(errors="replace")[-500:])
+        return loop_find.Window(start, loop_find.split_frames(out, size), fps)
+
+    try:
+        window_a = decode(a0, a1, loop_find.PROBE_FPS, loop_find.PROBE_SIZE)
+        window_b = decode(b0, b1, loop_find.PROBE_FPS, loop_find.PROBE_SIZE)
+        span = (min(a0, b0), max(a1, b1))
+        bridge = None  # without it, loop_find can't tell a frozen picture or a cut from a loop: only on short ranges
+        if span[1] - span[0] <= BRIDGE_MAX_SECONDS:
+            bridge = decode(span[0], span[1], loop_find.BRIDGE_FPS, loop_find.BRIDGE_SIZE)
+    except FfmpegError as e:
+        log.warning(f"loop search failed for {item['id']}: {e}")
+        raise JobFailed("ffmpeg_failed", "Couldn't look for a loop: Stash's ffmpeg can't read this video.") from None
+    found = loop_find.find_candidates(window_a, window_b, in_s, out_s, bridge=bridge)
+    return [c.as_dict() for c in found]
 
 
 def grab_still(ctx: Context, clip: dict[str, Any], t: float, still_id: str) -> str:
