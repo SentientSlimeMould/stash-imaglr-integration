@@ -361,7 +361,7 @@ def find_loops(ctx: Context, item: dict[str, Any], mode: str) -> list[dict[str, 
     except FfmpegError as e:
         log.warning(f"loop search failed for {item['id']}: {e}")
         raise JobFailed("ffmpeg_failed", "Couldn't look for a loop: Stash's ffmpeg can't read this video.") from None
-    found = loop_find.find_candidates(window_a, window_b, in_s, out_s, bridge=bridge)
+    found = loop_find.find_candidates(window_a, window_b, in_s, out_s, bridge=bridge, near_out=mode != "from_in")
     return [c.as_dict() for c in found]
 
 

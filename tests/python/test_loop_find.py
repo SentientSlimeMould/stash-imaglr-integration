@@ -40,6 +40,14 @@ class ScoringTest(unittest.TestCase):
         # the user's own points pull: the best is the whole-cycle pair nearest 0.6 → 4.5 (3.6 s = three cycles)
         self.assertAlmostEqual(found[0].out_s - found[0].in_s, 3.6, delta=0.1)
 
+    def test_from_in_prefers_a_short_clean_loop_over_one_near_the_users_out(self):
+        a, b = window(0.0, 2.0, periodic), window(1.0, 12.0, periodic)
+        near = lf.find_candidates(a, b, 0.6, 11.5, bridge=window(0.0, 12.0, periodic, fps=lf.PROBE_FPS))
+        free = lf.find_candidates(a, b, 0.6, 11.5, bridge=window(0.0, 12.0, periodic, fps=lf.PROBE_FPS), near_out=False)
+        self.assertGreater(near[0].out_s - near[0].in_s, 9.0)  # pulled towards the user's Out at 11.5
+        self.assertAlmostEqual(free[0].out_s - free[0].in_s, 1.2, delta=0.1)  # one cycle: the shortest clean loop
+        self.assertTrue(all(c.quality == "seamless" for c in free))
+
     def test_candidates_are_distinct(self):
         a, b = window(0.0, 2.0, periodic), window(3.0, 6.0, periodic)
         found = lf.find_candidates(a, b, 0.6, 4.5)

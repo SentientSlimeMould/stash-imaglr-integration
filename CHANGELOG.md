@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- The From In loop search no longer pulls towards your Out: between equally clean joins the shorter loop wins,
+  so a short clip gets its short loops rather than one near its full length.
+
 ## 0.1.22 — 2026-10-12
 
 - **Find a seamless loop.** For a WebP or GIF, the clip editor can look near your In and Out (or forward from

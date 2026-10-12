@@ -380,7 +380,7 @@ export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTarget
                   <div className="small text-muted mt-1">
                     {searchMode === "near"
                       ? "Looks within 2 s of your In and Out for a pair where the frames match across the join."
-                      : "Keeps In close and tries every Out from a second later up to yours, for markers that only mark a start."}
+                      : "Keeps In close and tries every Out from a second later up to yours; between equally clean joins the shorter loop wins."}
                     {" "}Nothing changes until you tap a result.
                   </div>
                   {found ? (found.candidates.length ? (

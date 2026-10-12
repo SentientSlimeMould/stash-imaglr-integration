@@ -22,6 +22,7 @@ BRIDGE_FPS = 5  # the coarse pass over the whole range, for the motion and cut c
 BRIDGE_SIZE = (32, 18)
 SEAM_HALF = 2  # frames either side of the join that must match too: motion, not just a pose
 NEAR_BIAS = 0.5  # score points per second away from the user's own In and Out
+SHORT_BIAS = 0.1  # when Out is free ("from In"), score points per second of loop: a clean short loop beats a long one
 MIN_LOOP_SECONDS = 1.0
 DISTINCT_SECONDS = 0.3  # candidates closer than this in both In and Out are the same one
 MOVING_FRACTION = 0.5  # the most-changing half of the pixels is scored (at least MIN_PIXELS of them)
@@ -111,9 +112,11 @@ def loop_is_live(bridge: Window, in_s: float, out_s: float) -> bool:
 
 
 def find_candidates(window_a: Window, window_b: Window, user_in: float, user_out: float, *,
-                    bridge: Window | None = None, limit: int = 3) -> list:
+                    bridge: Window | None = None, limit: int = 3, near_out: bool = True) -> list:
     """The best (In, Out) pairs with In from window A and Out from window B: the frame at Out (exclusive) looks
-    like the frame at In, and so do the frames either side. Best first, at most `limit`, no near-duplicates."""
+    like the frame at In, and so do the frames either side. Best first, at most `limit`, no near-duplicates.
+    Staying near the user's own points counts against a pair; with `near_out` off (the "from In" search, where
+    Out is free) the user's Out is no pull and a shorter loop wins between equally clean joins."""
     if len(window_a.frames) < 2 * SEAM_HALF + 1 or len(window_b.frames) < 2 * SEAM_HALF + 1:
         return []
     mask = moving_mask(window_a.frames + window_b.frames)
@@ -133,7 +136,10 @@ def find_candidates(window_a: Window, window_b: Window, user_in: float, user_out
     for i, j in pairs:
         seam = sum(d[(i + o, j + o)] for o in range(-k, k + 1)) / (2 * k + 1)
         t_in, t_out = window_a.time(i), window_b.time(j)
-        score = seam + NEAR_BIAS * (abs(t_in - user_in) + abs(t_out - user_out))
+        if near_out:
+            score = seam + NEAR_BIAS * (abs(t_in - user_in) + abs(t_out - user_out))
+        else:
+            score = seam + NEAR_BIAS * abs(t_in - user_in) + SHORT_BIAS * (t_out - t_in)
         scored.append(Candidate(t_in, t_out, seam, score))
     scored.sort(key=lambda c: c.score)
     kept: list = []
