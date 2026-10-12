@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.22 — 2026-10-12
 
 - **Find a seamless loop.** For a WebP or GIF, the clip editor can look near your In and Out (or forward from
   In) for pairs where the loop joins without a jump, scored on the cropped picture with Stash's ffmpeg. Tap a
