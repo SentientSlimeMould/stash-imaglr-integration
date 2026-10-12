@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.23 — 2026-10-12
 
 - The From In loop search no longer pulls towards your Out: between equally clean joins the shorter loop wins,
   so a short clip gets its short loops rather than one near its full length.
