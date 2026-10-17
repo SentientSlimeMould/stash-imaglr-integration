@@ -34,6 +34,7 @@ services:
       - v0311-cache:/cache
       - v0311-blobs:/blobs
       - media:/data:ro
+      - v0311-saved:/saved  # a writable library for posts saved from imaglr (seed.py <port> saving)
       - ${IMAGLR_DEV_PLUGIN:-${HOME}/.imaglr-dev/plugin}:/root/.stash/plugins/imaglrIntegration:ro
       - v0311-plugin-data:/root/.stash/plugins/imaglrIntegration/data
 
@@ -49,6 +50,7 @@ services:
       - dev-cache:/cache
       - dev-blobs:/blobs
       - media:/data:ro
+      - dev-saved:/saved  # a writable library for posts saved from imaglr (seed.py <port> saving)
       - ${IMAGLR_DEV_PLUGIN:-${HOME}/.imaglr-dev/plugin}:/root/.stash/plugins/imaglrIntegration:ro
       - dev-plugin-data:/root/.stash/plugins/imaglrIntegration/data
 
@@ -103,12 +105,14 @@ volumes:
   v0311-cache:
   v0311-blobs:
   v0311-plugin-data:
+  v0311-saved:
   dev-config:
   dev-generated:
   dev-metadata:
   dev-cache:
   dev-blobs:
   dev-plugin-data:
+  dev-saved:
   demo-config:
   demo-generated:
   demo-metadata:

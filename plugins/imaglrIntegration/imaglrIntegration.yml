@@ -18,6 +18,18 @@ ui:
 settings:
   # Stash lists settings sorted by these keys, so they are named to keep the order sensible.
   # Numbers are STRING settings so an unsaved value shows empty rather than 0.
+  browseImaglr:
+    displayName: Browse and save from imaglr (preview)
+    description: Adds a Discover section to the imaglr page for browsing imaglr and saving the posts you choose into your library.
+    type: BOOLEAN
+  browseImaglrAutoplay:
+    displayName: Autoplay videos while browsing
+    description: Videos in Discover start playing, muted, as you scroll to them, like the option in imaglr's app. Off (the default), you tap a video to play it, as on imaglr's website.
+    type: BOOLEAN
+  browseImaglrSaveFolder:
+    displayName: Save folder
+    description: Where posts saved from imaglr go. It must be inside one of your Stash libraries; the plugin offers a choice the first time you save.
+    type: STRING
   tagQueue:
     displayName: Queue tag
     description: Markers and images with this Stash tag appear on the Post to imaglr page. Leave empty for "imaglr". To change it later, rename the tag in Stash too so tagged items keep showing.

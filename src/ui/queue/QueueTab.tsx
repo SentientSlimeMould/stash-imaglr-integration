@@ -174,7 +174,9 @@ export function QueueTab({ tab, openId, data, error, load }: { tab: "clips" | "i
       preview: c.preview,
       portrait: (c.height ?? 0) > (c.width ?? 0),
       detail: cardDetail(c),
-      badge: { text: STATUS_LABELS[c.status], variant: STATUS_VARIANTS[c.status] },
+      // Saved from imaglr: never uploaded again (imaglr's terms); the editor offers a reblog instead.
+      badge: c.saved_from && !["exporting", "sending", "sent"].includes(c.status) ? { text: "From imaglr", variant: "info" }
+        : { text: STATUS_LABELS[c.status], variant: STATUS_VARIANTS[c.status] },
       count: c.members?.length,
     }));
     body = <CardGrid items={gridItems} view={controls.view} zoom={controls.zoom} highlightId={openId} selected={selected} onToggle={toggle} />;

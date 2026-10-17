@@ -161,6 +161,23 @@ MIGRATIONS = [
     """
     ALTER TABLE items ADD COLUMN cover_t REAL;
     """,
+    # v13: posts being saved from imaglr into Stash. Only the work in progress lives here; the record of what
+    # was saved is in Stash itself (links, details and custom fields on the saved items), so it outlives the plugin.
+    """
+    CREATE TABLE saves (
+      post_id TEXT PRIMARY KEY,             -- the credited imaglr post (the original, for a reblog)
+      status TEXT NOT NULL,                 -- queued | downloading | scanning | done | failed
+      progress REAL NOT NULL DEFAULT 0,
+      blog_id INTEGER,                      -- whose key read the post
+      post TEXT NOT NULL,                   -- the post as browsed (normalised JSON): what is credited
+      files TEXT NOT NULL DEFAULT '[]',     -- the saved files' paths
+      refs TEXT NOT NULL DEFAULT '[]',      -- the Stash scenes, images and gallery made from them
+      error TEXT,
+      stash_job_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    """,
 ]
 
 

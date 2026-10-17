@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **Discover (preview, off until switched on).** With *Browse and save from imaglr* on in the plugin's settings,
+  the imaglr page has two sections: Share (Clips, Images, Sent, as before) and Discover: your imaglr feed, your
+  likes, and Explore by tag, by creator or from a post's link, as one scrolling column. Videos play when tapped,
+  as on imaglr's website, or as you reach them with *Autoplay videos while browsing* on. **Save** puts a post into a folder of your choice inside a Stash library. Stash adds it like any file and
+  the plugin credits it there: the post's and creator's links, a credit line, the post date and two custom fields
+  (so the credit outlives the plugin), filed under the creator's name. Its imaglr tags link to Stash tags,
+  performers and a studio whose name or alias matches exactly; the plugin's own queue and sent tags never match. A
+  post with several files becomes a gallery; a reblog is saved as the original. The save folder must be one Stash
+  can write to (checked when you choose it); change it any time in the plugin's Settings. **Reblog** shares a post to one of
+  your blogs.
+- Files saved from imaglr are never uploaded again: their cards say "From imaglr", Send and Send all refuse them,
+  and the editor offers to reblog the original instead.
 - Fixed: on screens wider than a phone, a few of the clip editor's styles weren't applied (the section labels, the
   GIF preview bar, the cover row and the seamless-loop results). A style block meant for phones only was left open
   on 8 October and took everything after it with it.

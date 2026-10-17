@@ -1047,6 +1047,7 @@
     const [action, setAction] = react_default.useState(null);
     const [confirmPublish, setConfirmPublish] = react_default.useState(false);
     const [confirmRemove, setConfirmRemove] = react_default.useState(false);
+    const [confirmReblog, setConfirmReblog] = react_default.useState(false);
     const [tagsAuto, setTagsAuto] = react_default.useState(true);
     const [resetTags, setResetTags] = react_default.useState(false);
     const [busy, setBusy] = react_default.useState(false);
@@ -1096,6 +1097,7 @@
     const blog = pickBlog(blogs, blogId);
     const sendAction = effectiveAction(blog, action);
     const problem = blog ? blogProblem(blog) : null;
+    const fromImaglr = files.find((f) => f.saved_from)?.saved_from ?? null;
     const single = files.length === 1 && item.kind !== "set";
     const isClip = item.kind === "clip";
     function edit(setter) {
@@ -1201,6 +1203,20 @@
     }
     const removeLabel = item.kind === "still" ? "Delete still" : `Remove "${queueTag}" tag${item.kind === "set" ? "s" : ""}`;
     const removeQuestion = item.kind === "still" ? "Delete this still? It only exists in the plugin." : `Remove the "${queueTag}" tag in Stash${item.kind === "set" ? " from every file in this post" : ""}? It leaves this page. Nothing on imaglr is changed and nothing is deleted.`;
+    async function reblog() {
+      if (!blog || !fromImaglr) return;
+      setBusy(true);
+      try {
+        await runOperation("reblog", { post_id: fromImaglr, blog_id: blog.id });
+        Toast.success(`Reblogged to ${blog.label}.`);
+        await runOperation("remove_from_queue", { item_id: item.id });
+        onClose(true);
+      } catch (e) {
+        setConfirmReblog(false);
+        setBusy(false);
+        Toast.error(e);
+      }
+    }
     async function remove() {
       setBusy(true);
       try {
@@ -1289,7 +1305,7 @@
           }
         },
         ACTION_LABELS[a]
-      ))))), blogs.length === 0 ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info" }, "Add your imaglr blog first: use the Settings button on the page.") : null, problem ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, problem) : null), /* @__PURE__ */ react_default.createElement(Modal.Footer, { className: "imaglr-editor-footer" }, BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: cancelSend }, "Stop sending") : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger mr-auto", onClick: () => setConfirmRemove(true), disabled: locked }, removeLabel), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: cancel, disabled: busy }, "Cancel"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: saveAndClose, disabled: locked || !dirty || busy }, "Save"), /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: send, disabled: locked || !blog || !!problem || busy }, busy ? "Starting\u2026" : sendButtonLabel(sendAction, blog)))), confirmPublish ? /* @__PURE__ */ react_default.createElement(
+      ))))), blogs.length === 0 ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info" }, "Add your imaglr blog first: use the Settings button on the page.") : null, problem ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "warning" }, problem) : null, fromImaglr ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info" }, "This came from imaglr, so it isn't uploaded again. Reblog the original post instead.") : null), /* @__PURE__ */ react_default.createElement(Modal.Footer, { className: "imaglr-editor-footer" }, BUSY.includes(item.status) ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: cancelSend }, "Stop sending") : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger mr-auto", onClick: () => setConfirmRemove(true), disabled: locked }, removeLabel), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: cancel, disabled: busy }, "Cancel"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: saveAndClose, disabled: locked || !dirty || busy }, "Save"), fromImaglr ? /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => setConfirmReblog(true), disabled: locked || !blog || busy }, "Reblog", blog ? ` to ${blog.label}` : "") : /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: send, disabled: locked || !blog || !!problem || busy }, busy ? "Starting\u2026" : sendButtonLabel(sendAction, blog)))), confirmPublish ? /* @__PURE__ */ react_default.createElement(
         ConfirmDialog,
         {
           title: `Publish now on ${blog?.label}`,
@@ -1302,6 +1318,18 @@
         "This posts publicly on ",
         blog?.label,
         " right away, not as a draft."
+      ) : null, confirmReblog && blog ? /* @__PURE__ */ react_default.createElement(
+        ConfirmDialog,
+        {
+          title: `Reblog to ${blog.label}`,
+          accept: "Reblog",
+          busy,
+          onAccept: reblog,
+          onCancel: () => setConfirmReblog(false)
+        },
+        "The original post appears on ",
+        blog.label,
+        " straight away, and this comes off the page."
       ) : null, confirmRemove ? /* @__PURE__ */ react_default.createElement(
         ConfirmDialog,
         {
@@ -2048,7 +2076,8 @@
         preview: c.preview,
         portrait: (c.height ?? 0) > (c.width ?? 0),
         detail: cardDetail(c),
-        badge: { text: STATUS_LABELS[c.status], variant: STATUS_VARIANTS[c.status] },
+        // Saved from imaglr: never uploaded again (imaglr's terms); the editor offers a reblog instead.
+        badge: c.saved_from && !["exporting", "sending", "sent"].includes(c.status) ? { text: "From imaglr", variant: "info" } : { text: STATUS_LABELS[c.status], variant: STATUS_VARIANTS[c.status] },
         count: c.members?.length
       }));
       body = /* @__PURE__ */ react_default.createElement(CardGrid, { items: gridItems, view: controls.view, zoom: controls.zoom, highlightId: openId, selected, onToggle: toggle });
@@ -2362,6 +2391,81 @@
     ) : null);
   }
 
+  // src/ui/discover/SaveFolderDialog.tsx
+  function folderReady(setup) {
+    return !!setup && setup.folder_ok && setup.folder_writable;
+  }
+  function folderProblem(setup) {
+    if (!setup?.folder) return null;
+    if (!setup.folder_ok) return `${setup.folder} isn't inside one of your Stash libraries any more.`;
+    if (!setup.folder_writable) return `Stash can't write to ${setup.folder}. Its library may be read-only.`;
+    return null;
+  }
+  function SaveFolderDialog({ setup, onDone, onCancel }) {
+    const { Form } = PluginApi.libraries.Bootstrap;
+    const Toast = PluginApi.hooks.useToast();
+    const usable = setup.libraries.filter((l) => l.videos && l.images).sort((a, b) => Number(b.writable) - Number(a.writable));
+    const suggest = (path) => `${path.replace(/[\\/]+$/, "")}${path.includes("\\") ? "\\" : "/"}imaglr`;
+    const firstWritable = usable.find((l) => l.writable);
+    const [folder, setFolder] = react_default.useState(folderReady(setup) && setup.folder ? setup.folder : firstWritable ? suggest(firstWritable.path) : setup.folder ?? "");
+    const [busy, setBusy] = react_default.useState(false);
+    const problem = folderProblem(setup);
+    async function accept() {
+      setBusy(true);
+      try {
+        onDone(await runOperation("save_folder_set", { folder }));
+      } catch (e) {
+        Toast.error(e);
+        setBusy(false);
+      }
+    }
+    return /* @__PURE__ */ react_default.createElement(
+      ConfirmDialog,
+      {
+        title: "Where should saved posts go?",
+        accept: "Use this folder",
+        busy,
+        disabled: !folder.trim(),
+        onAccept: accept,
+        onCancel
+      },
+      problem ? /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-warning" }, problem) : null,
+      /* @__PURE__ */ react_default.createElement("p", null, "Saved posts go into a folder inside one of your Stash libraries, so Stash adds them like any other file. Each creator gets a folder of their own."),
+      usable.length > 1 ? /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Library"), /* @__PURE__ */ react_default.createElement(
+        Form.Control,
+        {
+          as: "select",
+          className: "text-input",
+          defaultValue: firstWritable?.path,
+          onChange: (e) => setFolder(suggest(e.target.value))
+        },
+        usable.map((l) => /* @__PURE__ */ react_default.createElement("option", { key: l.path, value: l.path }, l.path, l.writable ? "" : " (read-only)"))
+      )) : null,
+      /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mb-0" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Folder"), /* @__PURE__ */ react_default.createElement(
+        Form.Control,
+        {
+          className: "text-input",
+          value: folder,
+          onChange: (e) => setFolder(e.target.value)
+        }
+      ), usable.length === 0 ? /* @__PURE__ */ react_default.createElement(Form.Text, { className: "text-warning" }, "None of your Stash libraries takes both pictures and videos.") : !firstWritable ? /* @__PURE__ */ react_default.createElement(Form.Text, { className: "text-warning" }, "Stash can't write to any of your libraries. Saving needs one it can write to.") : null)
+    );
+  }
+  function SaveFolderSection() {
+    const { Button } = PluginApi.libraries.Bootstrap;
+    const [setup, setSetup] = react_default.useState(null);
+    const [changing, setChanging] = react_default.useState(false);
+    react_default.useEffect(() => {
+      runOperation("save_setup").then(setSetup, () => setSetup(null));
+    }, []);
+    if (!setup?.enabled) return null;
+    const problem = folderProblem(setup);
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-settings-section" }, /* @__PURE__ */ react_default.createElement("h5", null, "Saving from imaglr"), /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted mb-2" }, setup.folder ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, "Saved posts go to ", /* @__PURE__ */ react_default.createElement("code", null, setup.folder), ".") : "You'll choose where saved posts go the first time you save one."), problem ? /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-warning" }, problem) : null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setChanging(true) }, setup.folder ? "Change folder" : "Choose folder"), changing ? /* @__PURE__ */ react_default.createElement(SaveFolderDialog, { setup, onCancel: () => setChanging(false), onDone: (s) => {
+      setSetup(s);
+      setChanging(false);
+    } }) : null);
+  }
+
   // src/ui/settings/Settings.tsx
   function Settings({ onClose }) {
     const { Modal, Button, Form, Alert, Badge } = PluginApi.libraries.Bootstrap;
@@ -2446,7 +2550,7 @@
         },
         Object.keys(ACTION_LABELS).map((a) => /* @__PURE__ */ react_default.createElement("option", { key: a, value: a }, ACTION_LABELS[a]))
       ), /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger", onClick: () => setRemoving(blog) }, "Remove")));
-    })) : null, blogs && blogs.length ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-refresh" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", size: "sm", onClick: refresh, disabled: checking }, checking ? "Refreshing\u2026" : "Refresh status"), /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, "Asks imaglr for each blog's name, account status and posts left today. Nothing is changed on imaglr.")) : null, /* @__PURE__ */ react_default.createElement(Form, { onSubmit: add, className: "imaglr-add-blog" }, /* @__PURE__ */ react_default.createElement("h6", null, blogs && blogs.length ? "Add a blog" : "Add your imaglr blog"), /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted" }, "On imaglr, open ", /* @__PURE__ */ react_default.createElement("a", { href: "https://imaglr.com/settings", target: "_blank", rel: "noreferrer" }, "Settings \u2192 API"), " and create a key with the ", /* @__PURE__ */ react_default.createElement("strong", null, "read"), " and ", /* @__PURE__ */ react_default.createElement("strong", null, "manage"), " permissions (leave ", /* @__PURE__ */ react_default.createElement("strong", null, "write"), " off: the plugin never needs it). Each key belongs to one blog. The key is stored only in this plugin and never shown again."), /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "API key"), /* @__PURE__ */ react_default.createElement(
+    })) : null, blogs && blogs.length ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-refresh" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", size: "sm", onClick: refresh, disabled: checking }, checking ? "Refreshing\u2026" : "Refresh status"), /* @__PURE__ */ react_default.createElement("small", { className: "text-muted" }, "Asks imaglr for each blog's name, account status and posts left today. Nothing is changed on imaglr.")) : null, /* @__PURE__ */ react_default.createElement(Form, { onSubmit: add, className: "imaglr-add-blog" }, /* @__PURE__ */ react_default.createElement("h6", null, blogs && blogs.length ? "Add a blog" : "Add your imaglr blog"), /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted" }, "On imaglr, open ", /* @__PURE__ */ react_default.createElement("a", { href: "https://imaglr.com/settings", target: "_blank", rel: "noreferrer" }, "Settings \u2192 API"), " and create a key with the ", /* @__PURE__ */ react_default.createElement("strong", null, "read"), " and ", /* @__PURE__ */ react_default.createElement("strong", null, "manage"), " permissions. Add ", /* @__PURE__ */ react_default.createElement("strong", null, "write"), " too if you want to reblog. Each key belongs to one blog. The key is stored only in this plugin and never shown again."), /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "API key"), /* @__PURE__ */ react_default.createElement(
       Form.Control,
       {
         className: "text-input",
@@ -2465,7 +2569,7 @@
         onChange: (e) => setDefaultAction(e.target.value)
       },
       Object.keys(ACTION_LABELS).map((a) => /* @__PURE__ */ react_default.createElement("option", { key: a, value: a }, ACTION_LABELS[a]))
-    ), /* @__PURE__ */ react_default.createElement(Form.Text, { muted: true }, "You can still choose differently each time you send.")), error ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "danger" }, error) : null, /* @__PURE__ */ react_default.createElement(Button, { type: "submit", variant: "primary", disabled: adding || !key.trim() }, adding ? "Checking the key\u2026" : "Add blog")), /* @__PURE__ */ react_default.createElement(TagRules, null), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-danger-zone" }, /* @__PURE__ */ react_default.createElement("h5", null, "Delete all plugin data"), /* @__PURE__ */ react_default.createElement("p", { className: "text-muted small mb-2" }, "Removes every blog and its key, the sent history, tag rules and working files. Do this before uninstalling if you don't want the keys left behind: Stash's plugin manager leaves the plugin's data folder in place. Nothing in Stash or on imaglr changes."), /* @__PURE__ */ react_default.createElement(Button, { variant: "danger", onClick: () => setResetting(true) }, "Delete all plugin data\u2026"))), /* @__PURE__ */ react_default.createElement(Modal.Footer, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => onClose(changed) }, "Close")), resetting ? /* @__PURE__ */ react_default.createElement(
+    ), /* @__PURE__ */ react_default.createElement(Form.Text, { muted: true }, "You can still choose differently each time you send.")), error ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "danger" }, error) : null, /* @__PURE__ */ react_default.createElement(Button, { type: "submit", variant: "primary", disabled: adding || !key.trim() }, adding ? "Checking the key\u2026" : "Add blog")), /* @__PURE__ */ react_default.createElement(TagRules, null), /* @__PURE__ */ react_default.createElement(SaveFolderSection, null), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-danger-zone" }, /* @__PURE__ */ react_default.createElement("h5", null, "Delete all plugin data"), /* @__PURE__ */ react_default.createElement("p", { className: "text-muted small mb-2" }, "Removes every blog and its key, the sent history, tag rules and working files. Do this before uninstalling if you don't want the keys left behind: Stash's plugin manager leaves the plugin's data folder in place. Nothing in Stash or on imaglr changes."), /* @__PURE__ */ react_default.createElement(Button, { variant: "danger", onClick: () => setResetting(true) }, "Delete all plugin data\u2026"))), /* @__PURE__ */ react_default.createElement(Modal.Footer, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => onClose(changed) }, "Close")), resetting ? /* @__PURE__ */ react_default.createElement(
       ConfirmDialog,
       {
         title: "Delete all plugin data",
@@ -2489,6 +2593,451 @@
     ) : null);
   }
 
+  // src/ui/lib/posts.ts
+  var SAVING = ["queued", "downloading", "scanning"];
+  function relativeTime(iso, now = /* @__PURE__ */ new Date()) {
+    if (!iso) return "";
+    const then = new Date(iso);
+    const seconds = (now.getTime() - then.getTime()) / 1e3;
+    if (Number.isNaN(seconds)) return "";
+    if (seconds < 60) return "now";
+    if (seconds < 3600) return `${Math.floor(seconds / 60)} min`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)} h`;
+    if (seconds < 7 * 86400) return `${Math.floor(seconds / 86400)} d`;
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const day = `${then.getUTCDate()} ${months[then.getUTCMonth()]}`;
+    return then.getUTCFullYear() === now.getUTCFullYear() ? day : `${day} ${then.getUTCFullYear()}`;
+  }
+  function savedPath(refs) {
+    const ref = refs.find((r) => r.kind === "gallery") ?? refs[0];
+    if (!ref) return null;
+    return `${ref.kind === "gallery" ? "galleries" : ref.kind === "scene" ? "scenes" : "images"}/${ref.id}`;
+  }
+  function parseSearch(text) {
+    const value = text.trim();
+    if (!value) return null;
+    const link = value.match(/imaglr\.[a-z.]+\/post\/(\d+)/i) ?? value.match(/^(\d{3,})$/);
+    if (link) return { kind: "post", value: link[1] };
+    const profile = value.match(/imaglr\.[a-z.]+\/profile\/([^/?#\s]+)/i);
+    if (profile) return { kind: "creator", value: decodeURIComponent(profile[1]) };
+    if (value.startsWith("@")) return value.length > 1 ? { kind: "creator", value: value.slice(1).trim() } : null;
+    const tag = value.replace(/^#/, "").trim();
+    return tag ? { kind: "tag", value: tag } : null;
+  }
+  function mediaRatio(m) {
+    return m.width && m.height ? m.width / m.height : 4 / 5;
+  }
+  function avatarFallback(url) {
+    if (!url) return null;
+    const fixed = url.replace(/^(https:\/\/cdn\d{0,3}\.imaglr\.com)\/storage\/avatars\//, "$1/avatars/");
+    return fixed === url ? null : fixed;
+  }
+  function shortCount(n) {
+    if (n < 1e3) return String(n);
+    if (n < 1e4) return `${(n / 1e3).toFixed(1).replace(/\.0$/, "")}k`;
+    return `${Math.round(n / 1e3)}k`;
+  }
+
+  // src/ui/discover/PostCard.tsx
+  var AutoplayContext = react_default.createContext(false);
+  var previews = /* @__PURE__ */ new Map();
+  var waiting = [];
+  var running = 0;
+  var MAX_FETCHES = 2;
+  function previewSrc(url) {
+    let p = previews.get(url);
+    if (!p) {
+      p = new Promise((go) => {
+        if (running < MAX_FETCHES) {
+          running += 1;
+          go();
+        } else waiting.push(() => {
+          running += 1;
+          go();
+        });
+      }).then(() => runOperation("media_preview", { url })).then((r) => baseUrl() + r.src).finally(() => {
+        running -= 1;
+        waiting.shift()?.();
+      });
+      p.catch(() => previews.delete(url));
+      previews.set(url, p);
+    }
+    return p;
+  }
+  var playing = null;
+  var wantsSound = false;
+  function useInView(ref) {
+    const [state, setState] = react_default.useState({ near: false, visible: 0 });
+    react_default.useEffect(() => {
+      const el = ref.current;
+      if (!el || typeof IntersectionObserver === "undefined") return;
+      const near = new IntersectionObserver(
+        ([e]) => setState((s) => s.near || !e.isIntersecting ? s : { ...s, near: true }),
+        { rootMargin: "100% 0px" }
+      );
+      const seen = new IntersectionObserver(
+        ([e]) => setState((s) => ({ ...s, visible: e.intersectionRatio })),
+        { threshold: [0, 0.25, 0.6, 0.9] }
+      );
+      near.observe(el);
+      seen.observe(el);
+      return () => {
+        near.disconnect();
+        seen.disconnect();
+      };
+    }, [ref]);
+    return state;
+  }
+  function start(v, withSound) {
+    if (playing && playing !== v) playing.pause();
+    playing = v;
+    v.muted = !withSound;
+    v.play().catch(() => {
+      v.muted = true;
+      v.play().catch(() => void 0);
+    });
+  }
+  function VideoMedia({ media }) {
+    const { Icon } = PluginApi.components;
+    const autoplay = react_default.useContext(AutoplayContext);
+    const box = react_default.useRef(null);
+    const video = react_default.useRef(null);
+    const { near, visible } = useInView(box);
+    const [wanted, setWanted] = react_default.useState(false);
+    const [src, setSrc] = react_default.useState(null);
+    const [problem, setProblem] = react_default.useState(null);
+    react_default.useEffect(() => {
+      if (!(autoplay ? near : wanted) || src || problem) return;
+      let live = true;
+      previewSrc(media.url).then((s) => live && setSrc(s), (e) => live && setProblem(e.message));
+      return () => {
+        live = false;
+      };
+    }, [autoplay, near, wanted, src, problem, media.url]);
+    react_default.useEffect(() => {
+      const v = video.current;
+      if (!v || !src) return;
+      if (autoplay && visible >= 0.6) start(v, wantsSound);
+      else if (visible < 0.25 && !v.paused) v.pause();
+    }, [autoplay, visible, src]);
+    react_default.useEffect(() => {
+      if (!autoplay && wanted && src && video.current) start(video.current, true);
+    }, [autoplay, wanted, src]);
+    const waiting2 = autoplay ? !src && !problem : wanted && !src && !problem;
+    return /* @__PURE__ */ react_default.createElement("div", { ref: box, className: "imaglr-post-media", style: { aspectRatio: String(mediaRatio(media)) } }, /* @__PURE__ */ react_default.createElement(
+      "video",
+      {
+        ref: video,
+        src: src ?? void 0,
+        poster: media.thumb ?? void 0,
+        loop: true,
+        playsInline: true,
+        controls: !!src,
+        preload: "metadata",
+        onVolumeChange: (e) => {
+          wantsSound = !e.currentTarget.muted;
+        },
+        onPlay: (e) => {
+          if (playing && playing !== e.currentTarget) playing.pause();
+          playing = e.currentTarget;
+        }
+      }
+    ), !autoplay && !wanted ? /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "imaglr-post-play", "aria-label": "Play", onClick: () => setWanted(true) }, /* @__PURE__ */ react_default.createElement(Icon, { icon: PluginApi.libraries.FontAwesomeSolid.faPlay })) : null, waiting2 ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-loading" }, /* @__PURE__ */ react_default.createElement("span", { className: "spinner-border spinner-border-sm" })) : null, problem ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-problem small" }, problem) : null);
+  }
+  function PictureMedia({ media }) {
+    const direct = media.url.startsWith("https://");
+    const box = react_default.useRef(null);
+    const { near } = useInView(box);
+    const [src, setSrc] = react_default.useState(direct ? media.url : null);
+    react_default.useEffect(() => {
+      if (!direct && near && !src) previewSrc(media.url).then(setSrc, () => void 0);
+    }, [direct, near, src, media.url]);
+    return /* @__PURE__ */ react_default.createElement("div", { ref: box, className: "imaglr-post-media", style: { aspectRatio: String(mediaRatio(media)) } }, src ? /* @__PURE__ */ react_default.createElement("img", { src, alt: "", loading: "lazy", decoding: "async" }) : null);
+  }
+  function Media({ media }) {
+    const strip = react_default.useRef(null);
+    const [index, setIndex] = react_default.useState(0);
+    if (media.length === 0) return null;
+    if (media.length === 1) return media[0].kind === "video" ? /* @__PURE__ */ react_default.createElement(VideoMedia, { media: media[0] }) : /* @__PURE__ */ react_default.createElement(PictureMedia, { media: media[0] });
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-carousel" }, /* @__PURE__ */ react_default.createElement(
+      "div",
+      {
+        ref: strip,
+        className: "imaglr-post-strip",
+        onScroll: (e) => setIndex(Math.round(e.currentTarget.scrollLeft / Math.max(1, e.currentTarget.clientWidth)))
+      },
+      media.map((m, n) => /* @__PURE__ */ react_default.createElement("div", { key: n, className: "imaglr-post-slide" }, m.kind === "video" ? /* @__PURE__ */ react_default.createElement(VideoMedia, { media: m }) : /* @__PURE__ */ react_default.createElement(PictureMedia, { media: m })))
+    ), /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-post-counter badge badge-dark" }, index + 1, " / ", media.length));
+  }
+  function Avatar({ url, name, large }) {
+    const [src, setSrc] = react_default.useState(url);
+    react_default.useEffect(() => setSrc(url), [url]);
+    const className = `imaglr-avatar${large ? " imaglr-avatar-large" : ""}`;
+    if (!src) return /* @__PURE__ */ react_default.createElement("span", { className: `${className} imaglr-avatar-letter`, "aria-hidden": "true" }, (name[0] ?? "?").toUpperCase());
+    return /* @__PURE__ */ react_default.createElement("img", { className, src, alt: "", loading: "lazy", onError: () => setSrc(src === url ? avatarFallback(url) : null) });
+  }
+  function PostCard({ post, save: save2, onCreator, onTag, onSave, onReblog }) {
+    const { Button } = PluginApi.libraries.Bootstrap;
+    const { Link } = PluginApi.libraries.ReactRouterDOM;
+    const { Icon } = PluginApi.components;
+    const fa = PluginApi.libraries.FontAwesomeSolid;
+    const [expanded, setExpanded] = react_default.useState(false);
+    const state = save2 ?? post.save;
+    const refs = state?.status === "done" ? state.refs : post.saved;
+    const inLibrary = savedPath(refs);
+    const saving = !!state && SAVING.includes(state.status);
+    const longCaption = post.summary.length > 160 || post.summary.split("\n").length > 3;
+    return /* @__PURE__ */ react_default.createElement("article", { className: "card imaglr-post" }, /* @__PURE__ */ react_default.createElement("header", { className: "imaglr-post-head" }, /* @__PURE__ */ react_default.createElement(Avatar, { url: post.creator.avatar, name: post.creator.name }), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-who" }, /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "btn btn-link imaglr-post-name", onClick: () => onCreator(post.creator.name) }, post.creator.name || "someone"), post.original ? /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted" }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faRetweet }), " ", /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "btn btn-link imaglr-post-original", onClick: () => onCreator(post.original.creator.name) }, post.original.creator.name || "the original")) : null), /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted imaglr-post-time" }, relativeTime(post.created_at)), post.url ? /* @__PURE__ */ react_default.createElement("a", { className: "btn btn-link imaglr-post-open", href: post.url, target: "_blank", rel: "noopener noreferrer", title: "Open on imaglr" }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faExternalLinkAlt })) : null), /* @__PURE__ */ react_default.createElement(Media, { media: post.media }), /* @__PURE__ */ react_default.createElement("div", { className: "card-body imaglr-post-body" }, post.summary ? /* @__PURE__ */ react_default.createElement("p", { className: `imaglr-post-caption${expanded || !longCaption ? "" : " imaglr-post-caption-short"}` }, post.summary) : null, longCaption && !expanded ? /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "btn btn-link p-0 small", onClick: () => setExpanded(true) }, "more") : null, post.tags.length ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-tags" }, post.tags.map((t) => /* @__PURE__ */ react_default.createElement("button", { key: t, type: "button", className: "tag-item badge badge-secondary", onClick: () => onTag(t) }, "#", t))) : null, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-actions" }, /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted imaglr-post-notes" }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faHeart }), " ", shortCount(post.notes.likes), /* @__PURE__ */ react_default.createElement("span", { className: "ml-3" }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faRetweet }), " ", shortCount(post.notes.reposts))), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => onReblog(post) }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faRetweet }), " Reblog"), post.media.length === 0 ? null : inLibrary ? /* @__PURE__ */ react_default.createElement(Link, { className: "btn btn-secondary imaglr-post-saved", to: `/${inLibrary}` }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faCheck }), " In your library") : saving ? /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", disabled: true }, /* @__PURE__ */ react_default.createElement("span", { className: "spinner-border spinner-border-sm" }), " ", state.status === "scanning" ? "Adding to Stash\u2026" : `Saving\u2026 ${Math.round(state.progress * 100)}%`) : /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => onSave(post) }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faDownload }), " ", state?.status === "failed" ? "Try again" : "Save")), state?.status === "failed" && state.error ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning mt-2" }, state.error) : null));
+  }
+
+  // src/ui/discover/PostFeed.tsx
+  function CreatorHeader({ profile }) {
+    const { Icon } = PluginApi.components;
+    const fa = PluginApi.libraries.FontAwesomeSolid;
+    return /* @__PURE__ */ react_default.createElement("div", { className: "card imaglr-creator" }, /* @__PURE__ */ react_default.createElement("div", { className: "card-body" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-creator-head" }, /* @__PURE__ */ react_default.createElement(Avatar, { url: profile.avatar, name: profile.name, large: true }), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement("h4", { className: "mb-1" }, profile.name), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted" }, shortCount(profile.counts.posts), " posts \xB7 ", shortCount(profile.counts.followers), " followers")), profile.url ? /* @__PURE__ */ react_default.createElement("a", { className: "btn btn-secondary ml-auto", href: profile.url, target: "_blank", rel: "noopener noreferrer" }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faExternalLinkAlt }), " imaglr") : null), profile.description ? /* @__PURE__ */ react_default.createElement("p", { className: "imaglr-creator-bio mt-2 mb-0" }, profile.description) : null));
+  }
+  function PostFeed({ source, tag, name, blogId, saves, onCreator, onTag, onSave, onReblog }) {
+    const { Button } = PluginApi.libraries.Bootstrap;
+    const { LoadingIndicator } = PluginApi.components;
+    const [posts, setPosts] = react_default.useState([]);
+    const [next, setNext] = react_default.useState(null);
+    const [profile, setProfile] = react_default.useState(null);
+    const [loading, setLoading] = react_default.useState(false);
+    const [error, setError] = react_default.useState(null);
+    const [ended, setEnded] = react_default.useState(false);
+    const sentinel = react_default.useRef(null);
+    const busy = react_default.useRef(false);
+    const key = `${source}|${tag ?? ""}|${name ?? ""}|${blogId ?? ""}`;
+    const current = react_default.useRef(key);
+    const load2 = react_default.useCallback(async (link) => {
+      if (busy.current) return;
+      busy.current = true;
+      setLoading(true);
+      const asked = key;
+      try {
+        const page = await runOperation("browse", { source, tag, name, next: link, blog_id: blogId ?? void 0 });
+        if (current.current !== asked) return;
+        setPosts((old) => {
+          const seen = new Set(old.map((p) => p.id));
+          return [...link ? old : [], ...page.posts.filter((p) => !link || !seen.has(p.id))];
+        });
+        if (!link) setProfile(page.profile);
+        setNext(page.next);
+        setEnded(!page.next);
+        setError(null);
+      } catch (e) {
+        if (current.current === asked) setError(e.message);
+      } finally {
+        busy.current = false;
+        setLoading(false);
+      }
+    }, [key]);
+    react_default.useEffect(() => {
+      current.current = key;
+      setPosts([]);
+      setNext(null);
+      setProfile(null);
+      setEnded(false);
+      setError(null);
+      busy.current = false;
+      load2(null);
+    }, [key]);
+    react_default.useEffect(() => {
+      const el = sentinel.current;
+      if (!el || !next || error || typeof IntersectionObserver === "undefined") return;
+      const watch = new IntersectionObserver(([e]) => e.isIntersecting && load2(next), { rootMargin: "150% 0px" });
+      watch.observe(el);
+      return () => watch.disconnect();
+    }, [next, error, load2]);
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-feed" }, profile ? /* @__PURE__ */ react_default.createElement(CreatorHeader, { profile }) : null, posts.map((p) => /* @__PURE__ */ react_default.createElement(
+      PostCard,
+      {
+        key: p.id,
+        post: p,
+        save: saves.get(p.credit_id) ?? null,
+        onCreator,
+        onTag,
+        onSave,
+        onReblog
+      }
+    )), /* @__PURE__ */ react_default.createElement("div", { ref: sentinel }), loading ? LoadingIndicator ? /* @__PURE__ */ react_default.createElement(LoadingIndicator, { small: true }) : /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Loading\u2026") : null, error ? /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-warning imaglr-feed-end" }, error, " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", size: "sm", onClick: () => load2(posts.length ? next : null) }, "Try again")) : null, ended && !loading && !error ? /* @__PURE__ */ react_default.createElement("p", { className: "text-muted text-center imaglr-feed-end" }, posts.length ? "That's everything for now." : "Nothing here yet.") : null);
+  }
+
+  // src/ui/discover/Discover.tsx
+  var DISCOVER_TABS = [
+    { key: "feed", title: "Feed" },
+    { key: "likes", title: "Likes" },
+    { key: "explore", title: "Explore" }
+  ];
+  var POLL_MS = 2e3;
+  var BLOG_KEY = "imaglr.browseBlog";
+  function storedBlog() {
+    try {
+      const v = window.localStorage.getItem(BLOG_KEY);
+      return v ? Number(v) : null;
+    } catch {
+      return null;
+    }
+  }
+  function useSaves() {
+    const [saves, setSaves] = react_default.useState(/* @__PURE__ */ new Map());
+    const busy = [...saves.values()].some((s) => SAVING.includes(s.status));
+    react_default.useEffect(() => {
+      if (!busy) return;
+      const timer = window.setTimeout(() => {
+        runOperation("save_status").then((r) => {
+          setSaves((old) => {
+            const fresh = new Map(old);
+            for (const s of r.saves) if (fresh.has(s.post_id)) fresh.set(s.post_id, s);
+            return fresh;
+          });
+        }, () => setSaves((old) => new Map(old)));
+      }, POLL_MS);
+      return () => window.clearTimeout(timer);
+    }, [saves, busy]);
+    return { saves, put: (s) => setSaves((old) => new Map(old).set(s.post_id, s)) };
+  }
+  function ReblogDialog({ post, blogs, onClose }) {
+    const { Form } = PluginApi.libraries.Bootstrap;
+    const Toast = PluginApi.hooks.useToast();
+    const [blogId, setBlogId] = react_default.useState(blogs[0]?.id ?? null);
+    const [busy, setBusy] = react_default.useState(false);
+    const blog = blogs.find((b) => b.id === blogId);
+    async function accept() {
+      if (!blog) return;
+      setBusy(true);
+      try {
+        await runOperation("reblog", { post_id: post.id, blog_id: blog.id });
+        Toast.success(`Reblogged to ${blog.label}.`);
+        onClose();
+      } catch (e) {
+        Toast.error(e);
+        setBusy(false);
+      }
+    }
+    return /* @__PURE__ */ react_default.createElement(ConfirmDialog, { title: "Reblog", accept: "Reblog", busy, disabled: !blog, onAccept: accept, onCancel: onClose }, blogs.length > 1 ? /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "To"), /* @__PURE__ */ react_default.createElement(
+      Form.Control,
+      {
+        as: "select",
+        className: "text-input",
+        value: blogId ?? "",
+        onChange: (e) => setBlogId(Number(e.target.value))
+      },
+      blogs.map((b) => /* @__PURE__ */ react_default.createElement("option", { key: b.id, value: b.id }, b.label))
+    )) : null, blog ? /* @__PURE__ */ react_default.createElement("p", { className: "mb-0" }, "Reblog ", post.creator.name ? `@${post.creator.name}'s post` : "this post", " to ", blog.label, "? It appears on your blog straight away.") : /* @__PURE__ */ react_default.createElement("p", { className: "mb-0" }, "Add a blog in the plugin's settings first."));
+  }
+  function Explore({ params, onSearch, children }) {
+    const { Form, Button, InputGroup } = PluginApi.libraries.Bootstrap;
+    const initial = params.get("creator") ? `@${params.get("creator")}` : params.get("tag") ? `#${params.get("tag")}` : params.get("post") ?? "";
+    const [text, setText] = react_default.useState(initial);
+    react_default.useEffect(() => setText(initial), [initial]);
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-feed" }, /* @__PURE__ */ react_default.createElement(Form, { onSubmit: (e) => {
+      e.preventDefault();
+      onSearch(text);
+    }, className: "imaglr-explore-search" }, /* @__PURE__ */ react_default.createElement(InputGroup, null, /* @__PURE__ */ react_default.createElement(
+      Form.Control,
+      {
+        className: "text-input",
+        value: text,
+        placeholder: "#tag, @creator or a post link",
+        enterKeyHint: "search",
+        onChange: (e) => setText(e.target.value)
+      }
+    ), /* @__PURE__ */ react_default.createElement(InputGroup.Append, null, /* @__PURE__ */ react_default.createElement(Button, { type: "submit", variant: "primary" }, "Go")))), children);
+  }
+  function SinglePost({ id, ...handlers }) {
+    const [post, setPost] = react_default.useState(null);
+    const [error, setError] = react_default.useState(null);
+    react_default.useEffect(() => {
+      setPost(null);
+      setError(null);
+      runOperation("post_find", { link: id, blog_id: handlers.blogId ?? void 0 }).then((r) => setPost(r.post), (e) => setError(e.message));
+    }, [id, handlers.blogId]);
+    if (error) return /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-warning" }, error);
+    if (!post) return /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Loading\u2026");
+    return /* @__PURE__ */ react_default.createElement(
+      PostCard,
+      {
+        post,
+        save: handlers.saves.get(post.credit_id) ?? null,
+        onCreator: handlers.onCreator,
+        onTag: handlers.onTag,
+        onSave: handlers.onSave,
+        onReblog: handlers.onReblog
+      }
+    );
+  }
+  function Discover({ tab, params, blogs, go }) {
+    const { Form } = PluginApi.libraries.Bootstrap;
+    const Toast = PluginApi.hooks.useToast();
+    const [setup, setSetup] = react_default.useState(null);
+    const [pendingSave, setPendingSave] = react_default.useState(null);
+    const [reblogging, setReblogging] = react_default.useState(null);
+    const [visited, setVisited] = react_default.useState(/* @__PURE__ */ new Set([tab]));
+    const [blogId, setBlogId] = react_default.useState(() => {
+      const stored = storedBlog();
+      return blogs.some((b) => b.id === stored) ? stored : (blogs.find((b) => b.ok) ?? blogs[0])?.id ?? null;
+    });
+    const { saves, put } = useSaves();
+    react_default.useEffect(() => setVisited((v) => v.has(tab) ? v : new Set(v).add(tab)), [tab]);
+    react_default.useEffect(() => {
+      runOperation("save_setup").then(setSetup, () => setSetup(null));
+    }, []);
+    const explore = {
+      onCreator: (name) => name && go({ tab: "explore", creator: name }, true),
+      onTag: (tag2) => go({ tab: "explore", tag: tag2 }, true)
+    };
+    async function startSave(post, ready = setup) {
+      if (!folderReady(ready)) {
+        setPendingSave(post);
+        return;
+      }
+      put({ post_id: post.credit_id, status: "queued", progress: 0, error: null, refs: [] });
+      try {
+        const r = await runOperation("save_post", { post_id: post.id, blog_id: blogId ?? void 0 });
+        put(r.save);
+      } catch (e) {
+        put({ post_id: post.credit_id, status: "failed", progress: 0, error: e.message, refs: [] });
+        Toast.error(e);
+      }
+    }
+    const handlers = { ...explore, saves, blogId, onSave: (p) => startSave(p), onReblog: setReblogging };
+    function search(text) {
+      const found = parseSearch(text);
+      if (!found) return;
+      go(found.kind === "creator" ? { tab: "explore", creator: found.value } : found.kind === "tag" ? { tab: "explore", tag: found.value } : { tab: "explore", post: found.value }, true);
+    }
+    if (blogs.length === 0) {
+      return /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-info" }, "Add your imaglr blog in Settings to browse imaglr from here.");
+    }
+    const creator = params.get("creator");
+    const tag = params.get("tag");
+    const postId = params.get("post");
+    return /* @__PURE__ */ react_default.createElement(AutoplayContext.Provider, { value: !!setup?.autoplay }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-discover" }, blogs.length > 1 ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-discover-as" }, /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted" }, "Browsing as"), /* @__PURE__ */ react_default.createElement(
+      Form.Control,
+      {
+        as: "select",
+        size: "sm",
+        className: "text-input",
+        value: blogId ?? "",
+        onChange: (e) => {
+          const id = Number(e.target.value);
+          setBlogId(id);
+          try {
+            window.localStorage.setItem(BLOG_KEY, String(id));
+          } catch {
+          }
+        }
+      },
+      blogs.map((b) => /* @__PURE__ */ react_default.createElement("option", { key: b.id, value: b.id }, b.label))
+    )) : null, visited.has("feed") ? /* @__PURE__ */ react_default.createElement("div", { hidden: tab !== "feed" }, /* @__PURE__ */ react_default.createElement(PostFeed, { source: "feed", ...handlers })) : null, visited.has("likes") ? /* @__PURE__ */ react_default.createElement("div", { hidden: tab !== "likes" }, /* @__PURE__ */ react_default.createElement(PostFeed, { source: "likes", ...handlers })) : null, tab === "explore" ? /* @__PURE__ */ react_default.createElement(Explore, { params, onSearch: search }, creator ? /* @__PURE__ */ react_default.createElement(PostFeed, { source: "creator", name: creator, ...handlers }) : tag ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("h4", { className: "imaglr-explore-title" }, "#", tag), /* @__PURE__ */ react_default.createElement(PostFeed, { source: "tag", tag, ...handlers })) : postId ? /* @__PURE__ */ react_default.createElement(SinglePost, { id: postId, ...handlers }) : /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Find posts by tag, see everything a creator has posted, or paste a link to a post to save it.")) : null, pendingSave && setup ? /* @__PURE__ */ react_default.createElement(SaveFolderDialog, { setup, onCancel: () => setPendingSave(null), onDone: (s) => {
+      setSetup(s);
+      const post = pendingSave;
+      setPendingSave(null);
+      if (folderReady(s)) startSave(post, s);
+    } }) : null, reblogging ? /* @__PURE__ */ react_default.createElement(ReblogDialog, { post: reblogging, blogs, onClose: () => setReblogging(null) }) : null));
+  }
+
   // src/ui/PostPage.tsx
   var TABS = [
     { key: "clips", title: "Clips" },
@@ -2498,7 +3047,10 @@
   function isTab(key) {
     return TABS.some((t) => t.key === key);
   }
-  var POLL_MS = 2e3;
+  function isDiscoverTab(key) {
+    return DISCOVER_TABS.some((t) => t.key === key);
+  }
+  var POLL_MS2 = 2e3;
   var BUSY3 = ["exporting", "sending"];
   function useQueue(paused) {
     const [data, setData] = react_default.useState(null);
@@ -2527,7 +3079,7 @@
           setError(e.message);
           setTick((t) => t + 1);
         });
-      }, POLL_MS);
+      }, POLL_MS2);
       return () => window.clearTimeout(timer);
     }, [tick, inFlight, paused, load2]);
     return { data, error, load: load2 };
@@ -2547,14 +3099,20 @@
     return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-footer text-muted small" }, "Imaglr Integration v", ping.plugin_version, " \xB7 Stash ", ping.stash_version);
   }
   function PostPage() {
-    const { Nav, Tab, Button, Alert } = PluginApi.libraries.Bootstrap;
+    const { Nav, Tab, Button, Alert, ButtonGroup } = PluginApi.libraries.Bootstrap;
     const { useHistory, useLocation } = PluginApi.libraries.ReactRouterDOM;
     const { Icon } = PluginApi.components;
     const history = useHistory();
     const params = new URLSearchParams(useLocation().search);
     const openId = params.get("open");
     const requested = params.get("tab");
+    const [browsing, setBrowsing] = react_default.useState(false);
+    const discoverTab = browsing && isDiscoverTab(requested) ? requested : null;
     const tab = isTab(requested) ? requested : "clips";
+    const [lastDiscover, setLastDiscover] = react_default.useState(null);
+    react_default.useEffect(() => {
+      if (discoverTab) setLastDiscover(discoverTab);
+    }, [discoverTab]);
     const [blogs, setBlogs] = react_default.useState(null);
     const [showBlogs, setShowBlogs] = react_default.useState(false);
     const [reloadKey, setReloadKey] = react_default.useState(0);
@@ -2569,16 +3127,25 @@
     }, []);
     react_default.useEffect(loadBlogs, [loadBlogs]);
     react_default.useEffect(() => {
+      runOperation("save_setup").then((s) => setBrowsing(s.enabled), () => setBrowsing(false));
+    }, []);
+    react_default.useEffect(() => {
       const previous = document.title;
-      document.title = "Post to imaglr | Stash";
+      document.title = browsing ? "imaglr | Stash" : "Post to imaglr | Stash";
       return () => {
         document.title = previous;
       };
-    }, []);
+    }, [browsing]);
     function setTab(key) {
       history.replace({ search: `?tab=${key}` });
     }
-    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-page container-fluid" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-page-header" }, /* @__PURE__ */ react_default.createElement("h2", { className: "imaglr-page-title" }, "Post to imaglr"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setShowBlogs(true) }, /* @__PURE__ */ react_default.createElement(Icon, { icon: PluginApi.libraries.FontAwesomeSolid.faCog }), " Settings")), blogs && blogs.length === 0 ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info", className: "imaglr-welcome" }, /* @__PURE__ */ react_default.createElement("strong", null, "Add your imaglr blog to start."), " You'll need an API key from imaglr (paid supporters only).", " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", size: "sm", onClick: () => setShowBlogs(true) }, "Open settings")) : null, /* @__PURE__ */ react_default.createElement(Tab.Container, { activeKey: tab, onSelect: (key) => key && setTab(key) }, /* @__PURE__ */ react_default.createElement(Nav, { variant: "tabs", className: "imaglr-tabs" }, TABS.map(({ key, title }) => /* @__PURE__ */ react_default.createElement(Nav.Item, { key }, /* @__PURE__ */ react_default.createElement(Nav.Link, { eventKey: key }, /* @__PURE__ */ react_default.createElement(TabTitle, { title, count: counts?.[key] }))))), /* @__PURE__ */ react_default.createElement(Tab.Content, { className: "imaglr-tab-content", key: reloadKey }, /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "clips" }, tab === "clips" ? /* @__PURE__ */ react_default.createElement(QueueTab, { tab: "clips", openId, ...queue }) : null), /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "images" }, tab === "images" ? /* @__PURE__ */ react_default.createElement(QueueTab, { tab: "images", openId, ...queue }) : null), /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "sent" }, tab === "sent" ? /* @__PURE__ */ react_default.createElement(SentTab, { openId }) : null))), /* @__PURE__ */ react_default.createElement(BackendStatus, null), showBlogs ? /* @__PURE__ */ react_default.createElement(
+    function go(search, push = false) {
+      const location = { search: `?${new URLSearchParams(search).toString()}` };
+      if (push) history.push(location);
+      else history.replace(location);
+    }
+    const shareTabs = /* @__PURE__ */ react_default.createElement(Tab.Container, { activeKey: tab, onSelect: (key) => key && setTab(key) }, /* @__PURE__ */ react_default.createElement(Nav, { variant: "tabs", className: "imaglr-tabs" }, TABS.map(({ key, title }) => /* @__PURE__ */ react_default.createElement(Nav.Item, { key }, /* @__PURE__ */ react_default.createElement(Nav.Link, { eventKey: key }, /* @__PURE__ */ react_default.createElement(TabTitle, { title, count: counts?.[key] }))))), /* @__PURE__ */ react_default.createElement(Tab.Content, { className: "imaglr-tab-content", key: reloadKey }, /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "clips" }, tab === "clips" ? /* @__PURE__ */ react_default.createElement(QueueTab, { tab: "clips", openId, ...queue }) : null), /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "images" }, tab === "images" ? /* @__PURE__ */ react_default.createElement(QueueTab, { tab: "images", openId, ...queue }) : null), /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "sent" }, tab === "sent" ? /* @__PURE__ */ react_default.createElement(SentTab, { openId }) : null)));
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-page container-fluid" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-page-header" }, /* @__PURE__ */ react_default.createElement("h2", { className: "imaglr-page-title" }, browsing ? "imaglr" : "Post to imaglr"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setShowBlogs(true) }, /* @__PURE__ */ react_default.createElement(Icon, { icon: PluginApi.libraries.FontAwesomeSolid.faCog }), " Settings")), blogs && blogs.length === 0 ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info", className: "imaglr-welcome" }, /* @__PURE__ */ react_default.createElement("strong", null, "Add your imaglr blog to start."), " You'll need an API key from imaglr (paid supporters only).", " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", size: "sm", onClick: () => setShowBlogs(true) }, "Open settings")) : null, browsing ? /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented imaglr-sections" }, /* @__PURE__ */ react_default.createElement(Button, { variant: discoverTab ? "secondary" : "primary", onClick: () => setTab(tab) }, "Share"), /* @__PURE__ */ react_default.createElement(Button, { variant: discoverTab ? "primary" : "secondary", onClick: () => setTab(discoverTab ?? "feed") }, "Discover")) : null, lastDiscover || discoverTab ? /* @__PURE__ */ react_default.createElement("div", { hidden: !discoverTab }, /* @__PURE__ */ react_default.createElement(Tab.Container, { activeKey: discoverTab ?? lastDiscover, onSelect: (key) => key && setTab(key) }, /* @__PURE__ */ react_default.createElement(Nav, { variant: "tabs", className: "imaglr-tabs" }, DISCOVER_TABS.map(({ key, title }) => /* @__PURE__ */ react_default.createElement(Nav.Item, { key }, /* @__PURE__ */ react_default.createElement(Nav.Link, { eventKey: key }, title)))), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tab-content" }, blogs ? /* @__PURE__ */ react_default.createElement(Discover, { tab: discoverTab ?? lastDiscover, params, blogs, go }) : null))) : null, discoverTab ? null : shareTabs, /* @__PURE__ */ react_default.createElement(BackendStatus, null), showBlogs ? /* @__PURE__ */ react_default.createElement(
       Settings,
       {
         onClose: (changed) => {

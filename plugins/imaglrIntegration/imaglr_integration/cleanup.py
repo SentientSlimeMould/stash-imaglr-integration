@@ -41,6 +41,8 @@ def cleanup_prepared(db: Database, prepared_root: str, retention_days: int, now:
     known = {r["id"] for r in db.fetchall("SELECT id FROM items")}
     for name in os.listdir(prepared_root):
         folder = os.path.join(prepared_root, name)
+        if name.startswith("_"):  # the plugin's own working folders (_browse: videos being previewed)
+            continue
         if name not in known and os.path.isdir(folder) and time.time() - os.path.getmtime(folder) > ORPHAN_GRACE_SECONDS:
             removed += _remove(folder)
     if removed:

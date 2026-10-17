@@ -94,6 +94,7 @@ jobs:
         working-directory: dev
         run: |
           python3 seed.py 9931 setup
+          python3 seed.py 9931 saving
           python3 e2e.py 9931
       - name: Stash log
         if: failure()

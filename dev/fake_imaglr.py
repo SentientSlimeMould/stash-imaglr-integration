@@ -25,6 +25,12 @@ The API key chooses the scenario (keys look like pbk_<scenario>|anything):
   pbk_toolarge|...   first POST /drafts gets 422 file_too_large
 Tags named "banned" or starting with "banned-" are silently dropped, like imaglr does.
 
+Browsing (for saving posts into Stash): GET /user/feed, /user/likes, /tagged?tag=, /profiles/{name},
+/profiles/{name}/posts and /posts/{id} serve a fixed catalogue of made-up posts by made-up creators, paged with
+a cursor and absolute next links like imaglr's; POST /posts/{id}/repost records a reblog (listed on the index
+page). The posts' pictures, GIFs and videos are served without a key from /media/, like imaglr's CDN; they are
+generated on first request (PNG in pure Python, GIF and MP4 with ffmpeg when it is on PATH).
+
 Run: python3 dev/fake_imaglr.py [port] [state dir]   (the compose file runs it as `fake-imaglr`)
 """
 
@@ -45,6 +51,98 @@ SEEN_FIRST_POST = set()
 DRAFTS = {}  # id -> record
 UPLOADS = {}  # id -> {"filename", "size", "chunks": {index: bytes}, "total", "status"}
 CHUNK_SIZE = 512 * 1024  # imaglr's is 50 MB; small here so a few-MB test clip goes in several pieces
+REPOSTS = []  # (blog, post id)
+
+# ---- the browse catalogue -------------------------------------------------------------------------------
+CREATORS = ("sunny-days", "city-lights", "ocean-views", "mountain-trails")
+LIKED = (7000, 7002, 7003, 7010)
+SPECIAL = {
+    # id: (creator, media kinds, tags, caption); everything else follows a pattern below
+    7000: ("sunny-days", ["image"], ["sunset", "beach", "imaglr", "Test Performer"], "Golden hour on the shore"),
+    7001: ("city-lights", ["video"], ["night", "city"], "Night drive through the centre"),
+    7002: ("ocean-views", ["image", "image", "video"], ["ocean", "Test Studio"], "Three from the harbour"),
+    7003: ("mountain-trails", ["gif"], ["hiking"], "Switchbacks"),
+    7005: ("city-lights", [], ["thoughts"], "A text post with nothing to save"),
+}
+
+
+def catalogue(host):
+    """Every post, newest first, with media addresses on this server (like imaglr's CDN)."""
+    base = f"http://{host}"
+    posts = []
+    for n in range(26):
+        pid = 7000 + n
+        creator, kinds, tags, caption = SPECIAL.get(pid, (
+            CREATORS[n % len(CREATORS)], ["video" if n % 3 == 0 else "image"], [["sunset"], ["city"], ["ocean"], ["hiking"]][n % 4],
+            f"Post number {n}"))
+        media = []
+        for k, kind in enumerate(kinds, 1):
+            name, mime = {"image": (f"{pid}-{k}.png", "image/png"), "gif": (f"{pid}-{k}.gif", "image/gif"),
+                          "video": (f"{pid}-{k}.mp4", "video/mp4")}[kind]
+            media.append({"url": f"{base}/media/{name}", "thumb": f"{base}/media/{pid}-{k}-thumb.png" if kind == "video" else None,
+                          "kind": "video" if kind == "video" else "image", "mime": mime, "width": 320, "height": 240, "alt": None})
+        post = {
+            "id": pid, "url": f"https://imaglr.example/post/{pid}", "type": "video" if any(m["kind"] == "video" for m in media) else "image" if media else "text",
+            "profile": {"name": creator, "url": f"https://imaglr.example/profile/{creator}", "avatar": None},
+            "created_at": f"2026-10-{1 + n % 28:02d}T12:00:00+00:00", "body": f"<p>{html.escape(caption)}</p>", "summary": caption,
+            "tags": tags, "nsfw": False, "media": media, "link": None, "poll": None, "caption_chain": [], "reposted_from": None,
+            "is_ask": False, "note_count": {"likes": n * 3, "reposts": n, "comments": 0}, "liked": pid in LIKED,
+        }
+        posts.append(post)
+    # 7004 is city-lights reblogging 7000 by sunny-days: the original's media, credited to the original
+    original = next(p for p in posts if p["id"] == 7000)
+    reblog = next(p for p in posts if p["id"] == 7004)
+    reblog.update(media=original["media"], type=original["type"], profile={**reblog["profile"], "name": "city-lights",
+                  "url": "https://imaglr.example/profile/city-lights"}, tags=["reblog"], summary="Had to share this",
+                  reposted_from={"id": 7000, "url": original["url"], "profile": original["profile"]})
+    return sorted(posts, key=lambda p: p["id"], reverse=True)
+
+
+def png_bytes(seed, w=240, h=180):
+    """A small PNG, different for every seed (so Stash never sees two saves as the same file)."""
+    import struct
+    import zlib
+    r, g, b = (seed * 37) % 256, (seed * 91) % 256, (seed * 53) % 256
+    rows = []
+    for y in range(h):
+        rows.append(b"\x00" + bytes(v for x in range(w) for v in ((r + x) % 256, (g + y) % 256, (b + x + y) % 256)))
+
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(b"".join(rows), 6)) + chunk(b"IEND", b""))
+
+
+def media_file(name):
+    """The bytes of a catalogue media file, made on first request and kept in the state folder."""
+    import shutil
+    import subprocess
+    match = re.fullmatch(r"(\d+)-(\d+)(-thumb)?\.(png|gif|mp4)", name)
+    if not match:
+        return None
+    folder = os.path.join(STATE, "media")
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, name)
+    if not os.path.exists(path):
+        seed = int(match.group(1)) * 10 + int(match.group(2))
+        ext = match.group(4)
+        if ext == "png":
+            with open(path + ".tmp", "wb") as f:
+                f.write(png_bytes(seed))
+        else:
+            ffmpeg = shutil.which("ffmpeg")
+            if not ffmpeg:
+                return None
+            hue = f"hue=h={seed % 360}"
+            if ext == "gif":
+                args = ["-f", "lavfi", "-i", "testsrc2=s=240x180:r=10:d=1", "-vf", hue, "-f", "gif"]
+            else:
+                args = ["-f", "lavfi", "-i", "testsrc2=s=320x240:r=25:d=3", "-f", "lavfi", "-i", f"sine=frequency={200 + seed % 400}:d=3",
+                        "-vf", hue, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "-f", "mp4"]
+            subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", *args, path + ".tmp"], check=True)
+        os.replace(path + ".tmp", path)
+    with open(path, "rb") as f:
+        return f.read()
 
 
 def scenario(key):
@@ -109,6 +207,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.index()
         if self.path.startswith("/files/"):
             return self.file()
+        if self.path.startswith("/media/"):
+            return self.media()
         name = self.auth()
         if name is None:
             return
@@ -120,12 +220,21 @@ class Handler(BaseHTTPRequestHandler):
                 "writes_per_hour": {"limit": 500, "remaining": 500, "resets_in": 0},
                 "posts_per_day": {"limit": 1000, "remaining": 1000, "resets_in": 0},
             }})
-        self.not_allowed()
+        return self.browse()
 
     def do_POST(self):
         name = self.auth()
         if name is None:
             return
+        match = re.fullmatch(r"/api/v2/posts/(\d+)/repost", self.path)
+        if match:
+            if name == "noscope":
+                return self.reply(403, errors=[("insufficient_scope", "This key cannot write.")])
+            if not any(p["id"] == int(match.group(1)) for p in catalogue(self.headers.get("Host", "localhost"))):
+                return self.reply(404, errors=[("post_not_found", "No such post.")])
+            with LOCK:
+                REPOSTS.append((profile_for(name)["name"], int(match.group(1))))
+            return self.reply(201, {"post": {"id": 90000 + len(REPOSTS), "url": "https://imaglr.example/post/reblog"}})
         if self.path == "/api/v2/drafts":
             return self.create_draft(name)
         match = re.fullmatch(r"/api/v2/drafts/(\d+)/(publish|queue)", self.path)
@@ -208,6 +317,61 @@ class Handler(BaseHTTPRequestHandler):
         with LOCK:
             u["status"] = "ready"
         self.reply(200, self.upload_view(upload_id))
+
+    def browse(self):
+        """The read routes: lists paged with an opaque cursor and an absolute next link, a profile, a post."""
+        import urllib.parse
+        host = self.headers.get("Host", "localhost")
+        parts = urllib.parse.urlsplit(self.path)
+        query = dict(urllib.parse.parse_qsl(parts.query))
+        posts = catalogue(host)
+        path = parts.path
+        match = re.fullmatch(r"/api/v2/posts/(\d+)", path)
+        if match:
+            post = next((p for p in posts if p["id"] == int(match.group(1))), None)
+            return self.reply(200, {"post": post}) if post else self.reply(404, errors=[("post_not_found", "No such post.")])
+        match = re.fullmatch(r"/api/v2/profiles/([^/]+)(/posts)?", path)
+        if match:
+            name = urllib.parse.unquote(match.group(1))
+            if name not in CREATORS:
+                return self.reply(404, errors=[("profile_not_found", "No such profile.")])
+            if not match.group(2):
+                return self.reply(200, {"profile": {"name": name, "url": f"https://imaglr.example/profile/{name}", "avatar": None,
+                                                    "description": f"Made-up creator {name}", "nsfw": False, "supporter": True,
+                                                    "counts": {"followers": 12, "following": 3, "posts": 6}}})
+            posts = [p for p in posts if p["profile"]["name"] == name]
+        elif path == "/api/v2/user/feed":
+            pass
+        elif path == "/api/v2/user/likes":
+            posts = [p for p in posts if p["id"] in LIKED]
+        elif path == "/api/v2/tagged":
+            tag = (query.get("tag") or "").casefold()
+            if not tag:
+                return self.reply(400, errors=[("tag_required", "Which tag?")])
+            posts = [p for p in posts if tag in (t.casefold() for t in p["tags"])]
+        else:
+            return self.not_allowed()
+        limit = max(1, min(50, int(query.get("limit") or 20)))
+        start = int(query.get("cursor") or 0)
+        page = posts[start:start + limit]
+        payload = {"posts": page}
+        if start + limit < len(posts):
+            nxt = urllib.parse.urlencode({**{k: v for k, v in query.items() if k != "cursor"}, "cursor": str(start + limit)})
+            payload["_links"] = {"next": {"href": f"http://{host}{path}?{nxt}"}}
+        return self.reply(200, payload)
+
+    def media(self):
+        data = media_file(self.path[len("/media/"):].split("?", 1)[0])
+        if data is None:
+            self.send_response(404)
+            self.end_headers()
+            return
+        kind = {"png": "image/png", "gif": "image/gif", "mp4": "video/mp4"}[self.path.rsplit(".", 1)[-1]]
+        self.send_response(200)
+        self.send_header("Content-Type", kind)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
     def not_allowed(self):
         sys.stderr.write(f"fake-imaglr: !!! UNEXPECTED ROUTE {self.command} {self.path}\n")
@@ -310,7 +474,8 @@ class Handler(BaseHTTPRequestHandler):
             "<style>body{font:14px system-ui;margin:1rem}td,th{border:1px solid #ccc;padding:4px;vertical-align:top}"
             "table{border-collapse:collapse}</style><h1>fake imaglr: received posts</h1><table>"
             "<tr><th>id</th><th>blog</th><th>state</th><th>files</th><th>tags kept</th><th>body</th></tr>"
-            + "".join(rows) + "</table>"
+            + "".join(rows) + "</table><h2>reblogs</h2><ul>"
+            + "".join(f"<li>{html.escape(blog)} reblogged post {pid}</li>" for blog, pid in REPOSTS) + "</ul>"
         ).encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")

@@ -34,6 +34,12 @@ def _tags(xs: list[dict] | None) -> list[Tag]:
     return [t for t in (Tag.parse(x) for x in (xs or [])) if t]
 
 
+def _imaglr_post(d: dict) -> str | None:
+    """The imaglr post a scene or image was saved from (the plugin's custom field), if any."""
+    value = (d.get("custom_fields") or {}).get("imaglr_post_id")
+    return str(value) if value not in (None, "") else None
+
+
 def _ext(path: str) -> str:
     name = path.replace("\\", "/").rsplit("/", 1)[-1]
     return name.rsplit(".", 1)[-1].lower() if "." in name else ""
@@ -92,6 +98,7 @@ class Scene:
     studio: str | None = None
     date: str | None = None
     created_at: str | None = None
+    imaglr_post_id: str | None = None  # saved from imaglr: never uploaded again
 
     @property
     def primary_file(self) -> SceneFile | None:
@@ -126,6 +133,7 @@ class Scene:
             studio=(d.get("studio") or {}).get("name"),
             date=d.get("date"),
             created_at=d.get("created_at"),
+            imaglr_post_id=_imaglr_post(d),
         )
 
 
@@ -246,6 +254,7 @@ class Image:
     date: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
+    imaglr_post_id: str | None = None  # saved from imaglr: never uploaded again
 
     @property
     def primary_file(self) -> VisualFile | None:
@@ -286,4 +295,5 @@ class Image:
             date=d.get("date"),
             created_at=d.get("created_at"),
             updated_at=d.get("updated_at"),
+            imaglr_post_id=_imaglr_post(d),
         )

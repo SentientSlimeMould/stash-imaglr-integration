@@ -45,6 +45,7 @@ export interface Card {
   in_s?: number | null;
   out_s?: number | null;
   members?: Card[]; // posts with several files
+  saved_from?: string | null; // saved from this imaglr post: reblogged, never uploaded again
 }
 
 export interface QueueResponse {

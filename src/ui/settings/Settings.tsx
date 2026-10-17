@@ -8,6 +8,7 @@ import { fmtDate } from "../lib/format.ts";
 import { ACTION_LABELS, blogProblem } from "../lib/send.ts";
 import type { Blog, SendAction } from "../model.ts";
 import { TagRules } from "./TagRules.tsx";
+import { SaveFolderSection } from "../discover/SaveFolderDialog.tsx";
 
 export function Settings({ onClose }: { onClose: (changed: boolean) => void }) {
   const { Modal, Button, Form, Alert, Badge } = PluginApi.libraries.Bootstrap;
@@ -143,8 +144,8 @@ export function Settings({ onClose }: { onClose: (changed: boolean) => void }) {
           <h6>{blogs && blogs.length ? "Add a blog" : "Add your imaglr blog"}</h6>
           <p className="small text-muted">
             On imaglr, open <a href="https://imaglr.com/settings" target="_blank" rel="noreferrer">Settings → API</a> and
-            create a key with the <strong>read</strong> and <strong>manage</strong> permissions (leave <strong>write</strong> off:
-            the plugin never needs it). Each key belongs to one
+            create a key with the <strong>read</strong> and <strong>manage</strong> permissions. Add <strong>write</strong> too if you
+            want to reblog. Each key belongs to one
             blog. The key is stored only in this plugin and never shown again.
           </p>
           <Form.Group>
@@ -169,6 +170,7 @@ export function Settings({ onClose }: { onClose: (changed: boolean) => void }) {
         </Form>
 
         <TagRules />
+        <SaveFolderSection />
 
         <div className="imaglr-danger-zone">
           <h5>Delete all plugin data</h5>

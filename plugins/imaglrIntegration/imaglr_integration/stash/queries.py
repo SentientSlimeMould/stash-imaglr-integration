@@ -42,6 +42,7 @@ SCENE_FIELDS = """
   tags { id name }
   performers { name }
   studio { name }
+  custom_fields
 """
 
 MARKER_FIELDS = (
@@ -103,6 +104,7 @@ IMAGE_FIELDS = """
   performers { name }
   studio { name }
   galleries { id title tags { id name } }
+  custom_fields
 """
 
 FIND_QUEUED_IMAGES = (

@@ -7,6 +7,7 @@
     python3 dev/seed.py 9931 auth off  remove the login again
     python3 dev/seed.py 9931 status    show version, setup state and whether login is on
     python3 dev/seed.py 9933 demo      the screenshot instance: setup + scan + friendly metadata (dev/demo_media.py first)
+    python3 dev/seed.py 9931 saving    add the writable /saved library and switch on browsing and saving from imaglr
 """
 
 import http.cookiejar
@@ -259,6 +260,23 @@ def auth(stash, on):
     print(f"  login {'required (dev / dev-password)' if on else 'removed'}")
 
 
+def saving(stash):
+    """Browsing and saving from imaglr: a second, writable library at /saved (a volume of its own) and the
+    plugin's preview switch on. The save folder itself is left for the plugin's first save (or e2e) to choose."""
+    stash.wait_until_up()
+    current = stash.gql("{ configuration { general { stashes { path excludeVideo excludeImage } } } }")
+    libraries = [lib for lib in current["configuration"]["general"]["stashes"] if lib["path"] != "/saved"]
+    libraries.append({"path": "/saved", "excludeVideo": False, "excludeImage": False})
+    stash.gql("mutation($input: ConfigGeneralInput!) { configureGeneral(input: $input) { stashes { path } } }",
+              input={"stashes": libraries})
+    plugin = stash.gql('{ configuration { plugins(include: ["imaglrIntegration"]) } }')["configuration"]["plugins"]
+    values = {k: v for k, v in (plugin or {}).get("imaglrIntegration", {}).items()
+              if k not in ("saveFromImaglr", "saveFolder")}  # the preview's first key names
+    values["browseImaglr"] = True
+    stash.gql("mutation($input: Map!) { configurePlugin(plugin_id: \"imaglrIntegration\", input: $input) }", input=values)
+    print("  /saved added as a library; Browse and save from imaglr switched on")
+
+
 def status(stash):
     info = stash.wait_until_up()
     try:
@@ -279,6 +297,8 @@ if __name__ == "__main__":
         setup(stash)
     elif command == "demo":
         demo(stash)
+    elif command == "saving":
+        saving(stash)
     elif command == "auth" and len(sys.argv) == 4 and sys.argv[3] in ("on", "off"):
         auth(stash, sys.argv[3] == "on")
     elif command == "status":
