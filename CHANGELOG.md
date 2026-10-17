@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: on screens wider than a phone, a few of the clip editor's styles weren't applied (the section labels, the
+  GIF preview bar, the cover row and the seamless-loop results). A style block meant for phones only was left open
+  on 8 October and took everything after it with it.
+
 ## 0.1.23 — 2026-10-12
 
 - The From In loop search no longer pulls towards your Out: between equally clean joins the shorter loop wins,
