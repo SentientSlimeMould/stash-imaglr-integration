@@ -493,31 +493,36 @@ FOLLOWING_FRESH = timedelta(hours=1)
 
 
 def op_following(ctx: Context) -> dict[str, Any]:
-    """The creators the browsing blog follows, for Explore's suggestions. Kept for an hour, so typing in Explore
-    doesn't ask imaglr again."""
+    """The creators the browsing blog follows ({name, avatar}), for Explore's suggestions. Kept for an hour, so
+    typing in Explore doesn't ask imaglr again."""
     _require_enabled(ctx)
     blog = _blog(ctx)
     key = f"following:{blog['id']}"
     cached = json.loads(ctx.db.kv_get(key) or "null")
+    if cached and "people" not in cached:
+        cached = None  # an older shape: ask again
     now = datetime.now(timezone.utc)
     if cached and now - datetime.fromisoformat(cached["at"]) < FOLLOWING_FRESH:
-        return {"names": cached["names"]}
+        return {"people": cached["people"]}
     if not blog.get("name"):
-        return {"names": []}
-    names: list[str] = []
+        return {"people": []}
+    people: list[dict[str, Any]] = []
     nxt = None
     try:
         for _ in range(FOLLOWING_PAGES):
-            people, nxt = ctx.imaglr(blog).following(blog["name"], nxt)
-            names += [p["name"] for p in people if p["name"] not in names]
+            found, nxt = ctx.imaglr(blog).following(blog["name"], nxt)
+            for p in found:
+                view = saving.profile_view(p)
+                if view["name"] and all(o["name"] != view["name"] for o in people):
+                    people.append({"name": view["name"], "avatar": view["avatar"]})
             if not nxt:
                 break
     except ImaglrError as e:
         if cached:
-            return {"names": cached["names"]}  # stale beats nothing
+            return {"people": cached["people"]}  # stale beats nothing
         raise UserError(_imaglr_message(e, blog)) from None
-    ctx.db.kv_set(key, json.dumps({"at": now.isoformat(timespec="seconds"), "names": names}))
-    return {"names": names}
+    ctx.db.kv_set(key, json.dumps({"at": now.isoformat(timespec="seconds"), "people": people}))
+    return {"people": people}
 
 
 # ---- import rules --------------------------------------------------------------------------------------

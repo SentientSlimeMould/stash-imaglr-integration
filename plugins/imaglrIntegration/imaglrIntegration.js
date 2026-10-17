@@ -2811,9 +2811,23 @@
     const key = label.toLowerCase();
     return [label, ...recent.filter((r) => r.toLowerCase() !== key)].slice(0, RECENT_SEARCHES);
   }
-  function exploreSuggestions(recent, following) {
-    const seen = new Set(recent.map((r) => r.toLowerCase()));
-    return [...recent, ...following.map((n) => `@${n}`).filter((s) => !seen.has(s.toLowerCase()))];
+  function exploreOptions(text, recent, following, limits = { recent: 6, follow: 8 }) {
+    const typed = text.trim();
+    const needle = typed.replace(/^[#@]/, "").toLowerCase();
+    const groups = [];
+    const found = parseSearch(typed);
+    if (found) {
+      const label = found.kind === "creator" ? `Go to @${found.value}` : found.kind === "tag" ? `Search #${found.value}` : "Open this post";
+      groups.push({ label: "", options: [{ value: typed, label, kind: "search" }] });
+    }
+    const recents = recent.filter((r) => r.toLowerCase() !== typed.toLowerCase() && r.toLowerCase().includes(needle)).slice(0, limits.recent);
+    if (recents.length) groups.push({ label: "Recent searches", options: recents.map((r) => ({ value: r, label: r, kind: "recent" })) });
+    const seen = new Set(recents.map((r) => r.toLowerCase()));
+    const people = following.filter((p) => p.name.toLowerCase().includes(needle) && !seen.has(`@${p.name}`.toLowerCase()) && `@${p.name}`.toLowerCase() !== typed.toLowerCase()).slice(0, limits.follow);
+    if (people.length) {
+      groups.push({ label: "People you follow", options: people.map((p) => ({ value: `@${p.name}`, label: p.name, kind: "follow", avatar: p.avatar })) });
+    }
+    return groups;
   }
   function mediaRatio(m) {
     return m.width && m.height ? m.width / m.height : 4 / 5;
@@ -2960,10 +2974,10 @@
       media.map((m, n) => /* @__PURE__ */ react_default.createElement("div", { key: n, className: "imaglr-post-slide" }, m.kind === "video" ? /* @__PURE__ */ react_default.createElement(VideoMedia, { media: m }) : /* @__PURE__ */ react_default.createElement(PictureMedia, { media: m })))
     ), /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-post-counter badge badge-dark" }, index + 1, " / ", media.length));
   }
-  function Avatar({ url, name, large }) {
+  function Avatar({ url, name, large, small }) {
     const [src, setSrc] = react_default.useState(url);
     react_default.useEffect(() => setSrc(url), [url]);
-    const className = `imaglr-avatar${large ? " imaglr-avatar-large" : ""}`;
+    const className = `imaglr-avatar${large ? " imaglr-avatar-large" : small ? " imaglr-avatar-small" : ""}`;
     if (!src) return /* @__PURE__ */ react_default.createElement("span", { className: `${className} imaglr-avatar-letter`, "aria-hidden": "true" }, (name[0] ?? "?").toUpperCase());
     return /* @__PURE__ */ react_default.createElement("img", { className, src, alt: "", loading: "lazy", onError: () => setSrc(src === url ? avatarFallback(url) : null) });
   }
@@ -3126,26 +3140,54 @@
       blogs.map((b) => /* @__PURE__ */ react_default.createElement("option", { key: b.id, value: b.id }, b.label))
     )) : null, blog ? /* @__PURE__ */ react_default.createElement("p", { className: "mb-0" }, "Reblog ", post.creator.name ? `@${post.creator.name}'s post` : "this post", " to ", blog.label, "? It appears on your blog straight away.") : /* @__PURE__ */ react_default.createElement("p", { className: "mb-0" }, "Add a blog in the plugin's settings first."));
   }
-  function Explore({ params, suggestions, onSearch, children }) {
-    const { Form, Button, InputGroup } = PluginApi.libraries.Bootstrap;
+  function Explore({ params, recent, following, onSearch, children }) {
+    const { Button } = PluginApi.libraries.Bootstrap;
+    const { Icon } = PluginApi.components;
+    const Select = PluginApi.libraries.ReactSelect.default;
     const initial = params.get("creator") ? `@${params.get("creator")}` : params.get("tag") ? `#${params.get("tag")}` : params.get("post") ?? "";
     const [text, setText] = react_default.useState(initial);
+    const [open, setOpen] = react_default.useState(false);
     react_default.useEffect(() => setText(initial), [initial]);
-    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-feed" }, /* @__PURE__ */ react_default.createElement(Form, { onSubmit: (e) => {
-      e.preventDefault();
-      onSearch(text);
-    }, className: "imaglr-explore-search" }, /* @__PURE__ */ react_default.createElement(InputGroup, null, /* @__PURE__ */ react_default.createElement(
-      Form.Control,
+    const go = (value) => {
+      setText(value);
+      setOpen(false);
+      onSearch(value);
+    };
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-feed" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-explore-search" }, /* @__PURE__ */ react_default.createElement(
+      Select,
       {
-        className: "text-input",
-        value: text,
+        inputId: "imaglr-explore",
+        className: "react-select imaglr-explore-select",
+        classNamePrefix: "react-select",
+        value: null,
+        inputValue: text,
+        options: exploreOptions(text, recent, following),
+        menuIsOpen: open,
+        onMenuOpen: () => setOpen(true),
+        onMenuClose: () => setOpen(false),
+        onFocus: () => setOpen(true),
+        onInputChange: (v, meta) => {
+          if (meta.action === "input-change") {
+            setText(v);
+            setOpen(true);
+          }
+        },
+        onChange: (o) => o && go(o.value),
+        onKeyDown: (e) => {
+          if (e.key === "Enter" && !open && text.trim()) {
+            e.preventDefault();
+            go(text);
+          }
+        },
+        filterOption: () => true,
         placeholder: "#tag, @creator or a post link",
-        enterKeyHint: "search",
-        list: "imaglr-explore-suggestions",
-        autoComplete: "off",
-        onChange: (e) => setText(e.target.value)
+        noOptionsMessage: () => null,
+        formatOptionLabel: (o) => /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-explore-option" }, o.kind === "follow" ? /* @__PURE__ */ react_default.createElement(Avatar, { url: o.avatar ?? null, name: o.label, small: true }) : /* @__PURE__ */ react_default.createElement(Icon, { icon: o.kind === "recent" ? PluginApi.libraries.FontAwesomeSolid.faHistory : PluginApi.libraries.FontAwesomeSolid.faSearch }), /* @__PURE__ */ react_default.createElement("span", null, o.label)),
+        styles: { menuPortal: (base) => ({ ...base, zIndex: 1100 }) },
+        components: { IndicatorSeparator: () => null, DropdownIndicator: () => null },
+        menuPortalTarget: document.body
       }
-    ), /* @__PURE__ */ react_default.createElement(InputGroup.Append, null, /* @__PURE__ */ react_default.createElement(Button, { type: "submit", variant: "primary" }, "Go"))), /* @__PURE__ */ react_default.createElement("datalist", { id: "imaglr-explore-suggestions" }, suggestions.map((s) => /* @__PURE__ */ react_default.createElement("option", { key: s, value: s })))), children);
+    ), /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => text.trim() && go(text) }, "Go")), children);
   }
   function SinglePost({ id, ...handlers }) {
     const [post, setPost] = react_default.useState(null);
@@ -3190,7 +3232,7 @@
     }, []);
     react_default.useEffect(() => {
       if (tab !== "explore" || !blogId) return;
-      runOperation("following", { blog_id: blogId }).then((r) => setFollowing(r.names), () => setFollowing([]));
+      runOperation("following", { blog_id: blogId }).then((r) => setFollowing(r.people), () => setFollowing([]));
     }, [tab === "explore", blogId]);
     const explore = {
       onCreator: (name) => name && go({ tab: "explore", creator: name }, true),
@@ -3249,7 +3291,7 @@
         }
       },
       blogs.map((b) => /* @__PURE__ */ react_default.createElement("option", { key: b.id, value: b.id }, b.label))
-    )) : null, visited.has("feed") ? /* @__PURE__ */ react_default.createElement("div", { hidden: tab !== "feed" }, /* @__PURE__ */ react_default.createElement(PostFeed, { source: "feed", ...handlers })) : null, visited.has("likes") ? /* @__PURE__ */ react_default.createElement("div", { hidden: tab !== "likes" }, /* @__PURE__ */ react_default.createElement(PostFeed, { source: "likes", ...handlers })) : null, tab === "explore" ? /* @__PURE__ */ react_default.createElement(Explore, { params, suggestions: exploreSuggestions(recent, following), onSearch: search }, creator ? /* @__PURE__ */ react_default.createElement(PostFeed, { source: "creator", name: creator, ...handlers }) : tag ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("h4", { className: "imaglr-explore-title" }, "#", tag), /* @__PURE__ */ react_default.createElement(PostFeed, { source: "tag", tag, ...handlers })) : postId ? /* @__PURE__ */ react_default.createElement(SinglePost, { id: postId, ...handlers }) : /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Find posts by tag, see everything a creator has posted, or paste a link to a post to save it.")) : null, pendingSave && setup ? /* @__PURE__ */ react_default.createElement(SaveFolderDialog, { setup, onCancel: () => setPendingSave(null), onDone: (s) => {
+    )) : null, visited.has("feed") ? /* @__PURE__ */ react_default.createElement("div", { hidden: tab !== "feed" }, /* @__PURE__ */ react_default.createElement(PostFeed, { source: "feed", ...handlers })) : null, visited.has("likes") ? /* @__PURE__ */ react_default.createElement("div", { hidden: tab !== "likes" }, /* @__PURE__ */ react_default.createElement(PostFeed, { source: "likes", ...handlers })) : null, tab === "explore" ? /* @__PURE__ */ react_default.createElement(Explore, { params, recent, following, onSearch: search }, creator ? /* @__PURE__ */ react_default.createElement(PostFeed, { source: "creator", name: creator, ...handlers }) : tag ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("h4", { className: "imaglr-explore-title" }, "#", tag), /* @__PURE__ */ react_default.createElement(PostFeed, { source: "tag", tag, ...handlers })) : postId ? /* @__PURE__ */ react_default.createElement(SinglePost, { id: postId, ...handlers }) : /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Find posts by tag, see everything a creator has posted, or paste a link to a post to save it.")) : null, pendingSave && setup ? /* @__PURE__ */ react_default.createElement(SaveFolderDialog, { setup, onCancel: () => setPendingSave(null), onDone: (s) => {
       setSetup(s);
       const post = pendingSave;
       setPendingSave(null);

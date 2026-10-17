@@ -7,8 +7,8 @@ import React from "react";
 import { runOperation } from "../api.ts";
 import { ConfirmDialog } from "../ConfirmDialog.tsx";
 import type { Blog } from "../model.ts";
-import { exploreSuggestions, type ImaglrPost, parseSearch, rememberSearch, SAVING, type SaveState, searchLabel } from "../lib/posts.ts";
-import { AutoplayContext, PostCard } from "./PostCard.tsx";
+import { type ExploreOption, exploreOptions, type ImaglrPost, parseSearch, rememberSearch, SAVING, type SaveState, searchLabel } from "../lib/posts.ts";
+import { AutoplayContext, Avatar, PostCard } from "./PostCard.tsx";
 import { folderReady, SaveFolderDialog, type SaveSetup } from "./SaveFolderDialog.tsx";
 import { ReviewDialog } from "./ReviewDialog.tsx";
 import { PostFeed } from "./PostFeed.tsx";
@@ -98,26 +98,57 @@ function ReblogDialog({ post, blogs, onClose }: { post: ImaglrPost; blogs: Blog[
   );
 }
 
-function Explore({ params, suggestions, onSearch, children }: { params: URLSearchParams; suggestions: string[];
-  onSearch: (s: string) => void; children: React.ReactNode }) {
-  const { Form, Button, InputGroup } = PluginApi.libraries.Bootstrap;
+/** The Explore box: Stash's own select, typed into like a search field. Its menu offers what Enter would do,
+ *  your recent searches and the creators you follow; choosing one searches. */
+function Explore({ params, recent, following, onSearch, children }: { params: URLSearchParams; recent: string[];
+  following: { name: string; avatar: string | null }[]; onSearch: (s: string) => void; children: React.ReactNode }) {
+  const { Button } = PluginApi.libraries.Bootstrap;
+  const { Icon } = PluginApi.components;
+  const Select = PluginApi.libraries.ReactSelect.default;
   const initial = params.get("creator") ? `@${params.get("creator")}` : params.get("tag") ? `#${params.get("tag")}` : params.get("post") ?? "";
   const [text, setText] = React.useState(initial);
+  const [open, setOpen] = React.useState(false);
   React.useEffect(() => setText(initial), [initial]);
+  const go = (value: string) => {
+    setText(value);
+    setOpen(false);
+    onSearch(value);
+  };
   return (
     <div className="imaglr-feed">
-      <Form onSubmit={(e: React.FormEvent) => { e.preventDefault(); onSearch(text); }} className="imaglr-explore-search">
-        <InputGroup>
-          <Form.Control className="text-input" value={text} placeholder="#tag, @creator or a post link" enterKeyHint="search"
-            list="imaglr-explore-suggestions" autoComplete="off"
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setText(e.target.value)} />
-          <InputGroup.Append><Button type="submit" variant="primary">Go</Button></InputGroup.Append>
-        </InputGroup>
-        {/* the browser's own suggestion list: your recent searches, then the creators you follow */}
-        <datalist id="imaglr-explore-suggestions">
-          {suggestions.map((s) => <option key={s} value={s} />)}
-        </datalist>
-      </Form>
+      <div className="imaglr-explore-search">
+        <Select
+          inputId="imaglr-explore"
+          className="react-select imaglr-explore-select"
+          classNamePrefix="react-select"
+          value={null}
+          inputValue={text}
+          options={exploreOptions(text, recent, following)}
+          menuIsOpen={open}
+          onMenuOpen={() => setOpen(true)}
+          onMenuClose={() => setOpen(false)}
+          onFocus={() => setOpen(true)}
+          onInputChange={(v: string, meta: { action: string }) => { if (meta.action === "input-change") { setText(v); setOpen(true); } }}
+          onChange={(o: ExploreOption | null) => o && go(o.value)}
+          onKeyDown={(e: React.KeyboardEvent) => {
+            if (e.key === "Enter" && !open && text.trim()) { e.preventDefault(); go(text); }
+          }}
+          filterOption={() => true}
+          placeholder="#tag, @creator or a post link"
+          noOptionsMessage={() => null}
+          formatOptionLabel={(o: ExploreOption) => (
+            <span className="imaglr-explore-option">
+              {o.kind === "follow" ? <Avatar url={o.avatar ?? null} name={o.label} small />
+                : <Icon icon={o.kind === "recent" ? PluginApi.libraries.FontAwesomeSolid.faHistory : PluginApi.libraries.FontAwesomeSolid.faSearch} />}
+              <span>{o.label}</span>
+            </span>
+          )}
+          styles={{ menuPortal: (base: object) => ({ ...base, zIndex: 1100 }) }}
+          components={{ IndicatorSeparator: () => null, DropdownIndicator: () => null }}
+          menuPortalTarget={document.body}
+        />
+        <Button variant="primary" onClick={() => text.trim() && go(text)}>Go</Button>
+      </div>
       {children}
     </div>
   );
@@ -160,7 +191,7 @@ export function Discover({ tab, params, blogs, go }: Props) {
   });
   const { saves, put } = useSaves();
   const [recent, setRecent] = React.useState<string[]>(storedSearches);
-  const [following, setFollowing] = React.useState<string[]>([]);
+  const [following, setFollowing] = React.useState<{ name: string; avatar: string | null }[]>([]);
 
   React.useEffect(() => setVisited((v) => (v.has(tab) ? v : new Set(v).add(tab))), [tab]);
   React.useEffect(() => {
@@ -169,7 +200,8 @@ export function Discover({ tab, params, blogs, go }: Props) {
   // The creators the browsing blog follows, for Explore's suggestions (only once Explore is opened).
   React.useEffect(() => {
     if (tab !== "explore" || !blogId) return;
-    runOperation<{ names: string[] }>("following", { blog_id: blogId }).then((r) => setFollowing(r.names), () => setFollowing([]));
+    runOperation<{ people: { name: string; avatar: string | null }[] }>("following", { blog_id: blogId })
+      .then((r) => setFollowing(r.people), () => setFollowing([]));
   }, [tab === "explore", blogId]);
 
   const explore = {
@@ -239,7 +271,7 @@ export function Discover({ tab, params, blogs, go }: Props) {
         <div hidden={tab !== "likes"}><PostFeed source="likes" {...handlers} /></div>
       ) : null}
       {tab === "explore" ? (
-        <Explore params={params} suggestions={exploreSuggestions(recent, following)} onSearch={search}>
+        <Explore params={params} recent={recent} following={following} onSearch={search}>
           {creator ? <PostFeed source="creator" name={creator} {...handlers} />
             : tag ? (<><h4 className="imaglr-explore-title">#{tag}</h4><PostFeed source="tag" tag={tag} {...handlers} /></>)
             : postId ? <SinglePost id={postId} {...handlers} />

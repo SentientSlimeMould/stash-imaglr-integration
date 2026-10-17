@@ -766,11 +766,31 @@
 }
 
 .imaglr-explore-search {
+  display: flex;
+  gap: 0.5rem;
   margin-bottom: 1rem;
 }
 
-.imaglr-explore-search .btn {
+.imaglr-explore-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.imaglr-explore-search .btn,
+.imaglr-explore-select .react-select__control {
   min-height: 44px;
+}
+
+.imaglr-explore-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.imaglr-avatar-small {
+  width: 24px;
+  height: 24px;
+  font-size: 0.75rem;
 }
 
 .imaglr-explore-title {

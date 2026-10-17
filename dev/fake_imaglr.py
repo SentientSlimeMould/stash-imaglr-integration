@@ -26,7 +26,7 @@ The API key chooses the scenario (keys look like pbk_<scenario>|anything):
 Tags named "banned" or starting with "banned-" are silently dropped, like imaglr does.
 
 Browsing (for saving posts into Stash): GET /user/feed, /user/likes, /tagged?tag=, /profiles/{name},
-/profiles/{name}/posts and /posts/{id} serve a fixed catalogue of made-up posts by made-up creators, paged with
+/profiles/{name}/posts, /profiles/{name}/following and /posts/{id} serve a fixed catalogue of made-up posts by made-up creators, paged with
 a cursor and absolute next links like imaglr's; POST /posts/{id}/repost records a reblog (listed on the index
 page). The posts' pictures, GIFs and videos are served without a key from /media/, like imaglr's CDN; they are
 generated on first request (PNG in pure Python, GIF and MP4 with ffmpeg when it is on PATH).
@@ -330,6 +330,12 @@ class Handler(BaseHTTPRequestHandler):
         if match:
             post = next((p for p in posts if p["id"] == int(match.group(1))), None)
             return self.reply(200, {"post": post}) if post else self.reply(404, errors=[("post_not_found", "No such post.")])
+        match = re.fullmatch(r"/api/v2/profiles/([^/]+)/following", path)
+        if match:  # every blog follows three of the made-up creators
+            people = [{"name": c, "url": f"https://imaglr.example/profile/{c}", "avatar": None} for c in CREATORS[:3]]
+            who = urllib.parse.unquote(match.group(1))
+            return self.reply(200, {"profile": {"name": who, "url": f"https://imaglr.example/profile/{who}", "avatar": None},
+                                    "following": people})
         match = re.fullmatch(r"/api/v2/profiles/([^/]+)(/posts)?", path)
         if match:
             name = urllib.parse.unquote(match.group(1))

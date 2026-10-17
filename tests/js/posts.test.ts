@@ -51,8 +51,8 @@ test("a broken imaglr avatar address has a working twin", async () => {
   assert.equal(avatarFallback(null), null);
 });
 
-test("Explore remembers searches and suggests them before the creators you follow", async () => {
-  const { exploreSuggestions, rememberSearch, searchLabel, RECENT_SEARCHES } = await import("../../src/ui/lib/posts.ts");
+test("Explore remembers searches and offers them before the creators you follow", async () => {
+  const { exploreOptions, rememberSearch, searchLabel, RECENT_SEARCHES } = await import("../../src/ui/lib/posts.ts");
   assert.equal(searchLabel({ kind: "tag", value: "wam" }, "#wam "), "#wam");
   assert.equal(searchLabel({ kind: "creator", value: "sunny" }, "https://imaglr.com/profile/sunny"), "@sunny");
   assert.equal(searchLabel({ kind: "post", value: "123" }, " https://imaglr.com/post/123 "), "https://imaglr.com/post/123");
@@ -62,5 +62,16 @@ test("Explore remembers searches and suggests them before the creators you follo
   assert.deepEqual(recent, ["#WAM", "@sunny"]);
   for (let n = 0; n < 20; n++) recent = rememberSearch(recent, `#t${n}`);
   assert.equal(recent.length, RECENT_SEARCHES);
-  assert.deepEqual(exploreSuggestions(["@Sunny", "#wam"], ["sunny", "ocean"]), ["@Sunny", "#wam", "@ocean"]);
+
+  const people = [{ name: "sunny", avatar: null }, { name: "ocean", avatar: "https://cdn03.imaglr.com/o.jpg" }];
+  const empty = exploreOptions("", ["@sunny", "#wam"], people);
+  assert.deepEqual(empty.map((g) => g.label), ["Recent searches", "People you follow"]);
+  assert.deepEqual(empty[1].options.map((o) => o.value), ["@ocean"]); // @sunny is already a recent search
+  const typed = exploreOptions("su", ["@sunny", "#wam", "#sunset"], people);
+  assert.deepEqual(typed[0].options[0], { value: "su", label: "Search #su", kind: "search" });
+  assert.deepEqual(typed[1].options.map((o) => o.value), ["@sunny", "#sunset"]);
+  assert.equal(typed.length, 2); // sunny is in the recent searches already
+  assert.equal(exploreOptions("@oc", [], people)[0].options[0].label, "Go to @oc");
+  assert.equal(exploreOptions("@oc", [], people)[1].options[0].avatar, "https://cdn03.imaglr.com/o.jpg");
+  assert.equal(exploreOptions("https://imaglr.com/post/5", [], [])[0].options[0].label, "Open this post");
 });

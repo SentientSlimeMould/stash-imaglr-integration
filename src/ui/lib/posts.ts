@@ -112,10 +112,34 @@ export function rememberSearch(recent: string[], label: string): string[] {
   return [label, ...recent.filter((r) => r.toLowerCase() !== key)].slice(0, RECENT_SEARCHES);
 }
 
-/** Explore's suggestions: recent searches first, then the creators you follow not already among them. */
-export function exploreSuggestions(recent: string[], following: string[]): string[] {
-  const seen = new Set(recent.map((r) => r.toLowerCase()));
-  return [...recent, ...following.map((n) => `@${n}`).filter((s) => !seen.has(s.toLowerCase()))];
+export interface ExploreOption {
+  value: string; // what is searched when chosen
+  label: string;
+  kind: "search" | "recent" | "follow";
+  avatar?: string | null;
+}
+
+/** Explore's dropdown for what's typed: first what pressing Enter would do, then matching recent searches, then
+ *  matching creators you follow (with nothing typed: the latest of each). Groups as Stash's select takes them. */
+export function exploreOptions(text: string, recent: string[], following: { name: string; avatar: string | null }[],
+                               limits = { recent: 6, follow: 8 }): { label: string; options: ExploreOption[] }[] {
+  const typed = text.trim();
+  const needle = typed.replace(/^[#@]/, "").toLowerCase();
+  const groups: { label: string; options: ExploreOption[] }[] = [];
+  const found = parseSearch(typed);
+  if (found) {
+    const label = found.kind === "creator" ? `Go to @${found.value}` : found.kind === "tag" ? `Search #${found.value}` : "Open this post";
+    groups.push({ label: "", options: [{ value: typed, label, kind: "search" }] });
+  }
+  const recents = recent.filter((r) => r.toLowerCase() !== typed.toLowerCase() && r.toLowerCase().includes(needle)).slice(0, limits.recent);
+  if (recents.length) groups.push({ label: "Recent searches", options: recents.map((r) => ({ value: r, label: r, kind: "recent" as const })) });
+  const seen = new Set(recents.map((r) => r.toLowerCase()));
+  const people = following.filter((p) => p.name.toLowerCase().includes(needle) && !seen.has(`@${p.name}`.toLowerCase())
+    && `@${p.name}`.toLowerCase() !== typed.toLowerCase()).slice(0, limits.follow);
+  if (people.length) {
+    groups.push({ label: "People you follow", options: people.map((p) => ({ value: `@${p.name}`, label: p.name, kind: "follow" as const, avatar: p.avatar })) });
+  }
+  return groups;
 }
 
 /** The space a picture or video takes before it loads, so the feed doesn't jump: width / height, or 4:5. */

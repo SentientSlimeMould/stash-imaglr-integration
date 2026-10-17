@@ -159,10 +159,10 @@ function Media({ media }: { media: PostMedia[] }) {
 
 /** A creator's picture: imaglr's address, then the one that works when imaglr's is broken (see avatarFallback),
  *  then their initial. */
-export function Avatar({ url, name, large }: { url: string | null; name: string; large?: boolean }) {
+export function Avatar({ url, name, large, small }: { url: string | null; name: string; large?: boolean; small?: boolean }) {
   const [src, setSrc] = React.useState(url);
   React.useEffect(() => setSrc(url), [url]);
-  const className = `imaglr-avatar${large ? " imaglr-avatar-large" : ""}`;
+  const className = `imaglr-avatar${large ? " imaglr-avatar-large" : small ? " imaglr-avatar-small" : ""}`;
   if (!src) return <span className={`${className} imaglr-avatar-letter`} aria-hidden="true">{(name[0] ?? "?").toUpperCase()}</span>;
   return <img className={className} src={src} alt="" loading="lazy" onError={() => setSrc(src === url ? avatarFallback(url) : null)} />;
 }
