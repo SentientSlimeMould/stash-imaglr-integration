@@ -3,8 +3,9 @@
 on 2026-10-08 with imaglr's chunked uploads for files over the edge's 100 MB request limit, and on 2026-10-17
 with reading feeds, likes, tags, creators and posts, and reblogging, for browsing and saving chosen posts).
 
-Drafts first, then optionally queue or publish them; large files in pieces through /uploads; reading; reblogging.
-Never editing or deleting posts, liking, following, scheduling, or changing queue settings. Media files come
+Drafts first, then optionally queue or publish them; large files in pieces through /uploads; reading; reblogging;
+liking (added 2026-10-17 at the owner's request). Never editing or deleting posts, following, scheduling, or
+changing queue settings. Media files come
 through the one other gateway, which only reaches imaglr's own hosts and never carries the key.
 """
 
@@ -21,11 +22,11 @@ from tests.python.test_imaglr_client import FakeImaglr
 
 ALLOWED_ROUTES = {"/user/info", "/user/limits", "/drafts", "/drafts/{id}/publish", "/drafts/{id}/queue",
                   "/uploads", "/uploads/{id}/chunks/{index}", "/uploads/{id}/complete", "/uploads/{id}",
-                  "/user/feed", "/user/likes", "/tagged", "/profiles/{name}", "/profiles/{name}/posts", "/posts/{id}",
-                  "/posts/{id}/repost"}
+                  "/user/feed", "/user/likes", "/tagged", "/profiles/{name}", "/profiles/{name}/posts", "/profiles/{name}/following", "/posts/{id}",
+                  "/posts/{id}/repost", "/posts/{id}/like"}
 FORBIDDEN = [
-    "/schedule", "/settings", "/reorder", "/pages", "/submissions", "/accept", "/delete", "/follow",
-    "/like\"", "/{id}/like", "/blocks", "/muted", "/filtered-tags", "/draft\"", "/queue/", "PATCH", "\"DELETE\", \"/posts",
+    "/schedule", "/settings", "/reorder", "/pages", "/submissions", "/accept", "/delete", "/follow\"", "/followers",
+    "/blocks", "/muted", "/filtered-tags", "/draft\"", "/queue/", "PATCH", "\"DELETE\", \"/posts",
 ]
 
 
@@ -49,8 +50,10 @@ class AllowlistTest(unittest.TestCase):
                     ("GET", "/tagged"),
                     ("GET", "/profiles/{name}"),
                     ("GET", "/profiles/{name}/posts"),
+                    ("GET", "/profiles/{name}/following"),
                     ("GET", "/posts/{id}"),
                     ("POST", "/posts/{id}/repost"),
+                    ("POST", "/posts/{id}/like"),
                 }
             ),
         )
@@ -84,7 +87,7 @@ class AllowlistTest(unittest.TestCase):
     def test_public_methods_are_the_permitted_operations(self):
         public = {n for n, v in vars(ImaglrClient).items() if callable(v) and not n.startswith("_")}
         self.assertEqual(public, {"user_info", "user_limits", "create_draft", "publish_draft", "queue_draft", "upload_in_pieces",
-                                  "feed", "likes", "tagged", "profile", "profile_posts", "post", "repost"})
+                                  "feed", "likes", "tagged", "profile", "profile_posts", "following", "post", "repost", "like"})
 
     def test_only_client_module_knows_the_api_url(self):
         root = os.path.dirname(os.path.dirname(os.path.abspath(mod.__file__)))
@@ -124,7 +127,7 @@ class GatewayTest(unittest.TestCase):
             ("POST", "/drafts/"),
             ("POST", "/drafts?x=1"),
             ("POST", "/submissions/{id}/accept"),
-            ("POST", "/posts/{id}/like"),
+            ("GET", "/posts/{id}/like"),
             ("POST", "/posts"),
             ("PATCH", "/posts/{id}"),
             ("DELETE", "/posts/{id}"),
@@ -132,6 +135,8 @@ class GatewayTest(unittest.TestCase):
             ("POST", "/user/blocks"),
             ("POST", "/posts/{id}"),
             ("GET", "/posts/{id}/repost"),
+            ("POST", "/profiles/{name}/following"),
+            ("GET", "/profiles/{name}/followers"),
         ]:
             with self.subTest(method=method, path=path):
                 with self.assertRaises(DisallowedEndpoint):

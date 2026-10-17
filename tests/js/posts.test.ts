@@ -29,6 +29,7 @@ test("the Explore box understands tags, creators and links", () => {
   assert.deepEqual(parseSearch("https://imaglr.com/profile/some%20one"), { kind: "creator", value: "some one" });
   assert.deepEqual(parseSearch("https://imaglr.com/post/96040950?x=1"), { kind: "post", value: "96040950" });
   assert.deepEqual(parseSearch("96040950"), { kind: "post", value: "96040950" });
+  assert.deepEqual(parseSearch("Post 96040950"), { kind: "post", value: "96040950" }); // as the box shows it
   assert.equal(parseSearch("  "), null);
   assert.equal(parseSearch("@"), null);
   assert.equal(parseSearch("#"), null);
@@ -49,4 +50,52 @@ test("a broken imaglr avatar address has a working twin", async () => {
   assert.equal(avatarFallback("https://cdn03.imaglr.com/avatars/2026/7/1/a.webp"), null); // already fine
   assert.equal(avatarFallback("https://ui-avatars.com/api/?name=x"), null);
   assert.equal(avatarFallback(null), null);
+});
+
+test("Explore remembers searches and offers them before the creators you follow", async () => {
+  const { exploreOptions, rememberSearch, searchLabel, RECENT_SEARCHES } = await import("../../src/ui/lib/posts.ts");
+  assert.equal(searchLabel({ kind: "tag", value: "wam" }, "#wam "), "#wam");
+  assert.equal(searchLabel({ kind: "creator", value: "sunny" }, "https://imaglr.com/profile/sunny"), "@sunny");
+  assert.equal(searchLabel({ kind: "post", value: "123" }, " https://imaglr.com/post/123 "), "https://imaglr.com/post/123");
+  let recent = rememberSearch([], "#wam");
+  recent = rememberSearch(recent, "@sunny");
+  recent = rememberSearch(recent, "#WAM"); // again, whatever the case: to the front, once
+  assert.deepEqual(recent, ["#WAM", "@sunny"]);
+  for (let n = 0; n < 20; n++) recent = rememberSearch(recent, `#t${n}`);
+  assert.equal(recent.length, RECENT_SEARCHES);
+
+  const people = [{ name: "sunny", avatar: null }, { name: "ocean", avatar: "https://cdn03.imaglr.com/o.jpg" }];
+  const empty = exploreOptions("", ["@sunny", "#wam"], people);
+  assert.deepEqual(empty.map((g) => g.label), ["Recent searches", "People you follow"]);
+  assert.deepEqual(empty[1].options.map((o) => o.value), ["@ocean"]); // @sunny is already a recent search
+  const typed = exploreOptions("su", ["@sunny", "#wam", "#sunset"], people);
+  assert.deepEqual(typed[0].options[0], { value: "su", label: "Search #su", kind: "search" });
+  assert.deepEqual(typed[1].options.map((o) => o.value), ["@sunny", "#sunset"]);
+  assert.equal(typed.length, 2); // sunny is in the recent searches already
+  assert.equal(exploreOptions("@oc", [], people)[0].options[0].label, "Go to @oc");
+  assert.equal(exploreOptions("@oc", [], people)[1].options[0].avatar, "https://cdn03.imaglr.com/o.jpg");
+  assert.equal(exploreOptions("https://imaglr.com/post/5", [], [])[0].options[0].label, "Open this post");
+});
+
+test("the imaglr credit is read from an item's URLs", async () => {
+  const { imaglrCredit } = await import("../../src/ui/lib/posts.ts");
+  assert.deepEqual(imaglrCredit(["https://imaglr.com/post/96040950", "https://imaglr.com/profile/some%20one"]),
+    { postUrl: "https://imaglr.com/post/96040950", postId: "96040950", creatorUrl: "https://imaglr.com/profile/some%20one", creator: "some one" });
+  assert.equal(imaglrCredit(["https://example.com/post/1"]), null);
+  assert.equal(imaglrCredit([]), null);
+  assert.equal(imaglrCredit(undefined), null);
+  assert.equal(imaglrCredit(["https://imaglr.com/post/5"])?.creator, null);
+});
+
+test("the likes sync says what it's doing and what it did", async () => {
+  const { syncSummary } = await import("../../src/ui/lib/posts.ts");
+  assert.equal(syncSummary({ running: true, phase: "reading", seen: 120, new: 14, failed: 0 }), "Syncing your likes: 120 read, 14 new");
+  assert.equal(syncSummary({ running: true, phase: "reading", seen: 50, new: 2, failed: 1, note: "imaglr asked to slow down: waiting 30 s" }),
+    "Syncing your likes: 50 read, 2 new, 1 failed. imaglr asked to slow down: waiting 30 s");
+  assert.equal(syncSummary({ running: true, phase: "crediting", new: 14 }), "Adding 14 posts to Stash…");
+  assert.equal(syncSummary({}), "");
+  assert.match(syncSummary({ finished_at: new Date().toISOString(), saved: 12, known: 30, failed: 2 }),
+    /^Last sync just now: 12 saved, 30 already in your library, 2 failed\.$/);
+  assert.match(syncSummary({ finished_at: new Date(Date.now() - 2 * 3600e3).toISOString(), saved: 1 }), /^Last sync 2 h ago: /);
+  assert.match(syncSummary({ finished_at: "2020-10-03T12:00:00Z", saved: 1 }), /^Last sync on 3 Oct 2020: /);
 });

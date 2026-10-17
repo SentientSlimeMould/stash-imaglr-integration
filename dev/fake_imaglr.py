@@ -26,9 +26,9 @@ The API key chooses the scenario (keys look like pbk_<scenario>|anything):
 Tags named "banned" or starting with "banned-" are silently dropped, like imaglr does.
 
 Browsing (for saving posts into Stash): GET /user/feed, /user/likes, /tagged?tag=, /profiles/{name},
-/profiles/{name}/posts and /posts/{id} serve a fixed catalogue of made-up posts by made-up creators, paged with
+/profiles/{name}/posts, /profiles/{name}/following and /posts/{id} serve a fixed catalogue of made-up posts by made-up creators, paged with
 a cursor and absolute next links like imaglr's; POST /posts/{id}/repost records a reblog (listed on the index
-page). The posts' pictures, GIFs and videos are served without a key from /media/, like imaglr's CDN; they are
+page) and POST /posts/{id}/like toggles a like. The posts' pictures, GIFs and videos are served without a key from /media/, like imaglr's CDN; they are
 generated on first request (PNG in pure Python, GIF and MP4 with ffmpeg when it is on PATH).
 
 Run: python3 dev/fake_imaglr.py [port] [state dir]   (the compose file runs it as `fake-imaglr`)
@@ -55,7 +55,7 @@ REPOSTS = []  # (blog, post id)
 
 # ---- the browse catalogue -------------------------------------------------------------------------------
 CREATORS = ("sunny-days", "city-lights", "ocean-views", "mountain-trails")
-LIKED = (7000, 7002, 7003, 7010)
+LIKED = {7000, 7002, 7003, 7010}  # POST /posts/{id}/like toggles membership
 SPECIAL = {
     # id: (creator, media kinds, tags, caption); everything else follows a pattern below
     7000: ("sunny-days", ["image"], ["sunset", "beach", "imaglr", "Test Performer"], "Golden hour on the shore"),
@@ -226,6 +226,18 @@ class Handler(BaseHTTPRequestHandler):
         name = self.auth()
         if name is None:
             return
+        match = re.fullmatch(r"/api/v2/posts/(\d+)/like", self.path)
+        if match:
+            pid = int(match.group(1))
+            if name == "noscope":
+                return self.reply(403, errors=[("insufficient_scope", "This key cannot write.")])
+            post = next((p for p in catalogue(self.headers.get("Host", "localhost")) if p["id"] == pid), None)
+            if post is None:
+                return self.reply(404, errors=[("post_not_found", "No such post.")])
+            with LOCK:
+                LIKED.symmetric_difference_update({pid})
+                liked = pid in LIKED
+            return self.reply(200, {"liked": liked, "likes": post["note_count"]["likes"] + (1 if liked else 0)})
         match = re.fullmatch(r"/api/v2/posts/(\d+)/repost", self.path)
         if match:
             if name == "noscope":
@@ -330,6 +342,12 @@ class Handler(BaseHTTPRequestHandler):
         if match:
             post = next((p for p in posts if p["id"] == int(match.group(1))), None)
             return self.reply(200, {"post": post}) if post else self.reply(404, errors=[("post_not_found", "No such post.")])
+        match = re.fullmatch(r"/api/v2/profiles/([^/]+)/following", path)
+        if match:  # every blog follows three of the made-up creators
+            people = [{"name": c, "url": f"https://imaglr.example/profile/{c}", "avatar": None} for c in CREATORS[:3]]
+            who = urllib.parse.unquote(match.group(1))
+            return self.reply(200, {"profile": {"name": who, "url": f"https://imaglr.example/profile/{who}", "avatar": None},
+                                    "following": people})
         match = re.fullmatch(r"/api/v2/profiles/([^/]+)(/posts)?", path)
         if match:
             name = urllib.parse.unquote(match.group(1))

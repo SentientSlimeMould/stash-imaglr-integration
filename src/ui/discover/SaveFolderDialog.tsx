@@ -7,7 +7,6 @@ import { runOperation } from "../api.ts";
 import { ConfirmDialog } from "../ConfirmDialog.tsx";
 
 export interface SaveSetup {
-  enabled: boolean;
   autoplay: boolean;
   quick_save?: boolean;
   folder: string | null;
@@ -84,7 +83,7 @@ export function SaveFolderSection() {
   React.useEffect(() => {
     runOperation<SaveSetup>("save_setup").then(setSetup, () => setSetup(null));
   }, []);
-  if (!setup?.enabled) return null;
+  if (!setup) return null;
   const problem = folderProblem(setup);
   return (
     <div className="imaglr-settings-section">

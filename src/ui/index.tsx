@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Plugin UI entry point: runs once when Stash loads the plugin's JavaScript.
 import React from "react";
+import { patchCredit } from "./credit.tsx";
 import { patchImageLists } from "./imageListActions.tsx";
 import { NavItem } from "./NavItem.tsx";
 import { PostPage } from "./PostPage.tsx";
@@ -21,3 +22,4 @@ PluginApi.patch.before("MainNavBar.MenuItems", (props: { children?: React.ReactN
 ]);
 
 patchImageLists();
+patchCredit();

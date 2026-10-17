@@ -46,6 +46,7 @@ export interface Card {
   out_s?: number | null;
   members?: Card[]; // posts with several files
   saved_from?: string | null; // saved from this imaglr post: reblogged, never uploaded again
+  saved_creator?: string | null; // who posted it on imaglr
 }
 
 export interface QueueResponse {

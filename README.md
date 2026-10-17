@@ -11,6 +11,7 @@ your [imaglr](https://imaglr.com) blogs.
 - **Tags:** Tags for your imaglr posts are suggested from your Stash tags (including performers, studio and galleries). These can be edited before sending.
 - **Tag Mapping:** Set up rules on your Stash tags to automatically translate them to one or many corresponding Imaglr tags. 
 - **Draft, Queue or Publish immediately:** You can set a default upload action for each blog you want to send to and alter that if needed any time you send.
+- **Discover:** browse your imaglr feed, your likes, tags and creators inside Stash. Save the posts you love into your library, sync all your likes in one go, and like or reblog posts to your own blogs.
 - **Privacy:** location, camera and other metadata are removed from every file before upload.
 
 ## Demos
@@ -55,7 +56,7 @@ in [docs/media](docs/media).</sub>
   - **read**: lets the plugin check the blog's name, supporter status and daily limit, and lets you browse
     imaglr from Stash and save posts;
   - **manage**: drafts, including publishing or queueing a draft;
-  - **write**: only needed to **Reblog** from Stash.
+  - **write**: only needed to like and reblog from Stash.
 
 The plugin's Settings show each blog's **posts left today**, as reported by imaglr. imaglr allows 1,000 new posts
 a day; saving a draft doesn't use one, publishing does (including when imaglr publishes from your queue).
@@ -81,7 +82,8 @@ a day; saving a draft doesn't use one, publishing does (including when imaglr pu
 A few more options live in Stash under **Settings → Plugins → Imaglr Integration**: the queue tag (default
 `imaglr`), the tag applied after sending (default `imaglr-sent`), tags never suggested (default `^AI_`), keeping
 tag capitals, the default clip length, whether new clips start as GIFs, the GIF size target, the default codec and
-picture size for clips, and how long prepared files are kept.
+picture size for clips, and how long prepared files are kept; and for Discover: autoplaying videos, saving without
+reviewing tags, and the save folder.
 
 ## Use
 
@@ -99,6 +101,10 @@ picture size for clips, and how long prepared files are kept.
   straight away: items set to Publish now are saved as drafts instead.
 - **Sent** lists where each post went, which tags imaglr dropped, and lets you retry queueing or publishing if
   that step failed after the draft was saved.
+- **Discover:** scroll your Feed and Likes, or Explore a #tag, an @creator or a post link. **Save** shows what each
+  of the post's tags becomes in Stash; tick Remember to make it a rule for next time. **Sync likes to your library**
+  saves every liked post you haven't saved yet. Saved items show "From imaglr" in Stash, with links back to the post
+  and its creator.
 
 Sending is queued as a Stash task, so it shows on Stash's **Settings → Tasks** page.
 
@@ -126,14 +132,14 @@ folder inside Stash's plugins directory, in a SQLite database.
 
 - read your profile and API limits;
 - create a draft, send a large file for it in pieces, and publish or queue a draft it has just created;
-- read your feed, your likes, a tag, a creator and a single post while you browse;
-- reblog a post when you ask;
+- read your feed, your likes, a tag, a creator, who your blog follows and a single post while you browse;
+- like, unlike or reblog a post when you ask;
 - download pictures and videos, only from imaglr's own servers.
 
 It never:
 
 - edits or deletes posts;
-- likes or follows anyone;
+- follows anyone;
 - changes your queue settings;
 - saves anything you didn't choose.
 

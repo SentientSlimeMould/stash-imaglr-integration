@@ -70,6 +70,9 @@ def op_queue(ctx: Context) -> dict[str, Any]:
     for item in repo.list_items(db, kinds=("still",), statuses=repo.ACTIVE_STATUSES):
         cards[item["id"]] = services.still_card(item)
 
+    own = services.own_blog_names(db)
+    for card in cards.values():
+        services.allow_own(card, own)
     member_of = repo.members_index(db)
     out, posts = [], {}  # type: ignore[var-annotated]
     for item_id, card in cards.items():
@@ -186,7 +189,7 @@ def _file_view(ctx: Context, config, member: dict[str, Any]):
                                         "output_mime",
                                         "stash_marker_id", "stash_scene_id", "stash_image_id")})
     card["prepared"] = services.prepared_url(member["id"], member["output_path"]) if member["output_path"] else None
-    return card, sugg
+    return services.allow_own(card, services.own_blog_names(ctx.db)), sugg
 
 
 def op_item_detail(ctx: Context) -> dict[str, Any]:

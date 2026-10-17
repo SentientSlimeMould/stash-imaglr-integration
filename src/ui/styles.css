@@ -766,11 +766,31 @@
 }
 
 .imaglr-explore-search {
+  display: flex;
+  gap: 0.5rem;
   margin-bottom: 1rem;
 }
 
-.imaglr-explore-search .btn {
+.imaglr-explore-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.imaglr-explore-search .btn,
+.imaglr-explore-select .react-select__control {
   min-height: 44px;
+}
+
+.imaglr-explore-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.imaglr-avatar-small {
+  width: 24px;
+  height: 24px;
+  font-size: 0.75rem;
 }
 
 .imaglr-explore-title {
@@ -792,4 +812,136 @@
     padding-left: 0.6rem;
     padding-right: 0.6rem;
   }
+}
+
+/* The save review: one row per imaglr tag, its Stash targets as badges, a picker to add more, Remember. On a
+   phone the rows stack. */
+.imaglr-review-row {
+  display: grid;
+  grid-template-columns: minmax(7rem, 1fr) 2fr minmax(10rem, 1.3fr);
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.imaglr-review-targets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.imaglr-review-edit {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.imaglr-review-edit .imaglr-target-picker {
+  flex: 1;
+  min-width: 7rem;
+}
+
+.imaglr-target {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.imaglr-target-remove {
+  border: 0;
+  background: none;
+  color: inherit;
+  padding: 0 0 0 0.2rem;
+  min-width: 1.5rem;
+  min-height: 1.5rem;
+}
+
+@media (max-width: 575.98px) {
+  .imaglr-review-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* "From imaglr" on Stash's image and scene pages: a label like Stash's own, then the links as buttons */
+.imaglr-credit {
+  margin: 1rem 0;
+}
+
+.imaglr-credit-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.imaglr-credit-links .btn {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* The reblog composer (a file saved from imaglr): the post's pictures as thumbnails, then its credit */
+.imaglr-reblog-source {
+  margin-bottom: 1rem;
+}
+
+.imaglr-reblog-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.imaglr-reblog-thumbs img {
+  max-height: 240px;
+  max-width: 100%;
+  border-radius: 0.25rem;
+}
+
+/* The like button: a quiet heart and count, red once you've liked the post */
+.imaglr-like {
+  color: inherit;
+  padding: 0 0.25rem;
+  min-height: 44px;
+  font-size: inherit;
+}
+
+.imaglr-like:hover,
+.imaglr-like:focus {
+  color: #ff7373;
+  text-decoration: none;
+}
+
+.imaglr-liked,
+.imaglr-liked:hover {
+  color: #ff7373;
+}
+
+/* Sync likes, above the Likes list */
+.imaglr-sync {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  max-width: 640px;
+  margin: 0 auto 1rem;
+}
+
+.imaglr-sync .btn {
+  min-height: 44px;
+}
+
+/* A picture or video the browser can't show: a message and a link, where the broken-image icon would be */
+.imaglr-post-unshowable {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 1rem;
+  text-align: center;
+  background: #202b33;
 }

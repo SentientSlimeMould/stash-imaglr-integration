@@ -7,9 +7,12 @@ import React from "react";
 import { runOperation } from "../api.ts";
 import { ConfirmDialog } from "../ConfirmDialog.tsx";
 import type { Blog } from "../model.ts";
-import { type ImaglrPost, parseSearch, SAVING, type SaveState } from "../lib/posts.ts";
-import { AutoplayContext, PostCard } from "./PostCard.tsx";
+import { type ExploreOption, exploreOptions, type ImaglrPost, parseSearch, rememberSearch, SAVING, type SaveState, searchLabel } from "../lib/posts.ts";
+import { AutoplayContext, Avatar, PostCard } from "./PostCard.tsx";
 import { folderReady, SaveFolderDialog, type SaveSetup } from "./SaveFolderDialog.tsx";
+import { ReblogDialog } from "./ReblogDialog.tsx";
+import { LikesSync } from "./LikesSync.tsx";
+import { ReviewDialog } from "./ReviewDialog.tsx";
 import { PostFeed } from "./PostFeed.tsx";
 
 export const DISCOVER_TABS = [
@@ -22,6 +25,16 @@ export type DiscoverTab = (typeof DISCOVER_TABS)[number]["key"];
 
 const POLL_MS = 2000;
 const BLOG_KEY = "imaglr.browseBlog";
+const RECENT_KEY = "imaglr.recentSearches"; // this browser's own Explore history; nothing is sent anywhere
+
+function storedSearches(): string[] {
+  try {
+    const v = JSON.parse(window.localStorage.getItem(RECENT_KEY) ?? "[]");
+    return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
 
 function storedBlog(): number | null {
   try {
@@ -52,62 +65,68 @@ function useSaves() {
   return { saves, put: (s: SaveState) => setSaves((old) => new Map(old).set(s.post_id, s)) };
 }
 
-function ReblogDialog({ post, blogs, onClose }: { post: ImaglrPost; blogs: Blog[]; onClose: () => void }) {
-  const { Form } = PluginApi.libraries.Bootstrap;
-  const Toast = PluginApi.hooks.useToast();
-  const [blogId, setBlogId] = React.useState<number | null>(blogs[0]?.id ?? null);
-  const [busy, setBusy] = React.useState(false);
-  const blog = blogs.find((b) => b.id === blogId);
-  async function accept() {
-    if (!blog) return;
-    setBusy(true);
-    try {
-      await runOperation("reblog", { post_id: post.id, blog_id: blog.id });
-      Toast.success(`Reblogged to ${blog.label}.`);
-      onClose();
-    } catch (e) {
-      Toast.error(e);
-      setBusy(false);
-    }
-  }
-  return (
-    <ConfirmDialog title="Reblog" accept="Reblog" busy={busy} disabled={!blog} onAccept={accept} onCancel={onClose}>
-      {blogs.length > 1 ? (
-        <Form.Group>
-          <Form.Label>To</Form.Label>
-          <Form.Control as="select" className="text-input" value={blogId ?? ""}
-            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setBlogId(Number(e.target.value))}>
-            {blogs.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
-          </Form.Control>
-        </Form.Group>
-      ) : null}
-      {blog ? <p className="mb-0">Reblog {post.creator.name ? `@${post.creator.name}'s post` : "this post"} to {blog.label}? It appears on
-        your blog straight away.</p> : <p className="mb-0">Add a blog in the plugin's settings first.</p>}
-    </ConfirmDialog>
-  );
-}
-
-function Explore({ params, onSearch, children }: { params: URLSearchParams; onSearch: (s: string) => void; children: React.ReactNode }) {
-  const { Form, Button, InputGroup } = PluginApi.libraries.Bootstrap;
-  const initial = params.get("creator") ? `@${params.get("creator")}` : params.get("tag") ? `#${params.get("tag")}` : params.get("post") ?? "";
-  const [text, setText] = React.useState(initial);
-  React.useEffect(() => setText(initial), [initial]);
+/** The Explore box: Stash's own select, typed into like a search field. Its menu offers what Enter would do,
+ *  your recent searches and the creators you follow; choosing one searches. */
+function Explore({ params, recent, following, onSearch, children }: { params: URLSearchParams; recent: string[];
+  following: { name: string; avatar: string | null }[]; onSearch: (s: string) => void; children: React.ReactNode }) {
+  const { Button } = PluginApi.libraries.Bootstrap;
+  const { Icon } = PluginApi.components;
+  const Select = PluginApi.libraries.ReactSelect.default;
+  // What's being shown, as the select's chosen value (so the box says what you're looking at, as Stash's pickers
+  // show their choice); typing starts a new search in its place.
+  const current = params.get("creator") ? `@${params.get("creator")}` : params.get("tag") ? `#${params.get("tag")}`
+    : params.get("post") ? `Post ${params.get("post")}` : "";
+  const shown: ExploreOption | null = current ? { value: current, label: current, kind: "search" } : null;
+  const [text, setText] = React.useState("");
+  const [open, setOpen] = React.useState(false);
+  const go = (value: string) => {
+    setText("");
+    setOpen(false);
+    onSearch(value);
+  };
   return (
     <div className="imaglr-feed">
-      <Form onSubmit={(e: React.FormEvent) => { e.preventDefault(); onSearch(text); }} className="imaglr-explore-search">
-        <InputGroup>
-          <Form.Control className="text-input" value={text} placeholder="#tag, @creator or a post link" enterKeyHint="search"
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setText(e.target.value)} />
-          <InputGroup.Append><Button type="submit" variant="primary">Go</Button></InputGroup.Append>
-        </InputGroup>
-      </Form>
+      <div className="imaglr-explore-search">
+        <Select
+          inputId="imaglr-explore"
+          className="react-select imaglr-explore-select"
+          classNamePrefix="react-select"
+          value={shown}
+          inputValue={text}
+          options={exploreOptions(text, recent, following)}
+          menuIsOpen={open}
+          onMenuOpen={() => setOpen(true)}
+          onMenuClose={() => setOpen(false)}
+          onFocus={() => setOpen(true)}
+          onInputChange={(v: string, meta: { action: string }) => { if (meta.action === "input-change") { setText(v); setOpen(true); } }}
+          onChange={(o: ExploreOption | null) => o && go(o.value)}
+          onKeyDown={(e: React.KeyboardEvent) => {
+            if (e.key === "Enter" && !open && text.trim()) { e.preventDefault(); go(text); }
+          }}
+          filterOption={() => true}
+          placeholder="#tag, @creator or a post link"
+          noOptionsMessage={() => null}
+          formatOptionLabel={(o: ExploreOption, meta: { context: string }) => meta.context === "value" ? o.label : (
+            <span className="imaglr-explore-option">
+              {o.kind === "follow" ? <Avatar url={o.avatar ?? null} name={o.label} small />
+                : <Icon icon={o.kind === "recent" ? PluginApi.libraries.FontAwesomeSolid.faHistory : PluginApi.libraries.FontAwesomeSolid.faSearch} />}
+              <span>{o.label}</span>
+            </span>
+          )}
+          styles={{ menuPortal: (base: object) => ({ ...base, zIndex: 1100 }) }}
+          components={{ IndicatorSeparator: () => null, DropdownIndicator: () => null }}
+          menuPortalTarget={document.body}
+        />
+        <Button variant="primary" onClick={() => (text.trim() ? go(text) : shown ? onSearch(shown.value) : undefined)}>Go</Button>
+      </div>
       {children}
     </div>
   );
 }
 
 function SinglePost({ id, ...handlers }: { id: string; saves: Map<string, SaveState>; onCreator: (n: string) => void; onTag: (t: string) => void;
-  onSave: (p: ImaglrPost) => void; onReblog: (p: ImaglrPost) => void; blogId: number | null }) {
+  onSave: (p: ImaglrPost) => void; onReblog: (p: ImaglrPost) => void; blogId: number | null;
+  onLike: (p: ImaglrPost) => Promise<{ liked: boolean | null; likes: number | null }> }) {
   const [post, setPost] = React.useState<ImaglrPost | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   React.useEffect(() => {
@@ -119,7 +138,7 @@ function SinglePost({ id, ...handlers }: { id: string; saves: Map<string, SaveSt
   if (error) return <div className="alert alert-warning">{error}</div>;
   if (!post) return <p className="text-muted">Loading…</p>;
   return <PostCard post={post} save={handlers.saves.get(post.credit_id) ?? null} onCreator={handlers.onCreator}
-    onTag={handlers.onTag} onSave={handlers.onSave} onReblog={handlers.onReblog} />;
+    onTag={handlers.onTag} onSave={handlers.onSave} onReblog={handlers.onReblog} onLike={handlers.onLike} />;
 }
 
 interface Props {
@@ -135,17 +154,28 @@ export function Discover({ tab, params, blogs, go }: Props) {
   const [setup, setSetup] = React.useState<SaveSetup | null>(null);
   const [pendingSave, setPendingSave] = React.useState<ImaglrPost | null>(null);
   const [reblogging, setReblogging] = React.useState<ImaglrPost | null>(null);
+  const [reviewing, setReviewing] = React.useState<ImaglrPost | null>(null);
+  const [afterFolder, setAfterFolder] = React.useState<(() => void) | null>(null); // the sync waiting for a save folder
+  const [likesKey, setLikesKey] = React.useState(0); // bumped after a sync, so the Likes list shows what's saved
   const [visited, setVisited] = React.useState<Set<DiscoverTab>>(new Set([tab]));
   const [blogId, setBlogId] = React.useState<number | null>(() => {
     const stored = storedBlog();
     return blogs.some((b) => b.id === stored) ? stored : (blogs.find((b) => b.ok) ?? blogs[0])?.id ?? null;
   });
   const { saves, put } = useSaves();
+  const [recent, setRecent] = React.useState<string[]>(storedSearches);
+  const [following, setFollowing] = React.useState<{ name: string; avatar: string | null }[]>([]);
 
   React.useEffect(() => setVisited((v) => (v.has(tab) ? v : new Set(v).add(tab))), [tab]);
   React.useEffect(() => {
     runOperation<SaveSetup>("save_setup").then(setSetup, () => setSetup(null));
   }, []);
+  // The creators the browsing blog follows, for Explore's suggestions (only once Explore is opened).
+  React.useEffect(() => {
+    if (tab !== "explore" || !blogId) return;
+    runOperation<{ people: { name: string; avatar: string | null }[] }>("following", { blog_id: blogId })
+      .then((r) => setFollowing(r.people), () => setFollowing([]));
+  }, [tab === "explore", blogId]);
 
   const explore = {
     onCreator: (name: string) => name && go({ tab: "explore", creator: name }, true),
@@ -153,8 +183,12 @@ export function Discover({ tab, params, blogs, go }: Props) {
   };
 
   async function startSave(post: ImaglrPost, ready = setup) {
-    if (!folderReady(ready)) {
+    if (!ready || !folderReady(ready)) {
       setPendingSave(post); // first save, or the folder can't take saves: choose one, then this post saves
+      return;
+    }
+    if (!ready.quick_save) {
+      setReviewing(post); // the review saves it (or not)
       return;
     }
     put({ post_id: post.credit_id, status: "queued", progress: 0, error: null, refs: [] });
@@ -167,11 +201,23 @@ export function Discover({ tab, params, blogs, go }: Props) {
     }
   }
 
-  const handlers = { ...explore, saves, blogId, onSave: (p: ImaglrPost) => startSave(p), onReblog: setReblogging };
+  async function like(post: ImaglrPost) {
+    try {
+      return await runOperation<{ liked: boolean | null; likes: number | null }>("like", { post_id: post.id, blog_id: blogId ?? undefined });
+    } catch (e) {
+      Toast.error(e);
+      throw e;
+    }
+  }
+
+  const handlers = { ...explore, saves, blogId, onSave: (p: ImaglrPost) => startSave(p), onReblog: setReblogging, onLike: like };
 
   function search(text: string) {
     const found = parseSearch(text);
     if (!found) return;
+    const next = rememberSearch(recent, searchLabel(found, text));
+    setRecent(next);
+    try { window.localStorage.setItem(RECENT_KEY, JSON.stringify(next)); } catch { /* private window: not remembered */ }
     go(found.kind === "creator" ? { tab: "explore", creator: found.value } : found.kind === "tag" ? { tab: "explore", tag: found.value }
       : { tab: "explore", post: found.value }, true);
   }
@@ -204,10 +250,14 @@ export function Discover({ tab, params, blogs, go }: Props) {
         <div hidden={tab !== "feed"}><PostFeed source="feed" {...handlers} /></div>
       ) : null}
       {visited.has("likes") ? (
-        <div hidden={tab !== "likes"}><PostFeed source="likes" {...handlers} /></div>
+        <div hidden={tab !== "likes"}>
+          <LikesSync blogId={blogId} ready={folderReady(setup)} onNeedFolder={(then) => setAfterFolder(() => then)}
+            onFinished={() => setLikesKey((k) => k + 1)} />
+          <PostFeed key={likesKey} source="likes" {...handlers} />
+        </div>
       ) : null}
       {tab === "explore" ? (
-        <Explore params={params} onSearch={search}>
+        <Explore params={params} recent={recent} following={following} onSearch={search}>
           {creator ? <PostFeed source="creator" name={creator} {...handlers} />
             : tag ? (<><h4 className="imaglr-explore-title">#{tag}</h4><PostFeed source="tag" tag={tag} {...handlers} /></>)
             : postId ? <SinglePost id={postId} {...handlers} />
@@ -222,7 +272,19 @@ export function Discover({ tab, params, blogs, go }: Props) {
           if (folderReady(s)) startSave(post, s);
         }} />
       ) : null}
-      {reblogging ? <ReblogDialog post={reblogging} blogs={blogs} onClose={() => setReblogging(null)} /> : null}
+      {afterFolder && setup ? (
+        <SaveFolderDialog setup={setup} onCancel={() => setAfterFolder(null)} onDone={(s) => {
+          setSetup(s);
+          const then = afterFolder;
+          setAfterFolder(null);
+          if (folderReady(s)) then();
+        }} />
+      ) : null}
+      {reblogging ? <ReblogDialog postId={reblogging.id} creator={reblogging.creator.name} blogs={blogs} onClose={() => setReblogging(null)} /> : null}
+      {reviewing ? (
+        <ReviewDialog post={reviewing} blogId={blogId} onCancel={() => setReviewing(null)}
+          onDone={(s) => { put(s); setReviewing(null); }} />
+      ) : null}
     </div>
     </AutoplayContext.Provider>
   );

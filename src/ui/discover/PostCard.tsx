@@ -72,7 +72,20 @@ function start(v: HTMLVideoElement, withSound: boolean) {
   });
 }
 
-function VideoMedia({ media }: { media: PostMedia }) {
+/** In place of a picture or video the browser can't show (say, a TIFF uploaded as a .jpg, which imaglr serves as
+ *  it is): a plain message and the way to see it on imaglr, instead of a broken-image icon. */
+function Unshowable({ what, postUrl }: { what: string; postUrl: string | null }) {
+  const { Icon } = PluginApi.components;
+  return (
+    <div className="imaglr-post-unshowable small">
+      <Icon icon={PluginApi.libraries.FontAwesomeSolid.faEyeSlash} />
+      <span>This {what} can't be shown here.</span>
+      {postUrl ? <a href={postUrl} target="_blank" rel="noopener noreferrer">Open it on imaglr</a> : null}
+    </div>
+  );
+}
+
+function VideoMedia({ media, postUrl }: { media: PostMedia; postUrl: string | null }) {
   const { Icon } = PluginApi.components;
   const autoplay = React.useContext(AutoplayContext);
   const box = React.useRef<HTMLDivElement>(null);
@@ -81,6 +94,7 @@ function VideoMedia({ media }: { media: PostMedia }) {
   const [wanted, setWanted] = React.useState(false); // tapped to play (when videos don't start on their own)
   const [src, setSrc] = React.useState<string | null>(null);
   const [problem, setProblem] = React.useState<string | null>(null);
+  const [unplayable, setUnplayable] = React.useState(false); // fetched, but not a video the browser can play
 
   // Autoplay fetches each video as it nears the screen; otherwise only the one you tap.
   React.useEffect(() => {
@@ -108,7 +122,8 @@ function VideoMedia({ media }: { media: PostMedia }) {
     <div ref={box} className="imaglr-post-media" style={{ aspectRatio: String(mediaRatio(media)) }}>
       <video ref={video} src={src ?? undefined} poster={media.thumb ?? undefined} loop playsInline controls={!!src}
         preload="metadata" onVolumeChange={(e) => { wantsSound = !e.currentTarget.muted; }}
-        onPlay={(e) => { if (playing && playing !== e.currentTarget) playing.pause(); playing = e.currentTarget; }} />
+        onPlay={(e) => { if (playing && playing !== e.currentTarget) playing.pause(); playing = e.currentTarget; }}
+        onError={() => { if (src) setUnplayable(true); }} />
       {!autoplay && !wanted ? (
         <button type="button" className="imaglr-post-play" aria-label="Play" onClick={() => setWanted(true)}>
           <Icon icon={PluginApi.libraries.FontAwesomeSolid.faPlay} />
@@ -116,39 +131,44 @@ function VideoMedia({ media }: { media: PostMedia }) {
       ) : null}
       {waiting ? <div className="imaglr-post-loading"><span className="spinner-border spinner-border-sm" /></div> : null}
       {problem ? <div className="imaglr-post-problem small">{problem}</div> : null}
+      {unplayable ? <Unshowable what="video" postUrl={postUrl} /> : null}
     </div>
   );
 }
 
-function PictureMedia({ media }: { media: PostMedia }) {
+function PictureMedia({ media, postUrl }: { media: PostMedia; postUrl: string | null }) {
   // imaglr's pictures load straight from its CDN. Only the development fake serves plain http on a Docker
   // address the browser can't reach, so its pictures come through the plugin like videos do.
   const direct = media.url.startsWith("https://");
   const box = React.useRef<HTMLDivElement>(null);
   const { near } = useInView(box);
   const [src, setSrc] = React.useState<string | null>(direct ? media.url : null);
+  const [broken, setBroken] = React.useState(false);
   React.useEffect(() => {
     if (!direct && near && !src) previewSrc(media.url).then(setSrc, () => undefined);
   }, [direct, near, src, media.url]);
   return (
     <div ref={box} className="imaglr-post-media" style={{ aspectRatio: String(mediaRatio(media)) }}>
-      {src ? <img src={src} alt="" loading="lazy" decoding="async" /> : null}
+      {broken ? <Unshowable what="picture" postUrl={postUrl} />
+        : src ? <img src={src} alt="" loading="lazy" decoding="async" onError={() => setBroken(true)} /> : null}
     </div>
   );
 }
 
-function Media({ media }: { media: PostMedia[] }) {
+function Media({ media, postUrl }: { media: PostMedia[]; postUrl: string | null }) {
   const strip = React.useRef<HTMLDivElement>(null);
   const [index, setIndex] = React.useState(0);
   if (media.length === 0) return null;
-  if (media.length === 1) return media[0].kind === "video" ? <VideoMedia media={media[0]} /> : <PictureMedia media={media[0]} />;
+  if (media.length === 1) {
+    return media[0].kind === "video" ? <VideoMedia media={media[0]} postUrl={postUrl} /> : <PictureMedia media={media[0]} postUrl={postUrl} />;
+  }
   return (
     <div className="imaglr-post-carousel">
       <div ref={strip} className="imaglr-post-strip"
         onScroll={(e) => setIndex(Math.round(e.currentTarget.scrollLeft / Math.max(1, e.currentTarget.clientWidth)))}>
         {media.map((m, n) => (
           <div key={n} className="imaglr-post-slide">
-            {m.kind === "video" ? <VideoMedia media={m} /> : <PictureMedia media={m} />}
+            {m.kind === "video" ? <VideoMedia media={m} postUrl={postUrl} /> : <PictureMedia media={m} postUrl={postUrl} />}
           </div>
         ))}
       </div>
@@ -159,10 +179,10 @@ function Media({ media }: { media: PostMedia[] }) {
 
 /** A creator's picture: imaglr's address, then the one that works when imaglr's is broken (see avatarFallback),
  *  then their initial. */
-export function Avatar({ url, name, large }: { url: string | null; name: string; large?: boolean }) {
+export function Avatar({ url, name, large, small }: { url: string | null; name: string; large?: boolean; small?: boolean }) {
   const [src, setSrc] = React.useState(url);
   React.useEffect(() => setSrc(url), [url]);
-  const className = `imaglr-avatar${large ? " imaglr-avatar-large" : ""}`;
+  const className = `imaglr-avatar${large ? " imaglr-avatar-large" : small ? " imaglr-avatar-small" : ""}`;
   if (!src) return <span className={`${className} imaglr-avatar-letter`} aria-hidden="true">{(name[0] ?? "?").toUpperCase()}</span>;
   return <img className={className} src={src} alt="" loading="lazy" onError={() => setSrc(src === url ? avatarFallback(url) : null)} />;
 }
@@ -174,9 +194,43 @@ interface Props {
   onTag: (tag: string) => void;
   onSave: (post: ImaglrPost) => void;
   onReblog: (post: ImaglrPost) => void;
+  onLike: (post: ImaglrPost) => Promise<{ liked: boolean | null; likes: number | null }>;
 }
 
-export function PostCard({ post, save, onCreator, onTag, onSave, onReblog }: Props) {
+/** The like button: a heart that fills when you've liked the post, with imaglr's count. Shows the change at once
+ *  and puts it back if imaglr refuses. */
+function LikeButton({ post, onLike }: { post: ImaglrPost; onLike: Props["onLike"] }) {
+  const { Icon } = PluginApi.components;
+  const fa = PluginApi.libraries.FontAwesomeSolid;
+  const [liked, setLiked] = React.useState(post.liked);
+  const [count, setCount] = React.useState(post.notes.likes);
+  const [busy, setBusy] = React.useState(false);
+  async function toggle() {
+    if (busy) return;
+    const was = { liked, count };
+    setBusy(true);
+    setLiked(!liked);
+    setCount(Math.max(0, count + (liked ? -1 : 1)));
+    try {
+      const r = await onLike(post);
+      if (r.liked !== null) setLiked(r.liked);
+      if (r.likes !== null) setCount(r.likes);
+    } catch {
+      setLiked(was.liked);
+      setCount(was.count);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <button type="button" className={`btn btn-link imaglr-like${liked ? " imaglr-liked" : ""}`} onClick={toggle} disabled={busy}
+      aria-pressed={liked} title={liked ? "Liked: tap to take it back" : "Like"}>
+      <Icon icon={fa.faHeart} /> {shortCount(count)}
+    </button>
+  );
+}
+
+export function PostCard({ post, save, onCreator, onTag, onSave, onReblog, onLike }: Props) {
   const { Button } = PluginApi.libraries.Bootstrap;
   const { Link } = PluginApi.libraries.ReactRouterDOM;
   const { Icon } = PluginApi.components;
@@ -213,7 +267,7 @@ export function PostCard({ post, save, onCreator, onTag, onSave, onReblog }: Pro
         ) : null}
       </header>
 
-      <Media media={post.media} />
+      <Media media={post.media} postUrl={post.url} />
 
       <div className="card-body imaglr-post-body">
         {post.summary ? (
@@ -233,8 +287,8 @@ export function PostCard({ post, save, onCreator, onTag, onSave, onReblog }: Pro
         ) : null}
         <div className="imaglr-post-actions">
           <span className="small text-muted imaglr-post-notes">
-            <Icon icon={fa.faHeart} /> {shortCount(post.notes.likes)}
-            <span className="ml-3"><Icon icon={fa.faRetweet} /> {shortCount(post.notes.reposts)}</span>
+            <LikeButton post={post} onLike={onLike} />
+            <span className="ml-2"><Icon icon={fa.faRetweet} /> {shortCount(post.notes.reposts)}</span>
           </span>
           <Button variant="secondary" onClick={() => onReblog(post)}>
             <Icon icon={fa.faRetweet} /> Reblog

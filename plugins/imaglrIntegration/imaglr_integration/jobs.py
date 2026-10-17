@@ -77,23 +77,23 @@ FROM_IMAGLR = ("This came from imaglr, so it isn't uploaded again (imaglr's term
 
 
 def saved_from_imaglr(ctx: Context, members: list[dict[str, Any]]) -> str | None:
-    """The imaglr post any of these items was saved from, if one was: such files are reblogged, never sent."""
+    """The imaglr post any of these items was saved from, if one was: such files are reblogged, never sent.
+    A post by one of the user's own blogs is theirs, and may be sent again like anything else."""
+    own = services.own_blog_names(ctx.db)
     for member in members:
         source = member
         if member["kind"] == "still" and member.get("source_item_id"):
             source = repo.get_item(ctx.db, member["source_item_id"]) or member
-        post = None
+        found = None
         if source.get("stash_marker_id"):
             marker = api.find_marker(ctx.stash, source["stash_marker_id"])
-            post = marker.scene.imaglr_post_id if marker and marker.scene else None
+            found = marker.scene if marker else None
         elif source.get("stash_image_id"):
-            image = api.find_image(ctx.stash, source["stash_image_id"])
-            post = image.imaglr_post_id if image else None
+            found = api.find_image(ctx.stash, source["stash_image_id"])
         elif source.get("stash_scene_id"):
-            scene = api.find_scene(ctx.stash, source["stash_scene_id"])
-            post = scene.imaglr_post_id if scene else None
-        if post:
-            return post
+            found = api.find_scene(ctx.stash, source["stash_scene_id"])
+        if found and found.imaglr_post_id and str(found.imaglr_creator or "").casefold() not in own:
+            return found.imaglr_post_id
     return None
 
 

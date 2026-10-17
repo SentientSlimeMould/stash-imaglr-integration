@@ -71,8 +71,9 @@ class FakeClient:
         self._call("post", post_id)
         return self.posts[str(post_id)]
 
-    def repost(self, post_id):
+    def repost(self, post_id, body_html=None, tags=()):
         self._call("repost", post_id)
+        self.reposted = (post_id, body_html, list(tags))
         return {}
 
 
@@ -85,7 +86,7 @@ class Harness(unittest.TestCase):
         self.db = Database(":memory:")
         self.addCleanup(self.db.close)
         self.blog = blogs.add_blog(self.db, "pbk_test_key_123")
-        self.stash = FakeStash({"browseImaglr": True, "browseImaglrSaveFolder": self.folder})
+        self.stash = FakeStash({"browseImaglrSaveFolder": self.folder})
         self.client = FakeClient()
         self.refs = {}
         self.credited = []
@@ -111,11 +112,6 @@ class Harness(unittest.TestCase):
 
 
 class BrowseTest(Harness):
-    def test_off_until_switched_on(self):
-        self.stash.settings = {}
-        with self.assertRaises(UserError):
-            self.run_op("browse", source="feed")
-
     def test_a_page_says_what_is_saved_and_what_is_saving(self):
         self.refs = {"7000": [{"kind": "image", "id": "14"}]}
         now = "2026-10-17T10:00:00+00:00"
@@ -157,10 +153,10 @@ class BrowseTest(Harness):
 
 class SaveTest(Harness):
     def test_needs_a_folder_inside_a_library(self):
-        self.stash.settings = {"browseImaglr": True}
+        self.stash.settings = {}
         with self.assertRaises(UserError):
             self.run_op("save_post", post_id="7000")
-        self.stash.settings = {"browseImaglr": True, "browseImaglrSaveFolder": os.path.join(self.tmp.name, "elsewhere")}
+        self.stash.settings = {"browseImaglrSaveFolder": os.path.join(self.tmp.name, "elsewhere")}
         with self.assertRaises(UserError):
             self.run_op("save_post", post_id="7000")
         self.assertEqual(self.stash.tasks, [])
@@ -215,13 +211,14 @@ class SaveTest(Harness):
 
         found = {paths[0]: {"kind": "image", "id": "21"}, paths[1]: {"kind": "scene", "id": "8"}}
         credited, galleries, names = [], [], []
+        candidates = {"tag": [{"id": "1", "name": "Sunset", "aliases": []}, {"id": "9", "name": "imaglr", "aliases": []}],
+                      "performer": [{"id": "2", "name": "x", "aliases": ["sunset"]}], "studio": [{"id": "3", "name": "SUNSET", "aliases": []}]}
         with mock.patch.object(library, "find_by_path", lambda s, p: found.get(p)), \
-             mock.patch.object(library, "match_names", lambda s, tags, exclude: names.append((tags, exclude)) or
-                               {"tag_ids": ["1"], "performer_ids": ["2"], "studio_id": "3"}), \
+             mock.patch.object(library, "name_candidates", lambda s, tags: names.append(tags) or candidates), \
              mock.patch.object(library, "apply_credit", lambda s, ref, fields: credited.append((ref, fields))), \
              mock.patch.object(library, "create_gallery", lambda s, fields, image_ids: galleries.append((fields, image_ids)) or "5"):
             self.run_op("task_save_apply", post_id="7002")
-        self.assertEqual(names, [(["sunset", "imaglr"], {"imaglr", "imaglr-sent"})])  # the workflow tags never match
+        self.assertEqual(names, [["sunset", "imaglr"]])  # the workflow tag "imaglr" is never applied (tag 9)
         image_fields = credited[0][1]
         self.assertEqual(image_fields["custom_fields"], {"partial": {"imaglr_post_id": "7002", "imaglr_creator": "sunny"}})
         self.assertEqual(image_fields["urls"], ["https://imaglr.com/post/7002", "https://imaglr.com/profile/sunny"])
@@ -280,7 +277,7 @@ class FolderTest(Harness):
             with self.assertRaises(UserError):
                 self.run_op("save_folder_set", folder=self.folder)
         setup = self.run_op("save_setup")
-        self.assertEqual((setup["enabled"], setup["folder_ok"], setup["folder_writable"]), (True, True, True))
+        self.assertEqual((setup["folder_ok"], setup["folder_writable"]), (True, True))
         self.assertTrue(setup["libraries"][0]["writable"])
 
     def test_a_folder_stash_cant_write_to_is_refused(self):
@@ -351,6 +348,9 @@ class ReblogTest(Harness):
     def test_reblog(self):
         self.assertTrue(self.run_op("reblog", post_id="7000", blog_id=self.blog["id"])["ok"])
         self.assertIn(("repost", "7000"), self.client.calls)
+        self.assertEqual(self.client.reposted, ("7000", None, []))
+        self.run_op("reblog", post_id="7000", blog_id=self.blog["id"], caption="So good <3\nAgain", tags=[" a  b ", "", "c"])
+        self.assertEqual(self.client.reposted, ("7000", "<p>So good &lt;3<br>Again</p>", ["a b", "c"]))
         self.client.error = ImaglrError("insufficient_scope")
         with self.assertRaises(UserError) as caught:
             self.run_op("reblog", post_id="7000", blog_id=self.blog["id"])
@@ -368,10 +368,11 @@ class GuardTest(unittest.TestCase):
         self.ctx = Context({"args": {}})
         self.ctx._db = self.db
         self.ctx._stash = FakeStash({})
-        saved = Image.parse({"id": "1", "title": "", "custom_fields": {"imaglr_post_id": "7000"}})
+        saved = Image.parse({"id": "1", "title": "", "custom_fields": {"imaglr_post_id": "7000", "imaglr_creator": "someone"}})
+        mine = Image.parse({"id": "4", "title": "", "custom_fields": {"imaglr_post_id": "7100", "imaglr_creator": "My-Blog"}})
         plain = Image.parse({"id": "2", "title": "", "custom_fields": {}})
         scene = Scene.parse({"id": "3", "title": "", "custom_fields": {"imaglr_post_id": "7002"}})
-        patches = [mock.patch.object(jobs.api, "find_image", lambda s, i: {"1": saved, "2": plain}.get(i)),
+        patches = [mock.patch.object(jobs.api, "find_image", lambda s, i: {"1": saved, "2": plain, "4": mine}.get(i)),
                    mock.patch.object(jobs.api, "find_scene", lambda s, i: scene if i == "3" else None)]
         for p in patches:
             p.start()
@@ -391,6 +392,17 @@ class GuardTest(unittest.TestCase):
         self.assertEqual(jobs.saved_from_imaglr(self.ctx, [scene]), "7002")
         self.assertEqual(jobs.saved_from_imaglr(self.ctx, [still]), "7002")
 
+    def test_your_own_posts_are_yours_to_send(self):
+        blog = blogs.add_blog(self.db, "pbk_mine_12345")
+        self.db.execute("UPDATE blogs SET name='my-blog' WHERE id=?", (blog["id"],))
+        mine = items.create_item(self.db, kind="image", stash_image_id="4")
+        saved = items.create_item(self.db, kind="image", stash_image_id="1")
+        self.assertIsNone(jobs.saved_from_imaglr(self.ctx, [mine]))  # whatever the case of the name
+        self.assertEqual(jobs.saved_from_imaglr(self.ctx, [saved]), "7000")
+        from imaglr_integration import services
+        card = services.allow_own({"saved_from": "7100", "saved_creator": "MY-BLOG"}, services.own_blog_names(self.db))
+        self.assertIsNone(card["saved_from"])
+
     def test_send_refuses_and_send_all_skips(self):
         saved = items.create_item(self.db, kind="image", stash_image_id="1")
         ctx = Context({"args": {"mode": "send", "item_id": saved["id"]}})
@@ -404,3 +416,120 @@ class GuardTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReviewTest(Harness):
+    """The save review: what each imaglr tag would become, then saving with the choices made."""
+
+    def setUp(self):
+        super().setUp()
+        self.candidates = {"tag": [{"id": "1", "name": "Sunset", "aliases": []}], "performer": [], "studio": []}
+        self.alive = {("tag", "1"): "Sunset", ("tag", "5"): "Golden hour", ("performer", "7"): "Amber", ("tag", "40"): "Made"}
+        for p in (mock.patch.object(library, "name_candidates", lambda s, tags: self.candidates),
+                  mock.patch.object(library, "existing", lambda s, ts: [{**t, "name": self.alive[(t["kind"], t["id"])]}
+                                                                        for t in ts if (t["kind"], t["id"]) in self.alive])):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def test_rows_say_what_and_why(self):
+        from imaglr_integration import import_rules
+        import_rules.set_rule(self.db, "golden hour", [{"kind": "tag", "id": "5", "name": "x"}, {"kind": "tag", "id": "99", "name": "gone"}])
+        self.client.posts["7000"] = dict(POST, tags=["sunset", "imaglr", "Golden Hour", "beach", "mystery"])
+        self.db.execute("INSERT INTO tag_rules(stash_tag, imaglr_tags, created_at, updated_at) VALUES('Seaside', '[\"beach\"]', 'x', 'x')")
+        from imaglr_integration.stash import Tag
+        with mock.patch.object(browse_ops.api, "find_tag_exact", lambda s, name: Tag("12", "Seaside") if name == "Seaside" else None):
+            review = self.run_op("save_review", post_id="7000")
+        rows = {r["tag"]: r for r in review["rows"]}
+        self.assertNotIn("imaglr", rows)  # the queue tag is never offered
+        self.assertEqual((rows["sunset"]["source"], rows["sunset"]["targets"]), ("match", [{"kind": "tag", "id": "1", "name": "Sunset"}]))
+        self.assertEqual((rows["Golden Hour"]["source"], rows["Golden Hour"]["targets"]),
+                         ("rule", [{"kind": "tag", "id": "5", "name": "Golden hour"}]))  # the deleted target dropped, the name current
+        self.assertEqual((rows["beach"]["source"], rows["beach"]["targets"][0]["id"]), ("suggested", "12"))
+        self.assertEqual((rows["mystery"]["source"], rows["mystery"]["targets"]), ("none", []))
+        self.assertEqual(self.stash.tasks, [])  # nothing saved
+
+    def test_saving_with_choices_creates_remembers_and_applies(self):
+        made = []
+        from imaglr_integration.stash import Tag
+        mapping = [
+            {"tag": "sunset", "targets": [{"kind": "tag", "id": "1", "name": "Sunset"}, {"kind": "performer", "id": "7"}], "remember": False},
+            {"tag": "imaglr", "targets": [{"kind": "tag", "create": True, "name": "Made"}], "remember": True},
+            {"tag": "junk", "targets": [], "remember": True},
+            {"tag": "bad", "targets": [{"kind": "scene", "id": "1"}, {"kind": "tag", "id": "1; x"}], "remember": False},
+        ]
+        with mock.patch.object(browse_ops.api, "ensure_tag", lambda s, name: made.append(name) or Tag("40", name)):
+            self.run_op("save_post", post_id="7000", mapping=mapping, extra=[{"kind": "tag", "id": "5"}])
+        self.assertEqual(made, ["Made"])
+        stored = json.loads(self.save_row("7000")["mapping"])
+        self.assertEqual(stored, {"tag_ids": ["1", "40", "5"], "performer_ids": ["7"], "studio_id": None})
+        rules = {r["imaglr_tag"]: r["targets"] for r in self.run_op("import_rule_list")["rules"]}
+        self.assertEqual(rules, {"imaglr": [{"kind": "tag", "id": "40", "name": "Made"}], "junk": []})
+        # the credit step applies exactly what was reviewed
+        self.db.execute("UPDATE saves SET status='scanning', files=? WHERE post_id='7000'", (json.dumps(["/x/7000.jpg"]),))
+        credited = []
+        with mock.patch.object(library, "find_by_path", lambda s, p: {"kind": "image", "id": "3"}), \
+             mock.patch.object(library, "apply_credit", lambda s, ref, fields: credited.append(fields)):
+            self.run_op("task_save_apply", post_id="7000")
+        self.assertEqual((credited[0]["tag_ids"], credited[0]["performer_ids"]), (["1", "40", "5"], ["7"]))
+        self.assertNotIn("studio_id", credited[0])
+        self.run_op("import_rule_delete", imaglr_tag="JUNK")  # case doesn't matter
+        self.assertEqual([r["imaglr_tag"] for r in self.run_op("import_rule_list")["rules"]], ["imaglr"])
+
+    def test_a_save_without_review_uses_rules_and_matches_only(self):
+        rows = [{"tag": "a", "targets": [{"kind": "tag", "id": "1", "name": "A"}], "source": "match"},
+                {"tag": "b", "targets": [{"kind": "tag", "id": "2", "name": "B"}], "source": "suggested"},
+                {"tag": "c", "targets": [{"kind": "studio", "id": "3", "name": "C"}], "source": "match"},
+                {"tag": "d", "targets": [{"kind": "studio", "id": "4", "name": "D"}], "source": "rule"}]
+        self.assertEqual(browse_ops.automatic_mapping(rows), {"tag_ids": ["1"], "performer_ids": [], "studio_id": None})
+        self.assertEqual(browse_ops.automatic_mapping(rows[:3])["studio_id"], "3")
+
+    def test_find_names(self):
+        with mock.patch.object(library, "search", lambda s, q: [{"kind": "tag", "id": "1", "name": q}]):
+            self.assertEqual(self.run_op("stash_names_find", q="sun")["results"][0]["name"], "sun")
+
+
+class TopTagsTest(Harness):
+    def test_an_empty_search_lists_the_most_used_tags_without_the_workflow_tags(self):
+        class Lib:
+            def gql(self, query, variables=None):
+                return {"scenes": {"tags": [{"id": 1, "name": "Beach"}, {"id": 8, "name": "imaglr"}, {"id": 3, "name": "Dusk"}]},
+                        "images": {"tags": [{"id": 1, "name": "Beach"}, {"id": 4, "name": "Portrait"}, {"id": 9, "name": "Imaglr-Sent"}]}}
+        self.assertEqual([t["name"] for t in library.top_tags(Lib(), {"imaglr", "imaglr-sent"})], ["Beach", "Portrait", "Dusk"])
+        tops = [{"kind": "tag", "id": "5", "name": "AI_Housekeeping"}, {"kind": "tag", "id": "1", "name": "Beach"}]
+        with mock.patch.object(library, "top_tags", lambda s, exclude, limit: tops), \
+             mock.patch.object(library, "search", lambda s, q: self.fail("searched")):
+            self.assertEqual([t["name"] for t in self.run_op("stash_names_find", q="  ")["results"]], ["Beach"])  # "^AI_" by default
+
+
+class FollowingTest(Harness):
+    def test_followed_creators_are_kept_for_an_hour(self):
+        self.db.execute("UPDATE blogs SET name='me' WHERE id=?", (self.blog["id"],))
+        pages = {None: ([{"name": "a", "avatar": "https://cdn03.imaglr.com/a.jpg"}, {"name": "b"}], "https://imaglr.com/api/v2/profiles/me/following?cursor=2"),
+                 "https://imaglr.com/api/v2/profiles/me/following?cursor=2": ([{"name": "b"}, {"name": "c"}], None)}
+        calls = []
+
+        def following(name, nxt=None):
+            calls.append((name, nxt))
+            return pages[nxt]
+        self.client.following = following
+        people = self.run_op("following")["people"]
+        self.assertEqual([p["name"] for p in people], ["a", "b", "c"])
+        self.assertEqual(people[0]["avatar"], "https://cdn03.imaglr.com/a.jpg")
+        self.assertEqual(self.run_op("following")["people"], people)
+        self.assertEqual(len(calls), 2)  # two pages, once: the second call came from the cache
+        stale = json.dumps({"at": "2000-01-01T00:00:00+00:00", "people": [{"name": "old", "avatar": None}]})
+        self.db.kv_set(f"following:{self.blog['id']}", stale)
+        self.client.following = lambda name, nxt=None: (_ for _ in ()).throw(ImaglrError("server_error"))
+        self.assertEqual([p["name"] for p in self.run_op("following")["people"]], ["old"])  # imaglr down: stale beats nothing
+
+
+class LikeOpTest(Harness):
+    def test_like_as_the_browsing_blog(self):
+        self.client.like = lambda post_id: {"liked": True, "likes": 4} if post_id == "7000" else self.fail(post_id)
+        self.assertEqual(self.run_op("like", post_id="7000"), {"liked": True, "likes": 4})
+        with self.assertRaises(UserError):
+            self.run_op("like", post_id="7000/../x")
+        self.client.like = lambda post_id: (_ for _ in ()).throw(ImaglrError("insufficient_scope"))
+        with self.assertRaises(UserError) as caught:
+            self.run_op("like", post_id="7000")
+        self.assertIn("isn't allowed to like posts", str(caught.exception))

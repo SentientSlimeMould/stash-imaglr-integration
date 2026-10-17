@@ -17,13 +17,15 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from . import blogs, log, saving
+from . import blogs, import_rules, log, saving
 from .context import Context, UserError, imaglr_base_override
 from .db import now_iso
 from .imaglr import DisallowedEndpoint, ErrorClass, ImaglrError, MediaRefused, classify, fetch_media, media_url_ok
 from .settings import PLUGIN_ID, Settings
 from .settings import load as load_settings
-from .stash import StashError, library
+from .stash import StashError, api, library
+from .tags.caption import caption_to_html
+from .tags.pipeline import parse_patterns
 
 SOURCES = ("feed", "likes", "tag", "creator")
 PREVIEW_DIR = "_browse"  # under data/prepared, so Stash serves it from the plugin's assets
@@ -44,13 +46,6 @@ class SaveFailed(Exception):
 # ---- shared helpers ------------------------------------------------------------------------------------
 def _settings(ctx: Context) -> Settings:
     return load_settings(ctx.stash)
-
-
-def _require_enabled(ctx: Context) -> Settings:
-    config = _settings(ctx)
-    if not config.save_enabled:
-        raise UserError("Browsing imaglr is switched off. Turn it on in Settings → Plugins → Imaglr Integration.")
-    return config
 
 
 def _blog(ctx: Context) -> dict[str, Any]:
@@ -124,7 +119,6 @@ def _annotate(ctx: Context, posts: list[dict[str, Any]]) -> None:
 def op_browse(ctx: Context) -> dict[str, Any]:
     """One page of posts: the feed, the user's likes, a tag or a creator. `next` is the link a previous page
     returned. A creator's first page also carries their profile."""
-    _require_enabled(ctx)
     blog = _blog(ctx)
     source = ctx.arg("source")
     if source not in SOURCES:
@@ -161,7 +155,6 @@ def op_browse(ctx: Context) -> dict[str, Any]:
 
 def op_post_find(ctx: Context) -> dict[str, Any]:
     """One post, from its imaglr link or id (Save a link)."""
-    _require_enabled(ctx)
     blog = _blog(ctx)
     text = (ctx.arg("link") or "").strip()
     post_id = text.rstrip("/").rsplit("/", 1)[-1].split("?", 1)[0]
@@ -197,7 +190,6 @@ def _prune_previews(folder: str, keep: str) -> None:
 def op_media_preview(ctx: Context) -> dict[str, Any]:
     """A post's video, fetched once into the plugin's folder so Stash's page may play it; returns its address
     (relative to Stash's base). Pictures don't need this: the page shows them straight from imaglr."""
-    _require_enabled(ctx)
     url = ctx.arg("url")
     if not media_url_ok(url, _extra_host()):
         raise UserError("That file isn't on imaglr.")
@@ -220,11 +212,12 @@ def op_media_preview(ctx: Context) -> dict[str, Any]:
 
 # ---- the save folder -----------------------------------------------------------------------------------
 def op_save_setup(ctx: Context) -> dict[str, Any]:
-    """Whether browsing is on, where saves go, and the libraries a save folder may be in."""
+    """Discover's options, where saves go, and the libraries a save folder may be in."""
     config = _settings(ctx)
     libs, _ = library.libraries(ctx.stash)
     lib = saving.library_for(config.save_folder, libs) if config.save_folder else None
-    return {"enabled": config.save_enabled, "autoplay": config.browse_autoplay, "folder": config.save_folder or None,
+    return {"autoplay": config.browse_autoplay, "quick_save": config.quick_save,
+            "folder": config.save_folder or None,
             "folder_ok": lib is not None, "folder_writable": bool(config.save_folder) and saving.writable(config.save_folder),
             "libraries": [{"path": l["path"], "videos": not l.get("excludeVideo"), "images": not l.get("excludeImage"),
                            "writable": saving.writable(l["path"])} for l in libs]}
@@ -247,19 +240,9 @@ def op_save_folder_set(ctx: Context) -> dict[str, Any]:
 
 
 # ---- saving --------------------------------------------------------------------------------------------
-def op_save_post(ctx: Context) -> dict[str, Any]:
-    """Start saving one post: read it from imaglr again (it may have changed or gone private), then queue the
-    download as a Stash task. A reblog is saved as the original post, with the original's tags, caption and date
-    when imaglr still shows it. A post already in the library is not saved twice."""
-    config = _require_enabled(ctx)
-    if not config.save_folder:
-        raise UserError("Choose where saved posts go first.")
-    libs, _ = library.libraries(ctx.stash)
-    if saving.library_for(config.save_folder, libs) is None:
-        raise UserError("The save folder isn't inside a Stash library any more. Choose it again.")
-    if not saving.writable(config.save_folder):
-        raise UserError(f"Stash can't write to the save folder ({config.save_folder}). Choose another in the plugin's Settings.")
-    blog = _blog(ctx)
+def _post_to_save(ctx: Context, blog: dict[str, Any]) -> dict[str, Any]:
+    """The post as it will be saved, read from imaglr again (it may have changed or gone private). A reblog is
+    saved as the original post, with the original's tags, caption and date when imaglr still shows it."""
     client = ctx.imaglr(blog)
     try:
         post = saving.normalize_post(client.post(ctx.arg("post_id")))
@@ -274,6 +257,96 @@ def op_save_post(ctx: Context) -> dict[str, Any]:
             pass  # the original is no longer visible: keep the reblog's copy, still credited to the original
     if not post["media"]:
         raise UserError("This post has no pictures or videos to save.")
+    return post
+
+
+def _workflow_names(config: Settings) -> set[str]:
+    return {config.queue_tag.casefold(), config.done_tag.casefold()}
+
+
+def tag_plan(ctx: Context, post: dict[str, Any], config: Settings, suggest: bool = True) -> list[dict[str, Any]]:
+    """What each of the post's imaglr tags becomes in Stash, and why (see import_rules.plan): remembered rules
+    (their targets checked against Stash, which may have lost some), exact name or alias matches, and, for the
+    review only, the Stash tags of publishing rules that send that imaglr tag."""
+    tags = post["tags"]
+    rules = import_rules.rules_for(ctx.db, tags)
+    if rules:
+        alive = {(t["kind"], t["id"]): t for t in library.existing(ctx.stash, [t for ts in rules.values() for t in ts])}
+        rules = {k: [alive[(t["kind"], t["id"])] for t in ts if (t["kind"], t["id"]) in alive] if ts else [] for k, ts in rules.items()}
+    suggestions: dict[str, list[dict[str, Any]]] = {}
+    if suggest:
+        wanted = {" ".join(t.split()).casefold() for t in tags}
+        for row in ctx.db.fetchall("SELECT stash_tag, imaglr_tags FROM tag_rules"):
+            for sent in json.loads(row["imaglr_tags"] or "[]"):
+                key = " ".join(str(sent).split()).casefold()
+                if key in wanted and key not in suggestions:
+                    tag = api.find_tag_exact(ctx.stash, row["stash_tag"])
+                    if tag:
+                        suggestions[key] = [{"kind": "tag", "id": str(tag.id), "name": tag.name}]
+    candidates = library.name_candidates(ctx.stash, tags)
+    return import_rules.plan(tags, rules, candidates, suggestions, _workflow_names(config))
+
+
+def automatic_mapping(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """What a save without a review applies: rules and exact matches (never suggestions); and no studio when
+    more than one matches, rather than guessing."""
+    targets = [t for r in rows if r["source"] in ("rule", "match") for t in r["targets"]]
+    studios = {t["id"] for t in targets if t["kind"] == "studio"}
+    if len(studios) > 1:
+        targets = [t for t in targets if t["kind"] != "studio"]
+    return import_rules.resolve(targets)
+
+
+def op_save_review(ctx: Context) -> dict[str, Any]:
+    """The save review: the post as it will be saved, and what each of its imaglr tags would become in Stash.
+    Nothing is saved."""
+    config = _settings(ctx)
+    blog = _blog(ctx)
+    post = _post_to_save(ctx, blog)
+    credited = saving.credit(post)["id"]
+    existing = library.saved_refs(ctx.stash, [credited])[credited]
+    return {"post": post, "credit_id": credited, "saved": existing, "rows": [] if existing else tag_plan(ctx, post, config)}
+
+
+def _reviewed(ctx: Context) -> dict[str, Any] | None:
+    """The review's choices, if the save came from one: each imaglr tag's Stash targets (new tags created now),
+    rules remembered where asked, and extra targets not tied to a tag. None for a save without a review."""
+    rows = ctx.args.get("mapping")
+    if rows is None:
+        return None
+    if not isinstance(rows, list):
+        raise UserError("The review's choices didn't come through. Try again.")
+    chosen: list[dict[str, Any]] = []
+    for row in rows + [{"tag": "", "targets": ctx.args.get("extra") or []}]:
+        if not isinstance(row, dict):
+            continue
+        targets = import_rules.clean_targets(row.get("targets"))
+        made = []
+        for t in targets:
+            if t.get("create"):
+                tag = api.ensure_tag(ctx.stash, t["name"])
+                made.append({"kind": "tag", "id": str(tag.id), "name": tag.name})
+            else:
+                made.append(t)
+        if row.get("remember") and str(row.get("tag") or "").strip():
+            import_rules.set_rule(ctx.db, str(row["tag"]), made)
+        chosen += made
+    return import_rules.resolve(library.existing(ctx.stash, chosen))
+
+
+def op_save_post(ctx: Context) -> dict[str, Any]:
+    """Start saving one post (see _post_to_save), with the review's choices when there was one, by queueing the
+    download as a Stash task. A post already in the library is not saved twice."""
+    config = _settings(ctx)
+    if not config.save_folder:
+        raise UserError("Choose where saved posts go first.")
+    libs, _ = library.libraries(ctx.stash)
+    if saving.library_for(config.save_folder, libs) is None:
+        raise UserError("The save folder isn't inside a Stash library any more. Choose it again.")
+    if not saving.writable(config.save_folder):
+        raise UserError(f"Stash can't write to the save folder ({config.save_folder}). Choose another in the plugin's Settings.")
+    blog = _blog(ctx)
+    post = _post_to_save(ctx, blog)
     credited = saving.credit(post)["id"]
     existing = library.saved_refs(ctx.stash, [credited])[credited]
     if existing:
@@ -281,9 +354,11 @@ def op_save_post(ctx: Context) -> dict[str, Any]:
     row = _save_row(ctx, credited)
     if row and row["status"] in IN_PROGRESS:
         return {"save": _save_view(row)}
+    mapping = _reviewed(ctx)
     now = now_iso()
-    ctx.db.execute("INSERT OR REPLACE INTO saves(post_id, status, progress, blog_id, post, files, refs, error, created_at, updated_at) "
-                   "VALUES(?, 'queued', 0, ?, ?, '[]', '[]', NULL, ?, ?)", (credited, blog["id"], json.dumps(post), now, now))
+    ctx.db.execute("INSERT OR REPLACE INTO saves(post_id, status, progress, blog_id, post, files, refs, error, mapping, created_at, updated_at) "
+                   "VALUES(?, 'queued', 0, ?, ?, '[]', '[]', NULL, ?, ?, ?)",
+                   (credited, blog["id"], json.dumps(post), json.dumps(mapping) if mapping is not None else None, now, now))
     who = saving.credit(post)["creator"]["name"] or "imaglr"
     try:
         job = ctx.stash.gql(RUN_TASK, {"id": PLUGIN_ID, "description": f"imaglr: saving a post by @{who}",
@@ -303,6 +378,33 @@ def op_save_status(ctx: Context) -> dict[str, Any]:
     return {"saves": [_save_view(r) for r in rows]}
 
 
+def download_files(ctx: Context, post: dict[str, Any], folder: str, written: list[str], on_file=None) -> list[str]:
+    """Download a post's files into the save folder (a file already there is kept: saved before and removed from
+    Stash, it is still good). Files written now are added to `written`, so a failure can remove them."""
+    plan = saving.file_plan(folder, post)
+    for n, (media, path) in enumerate(plan):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if not os.path.exists(path):
+            fetch_media(media["url"], path, ctx.version, max_bytes=saving.MAX_BYTES[media["kind"]], extra_host=_extra_host())
+            written.append(path)
+        if on_file:
+            on_file((n + 1) / len(plan))
+    return [p for _, p in plan]
+
+
+def failure_message(post_id: str, e: Exception) -> str:
+    """What a failed download says on the post."""
+    if isinstance(e, (SaveFailed, MediaRefused)):
+        return str(e)
+    if isinstance(e, ImaglrError):
+        return _imaglr_message(e)
+    log.warning(f"saving post {post_id} failed: {e}")
+    if isinstance(e, OSError):
+        return (f"Stash couldn't write to the save folder ({e.strerror or e}). Choose another in the plugin's Settings, "
+                "then save again.")
+    return f"Stash refused: {e}"
+
+
 def task_save(ctx: Context) -> None:
     """Download a post's files into the save folder, then queue a scan of them and the task that credits them."""
     post_id = ctx.arg("post_id")
@@ -314,35 +416,19 @@ def task_save(ctx: Context) -> None:
         folder = _settings(ctx).save_folder
         if not folder:
             raise SaveFailed("Choose where saved posts go first.")
-        post = json.loads(row["post"])
-        plan = saving.file_plan(folder, post)
         _save_update(ctx, post_id, status="downloading", progress=0)
-        for n, (media, path) in enumerate(plan):
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            if not os.path.exists(path):  # saved before and removed from Stash: the file is still good
-                fetch_media(media["url"], path, ctx.version, max_bytes=saving.MAX_BYTES[media["kind"]],
-                            extra_host=_extra_host())
-                written.append(path)
-            fraction = (n + 1) / len(plan) * 0.8
-            _save_update(ctx, post_id, progress=fraction)
-            log.progress(fraction)
-        paths = [p for _, p in plan]
+
+        def progress(fraction: float) -> None:
+            _save_update(ctx, post_id, progress=fraction * 0.8)
+            log.progress(fraction * 0.8)
+        paths = download_files(ctx, json.loads(row["post"]), folder, written, progress)
         _, options = library.libraries(ctx.stash)
         library.scan(ctx.stash, paths, options)
         job = ctx.stash.gql(RUN_TASK, {"id": PLUGIN_ID, "description": "imaglr: crediting a saved post",
                                        "args": {"mode": "task_save_apply", "post_id": post_id}})["runPluginTask"]
         _save_update(ctx, post_id, status="scanning", progress=0.85, files=json.dumps(paths), stash_job_id=str(job))
-    except (SaveFailed, MediaRefused) as e:
-        _fail(ctx, post_id, str(e), written)
-    except ImaglrError as e:
-        _fail(ctx, post_id, _imaglr_message(e), written)
-    except OSError as e:
-        log.warning(f"saving post {post_id} failed: {e}")
-        _fail(ctx, post_id, f"Stash couldn't write to the save folder ({e.strerror or e}). Choose another in the "
-                            "plugin's Settings, then save again.", written)
-    except StashError as e:
-        log.warning(f"saving post {post_id} failed: {e}")
-        _fail(ctx, post_id, f"Stash refused: {e}", written)
+    except (SaveFailed, MediaRefused, ImaglrError, OSError, StashError) as e:
+        _fail(ctx, post_id, failure_message(post_id, e), written)
     return None
 
 
@@ -355,10 +441,9 @@ def _fail(ctx: Context, post_id: str, message: str, written: list[str]) -> None:
     _save_update(ctx, post_id, status="failed", error=message)
 
 
-def task_save_apply(ctx: Context) -> None:
-    """After the scan: find what Stash made of each saved file and write the credit, the matched tags,
-    performers and studio onto it; a post with several files also becomes a gallery."""
-    post_id = ctx.arg("post_id")
+def apply_one(ctx: Context, post_id: str) -> str | None:
+    """After the scan: find what Stash made of each of a post's saved files and write the credit, its tags,
+    performers and studio onto it; a post with several files also becomes a gallery. Returns the save's status."""
     row = _save_row(ctx, post_id)
     if row is None or row["status"] != "scanning":
         return None
@@ -373,7 +458,7 @@ def task_save_apply(ctx: Context) -> None:
             raise SaveFailed("Stash didn't add the saved files. Check the save folder is in a library that takes "
                              "pictures and videos, then save again.")
         config = _settings(ctx)
-        names = library.match_names(ctx.stash, post["tags"], {config.queue_tag.casefold(), config.done_tag.casefold()})
+        names = json.loads(row["mapping"]) if row["mapping"] else automatic_mapping(tag_plan(ctx, post, config, suggest=False))
         fields: dict[str, Any] = {"title": saving.title_text(post), "details": saving.details_text(post),
                                   "urls": saving.stash_urls(post), "tag_ids": names["tag_ids"],
                                   "performer_ids": names["performer_ids"]}
@@ -395,38 +480,133 @@ def task_save_apply(ctx: Context) -> None:
         if missing:
             error = (f"Stash didn't add {len(missing)} of the files. Check the save folder is in a library that "
                      "takes pictures and videos.")
-        _save_update(ctx, post_id, status="failed" if missing else "done", progress=1, refs=json.dumps(refs), error=error)
+        status = "failed" if missing else "done"
+        _save_update(ctx, post_id, status=status, progress=1, refs=json.dumps(refs), error=error)
+        return status
     except SaveFailed as e:
         _save_update(ctx, post_id, status="failed", error=str(e))
     except StashError as e:
         log.warning(f"crediting saved post {post_id} failed: {e}")
         _save_update(ctx, post_id, status="failed", error=f"Stash refused the credit: {e}")
+    return "failed"
+
+
+def task_save_apply(ctx: Context) -> None:
+    """The credit step of a single save (see apply_one)."""
+    apply_one(ctx, ctx.arg("post_id"))
     return None
+
+
+FOLLOWING_PAGES = 5  # up to 250 creators, for suggestions
+FOLLOWING_FRESH = timedelta(hours=1)
+
+
+def op_following(ctx: Context) -> dict[str, Any]:
+    """The creators the browsing blog follows ({name, avatar}), for Explore's suggestions. Kept for an hour, so
+    typing in Explore doesn't ask imaglr again."""
+    blog = _blog(ctx)
+    key = f"following:{blog['id']}"
+    cached = json.loads(ctx.db.kv_get(key) or "null")
+    if cached and "people" not in cached:
+        cached = None  # an older shape: ask again
+    now = datetime.now(timezone.utc)
+    if cached and now - datetime.fromisoformat(cached["at"]) < FOLLOWING_FRESH:
+        return {"people": cached["people"]}
+    if not blog.get("name"):
+        return {"people": []}
+    people: list[dict[str, Any]] = []
+    nxt = None
+    try:
+        for _ in range(FOLLOWING_PAGES):
+            found, nxt = ctx.imaglr(blog).following(blog["name"], nxt)
+            for p in found:
+                view = saving.profile_view(p)
+                if view["name"] and all(o["name"] != view["name"] for o in people):
+                    people.append({"name": view["name"], "avatar": view["avatar"]})
+            if not nxt:
+                break
+    except ImaglrError as e:
+        if cached:
+            return {"people": cached["people"]}  # stale beats nothing
+        raise UserError(_imaglr_message(e, blog)) from None
+    ctx.db.kv_set(key, json.dumps({"at": now.isoformat(timespec="seconds"), "people": people}))
+    return {"people": people}
+
+
+# ---- import rules --------------------------------------------------------------------------------------
+def op_import_rule_list(ctx: Context) -> dict[str, Any]:
+    """The remembered import rules, with their targets' current names (deleted ones dropped)."""
+    rules = import_rules.list_rules(ctx.db)
+    alive = {(t["kind"], t["id"]): t for t in library.existing(ctx.stash, [t for r in rules for t in r["targets"]])}
+    return {"rules": [{"imaglr_tag": r["imaglr_tag"],
+                       "targets": [alive[(t["kind"], t["id"])] for t in r["targets"] if (t["kind"], t["id"]) in alive]}
+                      for r in rules]}
+
+
+def op_import_rule_delete(ctx: Context) -> dict[str, Any]:
+    import_rules.delete_rule(ctx.db, str(ctx.arg("imaglr_tag")))
+    return op_import_rule_list(ctx)
+
+
+def op_stash_names_find(ctx: Context) -> dict[str, Any]:
+    """Stash tags, performers and studios by name or alias, for choosing in the save review; with nothing typed,
+    the library's most-used tags (never the plugin's own queue and sent tags, nor its "Tags never suggested")."""
+    text = str(ctx.args.get("q") or "").strip()
+    if not text:
+        config = _settings(ctx)
+        hidden = parse_patterns(config.exclude_patterns)
+        top = library.top_tags(ctx.stash, _workflow_names(config), limit=40)
+        return {"results": [t for t in top if not any(p.search(t["name"]) for p in hidden)][:12]}
+    return {"results": library.search(ctx.stash, text)}
 
 
 # ---- reblogging ----------------------------------------------------------------------------------------
 def op_reblog(ctx: Context) -> dict[str, Any]:
-    """Reblog a post to one of the user's blogs, straight away (the page asks first)."""
+    """Reblog a post to one of the user's blogs, straight away (the page asks first), with the user's own caption
+    and tags when given."""
     blog = blogs.get_blog(ctx.db, ctx.arg("blog_id", int))
     if blog is None:
         raise UserError("That blog has been removed. Choose another.")
     post_id = str(ctx.arg("post_id"))
     if not post_id.isdigit():
         raise UserError("That isn't an imaglr post.")
+    raw_tags = ctx.args.get("tags") or []
+    if not isinstance(raw_tags, list):
+        raise UserError("Tags must be a list.")
+    tags = [" ".join(str(t).split())[:64] for t in raw_tags if str(t).strip()][:30]
+    body = caption_to_html(ctx.args.get("caption") if isinstance(ctx.args.get("caption"), str) else None)
     try:
-        ctx.imaglr(blog).repost(post_id)
+        ctx.imaglr(blog).repost(post_id, body, tags)
     except ImaglrError as e:
         raise UserError(_imaglr_message(e, blog, doing="reblog")) from None
     return {"ok": True, "blog": {"id": blog["id"], "name": blog["name"]}}
 
 
+def op_like(ctx: Context) -> dict[str, Any]:
+    """Like a post on imaglr as the browsing blog, or take the like back (imaglr toggles)."""
+    blog = _blog(ctx)
+    post_id = str(ctx.arg("post_id"))
+    if not post_id.isdigit():
+        raise UserError("That isn't an imaglr post.")
+    try:
+        return ctx.imaglr(blog).like(post_id)
+    except ImaglrError as e:
+        raise UserError(_imaglr_message(e, blog, doing="like posts")) from None
+
+
 OPERATIONS = {
     "browse": op_browse,
+    "like": op_like,
     "post_find": op_post_find,
     "media_preview": op_media_preview,
     "save_setup": op_save_setup,
     "save_folder_set": op_save_folder_set,
+    "save_review": op_save_review,
     "save_post": op_save_post,
+    "following": op_following,
+    "import_rule_list": op_import_rule_list,
+    "import_rule_delete": op_import_rule_delete,
+    "stash_names_find": op_stash_names_find,
     "save_status": op_save_status,
     "reblog": op_reblog,
 }

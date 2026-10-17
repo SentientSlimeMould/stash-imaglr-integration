@@ -66,6 +66,26 @@ class ReadingTest(unittest.TestCase):
             self.client.repost(" ")
 
 
+class LikeTest(unittest.TestCase):
+    def setUp(self):
+        self.server = FakeImaglr()
+        self.addCleanup(self.server.close)
+        self.client = ImaglrClient("pbk_key", "9.9", self.server.base_url)
+
+    def test_like_toggles_and_reports_what_imaglr_says(self):
+        self.server.reply(body=envelope({"liked": True, "likes": 54}))
+        self.assertEqual(self.client.like("123"), {"liked": True, "likes": 54})
+        request = self.server.requests[0]
+        self.assertEqual((request["method"], request["path"]), ("POST", "/api/v2/posts/123/like"))
+        self.server.reply(body=envelope({"post": {"liked": False, "note_count": {"likes": 53}}}))
+        self.assertEqual(self.client.like("123"), {"liked": False, "likes": 53})  # however imaglr phrases it
+        self.server.reply(body=envelope({}))
+        self.assertEqual(self.client.like("123"), {"liked": None, "likes": None})
+        self.server.reply(403, envelope(errors=[{"code": "insufficient_scope"}]))
+        with self.assertRaises(ImaglrError):
+            self.client.like("123")
+
+
 class MediaTest(unittest.TestCase):
     def setUp(self):
         self.server = FakeImaglr()

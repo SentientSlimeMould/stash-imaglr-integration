@@ -90,13 +90,56 @@ export function savedPath(refs: StashRef[]): string | null {
 export function parseSearch(text: string): { kind: "creator" | "tag" | "post"; value: string } | null {
   const value = text.trim();
   if (!value) return null;
-  const link = value.match(/imaglr\.[a-z.]+\/post\/(\d+)/i) ?? value.match(/^(\d{3,})$/);
+  const link = value.match(/imaglr\.[a-z.]+\/post\/(\d+)/i) ?? value.match(/^(?:post\s+)?(\d{3,})$/i);
   if (link) return { kind: "post", value: link[1] };
   const profile = value.match(/imaglr\.[a-z.]+\/profile\/([^/?#\s]+)/i);
   if (profile) return { kind: "creator", value: decodeURIComponent(profile[1]) };
   if (value.startsWith("@")) return value.length > 1 ? { kind: "creator", value: value.slice(1).trim() } : null;
   const tag = value.replace(/^#/, "").trim();
   return tag ? { kind: "tag", value: tag } : null;
+}
+
+export const RECENT_SEARCHES = 12;
+
+/** A search as it is remembered and suggested: "#tag", "@creator", or the post link as typed. */
+export function searchLabel(found: { kind: "creator" | "tag" | "post"; value: string }, typed: string): string {
+  return found.kind === "creator" ? `@${found.value}` : found.kind === "tag" ? `#${found.value}` : typed.trim();
+}
+
+/** The recent-searches list with this one first: no repeats (ignoring case), at most RECENT_SEARCHES. */
+export function rememberSearch(recent: string[], label: string): string[] {
+  const key = label.toLowerCase();
+  return [label, ...recent.filter((r) => r.toLowerCase() !== key)].slice(0, RECENT_SEARCHES);
+}
+
+export interface ExploreOption {
+  value: string; // what is searched when chosen
+  label: string;
+  kind: "search" | "recent" | "follow";
+  avatar?: string | null;
+}
+
+/** Explore's dropdown for what's typed: first what pressing Enter would do, then matching recent searches, then
+ *  matching creators you follow (with nothing typed: the latest of each). Groups as Stash's select takes them. */
+export function exploreOptions(text: string, recent: string[], following: { name: string; avatar: string | null }[],
+                               limits = { recent: 6, follow: 8 }): { label: string; options: ExploreOption[] }[] {
+  const typed = text.trim();
+  const needle = typed.replace(/^[#@]/, "").toLowerCase();
+  const groups: { label: string; options: ExploreOption[] }[] = [];
+  const found = parseSearch(typed);
+  if (found) {
+    const label = found.kind === "creator" ? `Go to @${found.value}` : found.kind === "tag" ? `Search #${found.value}` : "Open this post";
+    groups.push({ label: "", options: [{ value: typed, label, kind: "search" }] });
+  }
+  const recents = recent.filter((r) => r.toLowerCase() !== typed.toLowerCase() && r.toLowerCase().includes(needle)).slice(0, limits.recent);
+  if (recents.length) groups.push({ label: "Recent searches", options: recents.map((r) => ({ value: r, label: r, kind: "recent" as const })) });
+  const seen = new Set(recents.map((r) => r.toLowerCase()));
+  const people = following.filter((p) => p.name.toLowerCase().includes(needle) && !seen.has(`@${p.name}`.toLowerCase())
+    && `@${p.name}`.toLowerCase() !== typed.toLowerCase()).slice(0, limits.follow);
+  if (people.length) {
+    groups.push({ label: "People you follow", options: people.map((p) => ({ value: `@${p.name}`, label: p.name, kind: "follow" as const, avatar: p.avatar })) });
+  }
+  return groups;
 }
 
 /** The space a picture or video takes before it loads, so the feed doesn't jump: width / height, or 4:5. */
@@ -117,4 +160,44 @@ export function shortCount(n: number): string {
   if (n < 1000) return String(n);
   if (n < 10000) return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k`;
   return `${Math.round(n / 1000)}k`;
+}
+
+/** The imaglr credit Stash holds in an item's URLs (saved from imaglr: the post's link, then the creator's), or
+ *  null for anything not saved from imaglr. */
+export function imaglrCredit(urls: string[] | null | undefined): { postUrl: string; postId: string; creatorUrl: string | null; creator: string | null } | null {
+  const list = urls ?? [];
+  const post = list.map((u) => ({ u, m: u.match(/^https?:\/\/(?:www\.)?imaglr\.[a-z.]+\/post\/(\d+)/i) })).find((x) => x.m);
+  if (!post) return null;
+  const profile = list.map((u) => ({ u, m: u.match(/^https?:\/\/(?:www\.)?imaglr\.[a-z.]+\/profile\/([^/?#]+)/i) })).find((x) => x.m);
+  return { postUrl: post.u, postId: post.m![1], creatorUrl: profile?.u ?? null, creator: profile ? decodeURIComponent(profile.m![1]) : null };
+}
+
+export interface SyncState {
+  running?: boolean;
+  phase?: "reading" | "crediting" | "done";
+  everything?: boolean;
+  seen?: number; // likes read
+  new?: number; // downloaded this run
+  known?: number; // already in the library
+  skipped?: number; // nothing to save (text posts)
+  failed?: number;
+  saved?: number; // credited in Stash
+  error?: string | null;
+  note?: string | null;
+  finished_at?: string | null;
+}
+
+/** What the sync is doing, or did, in a sentence. */
+export function syncSummary(s: SyncState): string {
+  const n = (v?: number) => v ?? 0;
+  if (s.running && s.phase === "crediting") return `Adding ${n(s.new)} posts to Stash…`;
+  if (s.running) {
+    return `Syncing your likes: ${n(s.seen)} read, ${n(s.new)} new${n(s.failed) ? `, ${n(s.failed)} failed` : ""}${s.note ? `. ${s.note}` : ""}`;
+  }
+  if (!s.finished_at) return "";
+  const parts = [`${n(s.saved)} saved`, `${n(s.known)} already in your library`];
+  if (n(s.failed)) parts.push(`${n(s.failed)} failed`);
+  const when = relativeTime(s.finished_at);
+  const phrase = when === "now" ? "just now" : /^\d+ (min|h|d)$/.test(when) ? `${when} ago` : `on ${when}`;
+  return `Last sync ${phrase}: ${parts.join(", ")}.${s.error ? ` ${s.error}` : ""}`;
 }

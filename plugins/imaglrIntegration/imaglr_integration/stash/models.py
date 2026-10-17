@@ -34,9 +34,9 @@ def _tags(xs: list[dict] | None) -> list[Tag]:
     return [t for t in (Tag.parse(x) for x in (xs or [])) if t]
 
 
-def _imaglr_post(d: dict) -> str | None:
-    """The imaglr post a scene or image was saved from (the plugin's custom field), if any."""
-    value = (d.get("custom_fields") or {}).get("imaglr_post_id")
+def _imaglr_post(d: dict, field: str = "imaglr_post_id") -> str | None:
+    """The imaglr post a scene or image was saved from, or its creator (the plugin's custom fields), if any."""
+    value = (d.get("custom_fields") or {}).get(field)
     return str(value) if value not in (None, "") else None
 
 
@@ -98,7 +98,8 @@ class Scene:
     studio: str | None = None
     date: str | None = None
     created_at: str | None = None
-    imaglr_post_id: str | None = None  # saved from imaglr: never uploaded again
+    imaglr_post_id: str | None = None  # saved from imaglr: never uploaded again (unless it's the user's own)
+    imaglr_creator: str | None = None
 
     @property
     def primary_file(self) -> SceneFile | None:
@@ -134,6 +135,7 @@ class Scene:
             date=d.get("date"),
             created_at=d.get("created_at"),
             imaglr_post_id=_imaglr_post(d),
+            imaglr_creator=_imaglr_post(d, "imaglr_creator"),
         )
 
 
@@ -254,7 +256,8 @@ class Image:
     date: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
-    imaglr_post_id: str | None = None  # saved from imaglr: never uploaded again
+    imaglr_post_id: str | None = None  # saved from imaglr: never uploaded again (unless it's the user's own)
+    imaglr_creator: str | None = None
 
     @property
     def primary_file(self) -> VisualFile | None:
@@ -296,4 +299,5 @@ class Image:
             created_at=d.get("created_at"),
             updated_at=d.get("updated_at"),
             imaglr_post_id=_imaglr_post(d),
+            imaglr_creator=_imaglr_post(d, "imaglr_creator"),
         )
