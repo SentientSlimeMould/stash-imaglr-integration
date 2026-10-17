@@ -12,6 +12,8 @@
   post with several files becomes a gallery; a reblog is saved as the original. The save folder must be one Stash
   can write to (checked when you choose it); change it any time in the plugin's Settings. **Reblog** shares a post to one of
   your blogs.
+- **Like** posts from Discover: the heart under each post likes it as your browsing blog, and tapping again takes
+  the like back (needs the key's write permission).
 - Explore suggests as you type: your recent searches (kept in your browser) and the creators your blog follows.
 - **Review before saving.** Save opens a short review: each of the post's imaglr tags with what it becomes in
   Stash and why (your rule, the same name in Stash, or one of your tag rules). Change any, create a new Stash tag,

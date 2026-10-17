@@ -17,6 +17,7 @@ interface Props {
   onTag: (tag: string) => void;
   onSave: (post: ImaglrPost) => void;
   onReblog: (post: ImaglrPost) => void;
+  onLike: (post: ImaglrPost) => Promise<{ liked: boolean | null; likes: number | null }>;
 }
 
 function CreatorHeader({ profile }: { profile: CreatorProfile }) {
@@ -45,7 +46,7 @@ function CreatorHeader({ profile }: { profile: CreatorProfile }) {
   );
 }
 
-export function PostFeed({ source, tag, name, blogId, saves, onCreator, onTag, onSave, onReblog }: Props) {
+export function PostFeed({ source, tag, name, blogId, saves, onCreator, onTag, onSave, onReblog, onLike }: Props) {
   const { Button } = PluginApi.libraries.Bootstrap;
   const { LoadingIndicator } = PluginApi.components;
   const [posts, setPosts] = React.useState<ImaglrPost[]>([]);
@@ -108,7 +109,7 @@ export function PostFeed({ source, tag, name, blogId, saves, onCreator, onTag, o
       {profile ? <CreatorHeader profile={profile} /> : null}
       {posts.map((p) => (
         <PostCard key={p.id} post={p} save={saves.get(p.credit_id) ?? null} onCreator={onCreator} onTag={onTag}
-          onSave={onSave} onReblog={onReblog} />
+          onSave={onSave} onReblog={onReblog} onLike={onLike} />
       ))}
       <div ref={sentinel} />
       {loading ? (LoadingIndicator ? <LoadingIndicator small /> : <p className="text-muted">Loading…</p>) : null}

@@ -124,7 +124,8 @@ function Explore({ params, recent, following, onSearch, children }: { params: UR
 }
 
 function SinglePost({ id, ...handlers }: { id: string; saves: Map<string, SaveState>; onCreator: (n: string) => void; onTag: (t: string) => void;
-  onSave: (p: ImaglrPost) => void; onReblog: (p: ImaglrPost) => void; blogId: number | null }) {
+  onSave: (p: ImaglrPost) => void; onReblog: (p: ImaglrPost) => void; blogId: number | null;
+  onLike: (p: ImaglrPost) => Promise<{ liked: boolean | null; likes: number | null }> }) {
   const [post, setPost] = React.useState<ImaglrPost | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   React.useEffect(() => {
@@ -136,7 +137,7 @@ function SinglePost({ id, ...handlers }: { id: string; saves: Map<string, SaveSt
   if (error) return <div className="alert alert-warning">{error}</div>;
   if (!post) return <p className="text-muted">Loading…</p>;
   return <PostCard post={post} save={handlers.saves.get(post.credit_id) ?? null} onCreator={handlers.onCreator}
-    onTag={handlers.onTag} onSave={handlers.onSave} onReblog={handlers.onReblog} />;
+    onTag={handlers.onTag} onSave={handlers.onSave} onReblog={handlers.onReblog} onLike={handlers.onLike} />;
 }
 
 interface Props {
@@ -197,7 +198,16 @@ export function Discover({ tab, params, blogs, go }: Props) {
     }
   }
 
-  const handlers = { ...explore, saves, blogId, onSave: (p: ImaglrPost) => startSave(p), onReblog: setReblogging };
+  async function like(post: ImaglrPost) {
+    try {
+      return await runOperation<{ liked: boolean | null; likes: number | null }>("like", { post_id: post.id, blog_id: blogId ?? undefined });
+    } catch (e) {
+      Toast.error(e);
+      throw e;
+    }
+  }
+
+  const handlers = { ...explore, saves, blogId, onSave: (p: ImaglrPost) => startSave(p), onReblog: setReblogging, onLike: like };
 
   function search(text: string) {
     const found = parseSearch(text);

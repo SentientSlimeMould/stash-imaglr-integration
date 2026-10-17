@@ -526,3 +526,15 @@ class FollowingTest(Harness):
         self.db.kv_set(f"following:{self.blog['id']}", stale)
         self.client.following = lambda name, nxt=None: (_ for _ in ()).throw(ImaglrError("server_error"))
         self.assertEqual([p["name"] for p in self.run_op("following")["people"]], ["old"])  # imaglr down: stale beats nothing
+
+
+class LikeOpTest(Harness):
+    def test_like_as_the_browsing_blog(self):
+        self.client.like = lambda post_id: {"liked": True, "likes": 4} if post_id == "7000" else self.fail(post_id)
+        self.assertEqual(self.run_op("like", post_id="7000"), {"liked": True, "likes": 4})
+        with self.assertRaises(UserError):
+            self.run_op("like", post_id="7000/../x")
+        self.client.like = lambda post_id: (_ for _ in ()).throw(ImaglrError("insufficient_scope"))
+        with self.assertRaises(UserError) as caught:
+            self.run_op("like", post_id="7000")
+        self.assertIn("isn't allowed to like posts", str(caught.exception))

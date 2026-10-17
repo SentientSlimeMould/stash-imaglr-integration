@@ -250,6 +250,10 @@ def browse_and_save(stash, plugin, blog):
     liked = {p["id"]: p for p in plugin.op("browse", source="likes")["posts"]}
     check(liked["7000"]["saved"] and liked["7002"]["saved"], "the feed shows both as in the library")
 
+    first = plugin.op("like", post_id="7001")  # not liked in the fake's catalogue
+    again = plugin.op("like", post_id="7001")
+    check(first["liked"] is True and again["liked"] is False and first["likes"] == again["likes"] + 1, "liking toggles")
+
     print("the save review")
     for tag in ("night", "city"):  # rules left by an earlier run
         plugin.op("import_rule_delete", imaglr_tag=tag)

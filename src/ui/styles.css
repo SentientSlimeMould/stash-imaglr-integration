@@ -898,3 +898,22 @@
   max-width: 100%;
   border-radius: 0.25rem;
 }
+
+/* The like button: a quiet heart and count, red once you've liked the post */
+.imaglr-like {
+  color: inherit;
+  padding: 0 0.25rem;
+  min-height: 44px;
+  font-size: inherit;
+}
+
+.imaglr-like:hover,
+.imaglr-like:focus {
+  color: #ff7373;
+  text-decoration: none;
+}
+
+.imaglr-liked,
+.imaglr-liked:hover {
+  color: #ff7373;
+}

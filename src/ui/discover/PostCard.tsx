@@ -174,9 +174,43 @@ interface Props {
   onTag: (tag: string) => void;
   onSave: (post: ImaglrPost) => void;
   onReblog: (post: ImaglrPost) => void;
+  onLike: (post: ImaglrPost) => Promise<{ liked: boolean | null; likes: number | null }>;
 }
 
-export function PostCard({ post, save, onCreator, onTag, onSave, onReblog }: Props) {
+/** The like button: a heart that fills when you've liked the post, with imaglr's count. Shows the change at once
+ *  and puts it back if imaglr refuses. */
+function LikeButton({ post, onLike }: { post: ImaglrPost; onLike: Props["onLike"] }) {
+  const { Icon } = PluginApi.components;
+  const fa = PluginApi.libraries.FontAwesomeSolid;
+  const [liked, setLiked] = React.useState(post.liked);
+  const [count, setCount] = React.useState(post.notes.likes);
+  const [busy, setBusy] = React.useState(false);
+  async function toggle() {
+    if (busy) return;
+    const was = { liked, count };
+    setBusy(true);
+    setLiked(!liked);
+    setCount(Math.max(0, count + (liked ? -1 : 1)));
+    try {
+      const r = await onLike(post);
+      if (r.liked !== null) setLiked(r.liked);
+      if (r.likes !== null) setCount(r.likes);
+    } catch {
+      setLiked(was.liked);
+      setCount(was.count);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <button type="button" className={`btn btn-link imaglr-like${liked ? " imaglr-liked" : ""}`} onClick={toggle} disabled={busy}
+      aria-pressed={liked} title={liked ? "Liked: tap to take it back" : "Like"}>
+      <Icon icon={fa.faHeart} /> {shortCount(count)}
+    </button>
+  );
+}
+
+export function PostCard({ post, save, onCreator, onTag, onSave, onReblog, onLike }: Props) {
   const { Button } = PluginApi.libraries.Bootstrap;
   const { Link } = PluginApi.libraries.ReactRouterDOM;
   const { Icon } = PluginApi.components;
@@ -233,8 +267,8 @@ export function PostCard({ post, save, onCreator, onTag, onSave, onReblog }: Pro
         ) : null}
         <div className="imaglr-post-actions">
           <span className="small text-muted imaglr-post-notes">
-            <Icon icon={fa.faHeart} /> {shortCount(post.notes.likes)}
-            <span className="ml-3"><Icon icon={fa.faRetweet} /> {shortCount(post.notes.reposts)}</span>
+            <LikeButton post={post} onLike={onLike} />
+            <span className="ml-2"><Icon icon={fa.faRetweet} /> {shortCount(post.notes.reposts)}</span>
           </span>
           <Button variant="secondary" onClick={() => onReblog(post)}>
             <Icon icon={fa.faRetweet} /> Reblog

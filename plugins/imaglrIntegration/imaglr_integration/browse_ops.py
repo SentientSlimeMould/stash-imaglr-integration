@@ -576,8 +576,22 @@ def op_reblog(ctx: Context) -> dict[str, Any]:
     return {"ok": True, "blog": {"id": blog["id"], "name": blog["name"]}}
 
 
+def op_like(ctx: Context) -> dict[str, Any]:
+    """Like a post on imaglr as the browsing blog, or take the like back (imaglr toggles)."""
+    _require_enabled(ctx)
+    blog = _blog(ctx)
+    post_id = str(ctx.arg("post_id"))
+    if not post_id.isdigit():
+        raise UserError("That isn't an imaglr post.")
+    try:
+        return ctx.imaglr(blog).like(post_id)
+    except ImaglrError as e:
+        raise UserError(_imaglr_message(e, blog, doing="like posts")) from None
+
+
 OPERATIONS = {
     "browse": op_browse,
+    "like": op_like,
     "post_find": op_post_find,
     "media_preview": op_media_preview,
     "save_setup": op_save_setup,

@@ -3061,7 +3061,45 @@
     if (!src) return /* @__PURE__ */ react_default.createElement("span", { className: `${className} imaglr-avatar-letter`, "aria-hidden": "true" }, (name[0] ?? "?").toUpperCase());
     return /* @__PURE__ */ react_default.createElement("img", { className, src, alt: "", loading: "lazy", onError: () => setSrc(src === url ? avatarFallback(url) : null) });
   }
-  function PostCard({ post, save: save2, onCreator, onTag, onSave, onReblog }) {
+  function LikeButton({ post, onLike }) {
+    const { Icon } = PluginApi.components;
+    const fa = PluginApi.libraries.FontAwesomeSolid;
+    const [liked, setLiked] = react_default.useState(post.liked);
+    const [count, setCount] = react_default.useState(post.notes.likes);
+    const [busy, setBusy] = react_default.useState(false);
+    async function toggle() {
+      if (busy) return;
+      const was = { liked, count };
+      setBusy(true);
+      setLiked(!liked);
+      setCount(Math.max(0, count + (liked ? -1 : 1)));
+      try {
+        const r = await onLike(post);
+        if (r.liked !== null) setLiked(r.liked);
+        if (r.likes !== null) setCount(r.likes);
+      } catch {
+        setLiked(was.liked);
+        setCount(was.count);
+      } finally {
+        setBusy(false);
+      }
+    }
+    return /* @__PURE__ */ react_default.createElement(
+      "button",
+      {
+        type: "button",
+        className: `btn btn-link imaglr-like${liked ? " imaglr-liked" : ""}`,
+        onClick: toggle,
+        disabled: busy,
+        "aria-pressed": liked,
+        title: liked ? "Liked: tap to take it back" : "Like"
+      },
+      /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faHeart }),
+      " ",
+      shortCount(count)
+    );
+  }
+  function PostCard({ post, save: save2, onCreator, onTag, onSave, onReblog, onLike }) {
     const { Button } = PluginApi.libraries.Bootstrap;
     const { Link } = PluginApi.libraries.ReactRouterDOM;
     const { Icon } = PluginApi.components;
@@ -3072,7 +3110,7 @@
     const inLibrary = savedPath(refs);
     const saving = !!state && SAVING.includes(state.status);
     const longCaption = post.summary.length > 160 || post.summary.split("\n").length > 3;
-    return /* @__PURE__ */ react_default.createElement("article", { className: "card imaglr-post" }, /* @__PURE__ */ react_default.createElement("header", { className: "imaglr-post-head" }, /* @__PURE__ */ react_default.createElement(Avatar, { url: post.creator.avatar, name: post.creator.name }), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-who" }, /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "btn btn-link imaglr-post-name", onClick: () => onCreator(post.creator.name) }, post.creator.name || "someone"), post.original ? /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted" }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faRetweet }), " ", /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "btn btn-link imaglr-post-original", onClick: () => onCreator(post.original.creator.name) }, post.original.creator.name || "the original")) : null), /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted imaglr-post-time" }, relativeTime(post.created_at)), post.url ? /* @__PURE__ */ react_default.createElement("a", { className: "btn btn-link imaglr-post-open", href: post.url, target: "_blank", rel: "noopener noreferrer", title: "Open on imaglr" }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faExternalLinkAlt })) : null), /* @__PURE__ */ react_default.createElement(Media, { media: post.media }), /* @__PURE__ */ react_default.createElement("div", { className: "card-body imaglr-post-body" }, post.summary ? /* @__PURE__ */ react_default.createElement("p", { className: `imaglr-post-caption${expanded || !longCaption ? "" : " imaglr-post-caption-short"}` }, post.summary) : null, longCaption && !expanded ? /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "btn btn-link p-0 small", onClick: () => setExpanded(true) }, "more") : null, post.tags.length ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-tags" }, post.tags.map((t) => /* @__PURE__ */ react_default.createElement("button", { key: t, type: "button", className: "tag-item badge badge-secondary", onClick: () => onTag(t) }, "#", t))) : null, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-actions" }, /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted imaglr-post-notes" }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faHeart }), " ", shortCount(post.notes.likes), /* @__PURE__ */ react_default.createElement("span", { className: "ml-3" }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faRetweet }), " ", shortCount(post.notes.reposts))), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => onReblog(post) }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faRetweet }), " Reblog"), post.media.length === 0 ? null : inLibrary ? /* @__PURE__ */ react_default.createElement(Link, { className: "btn btn-secondary imaglr-post-saved", to: `/${inLibrary}` }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faCheck }), " In your library") : saving ? /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", disabled: true }, /* @__PURE__ */ react_default.createElement("span", { className: "spinner-border spinner-border-sm" }), " ", state.status === "scanning" ? "Adding to Stash\u2026" : `Saving\u2026 ${Math.round(state.progress * 100)}%`) : /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => onSave(post) }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faDownload }), " ", state?.status === "failed" ? "Try again" : "Save")), state?.status === "failed" && state.error ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning mt-2" }, state.error) : null));
+    return /* @__PURE__ */ react_default.createElement("article", { className: "card imaglr-post" }, /* @__PURE__ */ react_default.createElement("header", { className: "imaglr-post-head" }, /* @__PURE__ */ react_default.createElement(Avatar, { url: post.creator.avatar, name: post.creator.name }), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-who" }, /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "btn btn-link imaglr-post-name", onClick: () => onCreator(post.creator.name) }, post.creator.name || "someone"), post.original ? /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted" }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faRetweet }), " ", /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "btn btn-link imaglr-post-original", onClick: () => onCreator(post.original.creator.name) }, post.original.creator.name || "the original")) : null), /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted imaglr-post-time" }, relativeTime(post.created_at)), post.url ? /* @__PURE__ */ react_default.createElement("a", { className: "btn btn-link imaglr-post-open", href: post.url, target: "_blank", rel: "noopener noreferrer", title: "Open on imaglr" }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faExternalLinkAlt })) : null), /* @__PURE__ */ react_default.createElement(Media, { media: post.media }), /* @__PURE__ */ react_default.createElement("div", { className: "card-body imaglr-post-body" }, post.summary ? /* @__PURE__ */ react_default.createElement("p", { className: `imaglr-post-caption${expanded || !longCaption ? "" : " imaglr-post-caption-short"}` }, post.summary) : null, longCaption && !expanded ? /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "btn btn-link p-0 small", onClick: () => setExpanded(true) }, "more") : null, post.tags.length ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-tags" }, post.tags.map((t) => /* @__PURE__ */ react_default.createElement("button", { key: t, type: "button", className: "tag-item badge badge-secondary", onClick: () => onTag(t) }, "#", t))) : null, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-actions" }, /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted imaglr-post-notes" }, /* @__PURE__ */ react_default.createElement(LikeButton, { post, onLike }), /* @__PURE__ */ react_default.createElement("span", { className: "ml-2" }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faRetweet }), " ", shortCount(post.notes.reposts))), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => onReblog(post) }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faRetweet }), " Reblog"), post.media.length === 0 ? null : inLibrary ? /* @__PURE__ */ react_default.createElement(Link, { className: "btn btn-secondary imaglr-post-saved", to: `/${inLibrary}` }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faCheck }), " In your library") : saving ? /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", disabled: true }, /* @__PURE__ */ react_default.createElement("span", { className: "spinner-border spinner-border-sm" }), " ", state.status === "scanning" ? "Adding to Stash\u2026" : `Saving\u2026 ${Math.round(state.progress * 100)}%`) : /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => onSave(post) }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faDownload }), " ", state?.status === "failed" ? "Try again" : "Save")), state?.status === "failed" && state.error ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning mt-2" }, state.error) : null));
   }
 
   // src/ui/discover/PostFeed.tsx
@@ -3081,7 +3119,7 @@
     const fa = PluginApi.libraries.FontAwesomeSolid;
     return /* @__PURE__ */ react_default.createElement("div", { className: "card imaglr-creator" }, /* @__PURE__ */ react_default.createElement("div", { className: "card-body" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-creator-head" }, /* @__PURE__ */ react_default.createElement(Avatar, { url: profile.avatar, name: profile.name, large: true }), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement("h4", { className: "mb-1" }, profile.name), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted" }, shortCount(profile.counts.posts), " posts \xB7 ", shortCount(profile.counts.followers), " followers")), profile.url ? /* @__PURE__ */ react_default.createElement("a", { className: "btn btn-secondary ml-auto", href: profile.url, target: "_blank", rel: "noopener noreferrer" }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faExternalLinkAlt }), " imaglr") : null), profile.description ? /* @__PURE__ */ react_default.createElement("p", { className: "imaglr-creator-bio mt-2 mb-0" }, profile.description) : null));
   }
-  function PostFeed({ source, tag, name, blogId, saves, onCreator, onTag, onSave, onReblog }) {
+  function PostFeed({ source, tag, name, blogId, saves, onCreator, onTag, onSave, onReblog, onLike }) {
     const { Button } = PluginApi.libraries.Bootstrap;
     const { LoadingIndicator } = PluginApi.components;
     const [posts, setPosts] = react_default.useState([]);
@@ -3143,7 +3181,8 @@
         onCreator,
         onTag,
         onSave,
-        onReblog
+        onReblog,
+        onLike
       }
     )), /* @__PURE__ */ react_default.createElement("div", { ref: sentinel }), loading ? LoadingIndicator ? /* @__PURE__ */ react_default.createElement(LoadingIndicator, { small: true }) : /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Loading\u2026") : null, error ? /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-warning imaglr-feed-end" }, error, " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", size: "sm", onClick: () => load2(posts.length ? next : null) }, "Try again")) : null, ended && !loading && !error ? /* @__PURE__ */ react_default.createElement("p", { className: "text-muted text-center imaglr-feed-end" }, posts.length ? "That's everything for now." : "Nothing here yet.") : null);
   }
@@ -3258,7 +3297,8 @@
         onCreator: handlers.onCreator,
         onTag: handlers.onTag,
         onSave: handlers.onSave,
-        onReblog: handlers.onReblog
+        onReblog: handlers.onReblog,
+        onLike: handlers.onLike
       }
     );
   }
@@ -3307,7 +3347,15 @@
         Toast.error(e);
       }
     }
-    const handlers = { ...explore, saves, blogId, onSave: (p) => startSave(p), onReblog: setReblogging };
+    async function like(post) {
+      try {
+        return await runOperation("like", { post_id: post.id, blog_id: blogId ?? void 0 });
+      } catch (e) {
+        Toast.error(e);
+        throw e;
+      }
+    }
+    const handlers = { ...explore, saves, blogId, onSave: (p) => startSave(p), onReblog: setReblogging, onLike: like };
     function search(text) {
       const found = parseSearch(text);
       if (!found) return;
