@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.0 — 2026-10-17
 
 - **Discover.** The imaglr page has two sections: Share (Clips, Images, Sent, as before) and Discover: your imaglr feed, your
   likes, and Explore by tag, by creator or from a post's link, as one scrolling column. Videos play when tapped,
