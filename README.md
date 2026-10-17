@@ -13,10 +13,6 @@ your [imaglr](https://imaglr.com) blogs.
 - **Draft, Queue or Publish immediately:** You can set a default upload action for each blog you want to send to and alter that if needed any time you send.
 - **Privacy:** location, camera and other metadata are removed from every file before upload.
 
-> **Status: early release (0.1.x).** It works end to end and is tested on Stash v0.31.1 and the development
-> build, but it hasn't been used widely yet. Please report problems on the
-> [issue tracker](https://github.com/SentientSlimeMould/stash-imaglr-integration/issues).
-
 ## Demos
 
 Performed on a demo library of public-domain films and NASA images.
@@ -56,10 +52,10 @@ in [docs/media](docs/media).</sub>
 - **An imaglr API key** for each blog you want to post to. imaglr's API is currently only available to
   [paid supporters](https://imaglr.com/subscriptions) (see [imaglr's API page](https://imaglr.com/developers)).
   Create the key on imaglr under **Settings → API** with these permissions:
-  - **read**: lets the plugin check the blog's name, supporter status and daily limit;
-  - **manage**: drafts, including publishing or queueing a draft, which is how everything is posted.
-
-  Leave **write** off: weirdly, this permission is not needed?! - Likely to change, as the Imaglr API is currently in Beta. 
+  - **read**: lets the plugin check the blog's name, supporter status and daily limit, and lets you browse
+    imaglr from Stash and save posts;
+  - **manage**: drafts, including publishing or queueing a draft;
+  - **write**: only needed to **Reblog** from Stash.
 
 The plugin's Settings show each blog's **posts left today**, as reported by imaglr. imaglr allows 1,000 new posts
 a day; saving a draft doesn't use one, publishing does (including when imaglr publishes from your queue).
@@ -115,15 +111,31 @@ Sending is queued as a Stash task, so it shows on Stash's **Settings → Tasks**
 - adds the queue tag to images you choose **Add to imaglr** for, and removes it when you choose **Remove "imaglr"
   tag**;
 - swaps the queue tag for the sent tag on markers and images you've sent;
-- writes trimmed start and end times back to markers, and asks Stash to regenerate those markers' previews.
+- writes trimmed start and end times back to markers, and asks Stash to regenerate those markers' previews;
+- when you save a post from imaglr: downloads its files into your save folder, asks Stash to scan just those
+  files, then writes the credit onto them (the post's and creator's links, a credit line, the post date and the
+  custom fields imaglr_post_id and imaglr_creator), links Stash tags, performers and a studio whose name or alias
+  matches one of the post's tags exactly, and makes a gallery of a post with several files.
 
-It never modifies, moves or deletes your media files, and it never creates markers.
+It never modifies, moves or deletes your existing media files.
 
 **Its own data** — the imaglr API keys, the sent history, tag rules and prepared files — are kept in its `data`
 folder inside Stash's plugins directory, in a SQLite database.
-**On imaglr** it can only make these five calls: read your profile, read your API rate limits, create a
-draft, and publish or queue a draft it has just created. It never edits or deletes posts, changes your queue
-settings or reads your feed.
+
+**On imaglr** it can:
+
+- read your profile and API limits;
+- create a draft, send a large file for it in pieces, and publish or queue a draft it has just created;
+- read your feed, your likes, a tag, a creator and a single post while you browse;
+- reblog a post when you ask;
+- download pictures and videos, only from imaglr's own servers.
+
+It never:
+
+- edits or deletes posts;
+- likes or follows anyone;
+- changes your queue settings;
+- saves anything you didn't choose.
 
 **What is sent to imaglr** for each post: the prepared files (metadata stripped), each with a file name made from
 the Stash title or original file name (letters, digits and dashes only — rename in Stash first if a name says
@@ -136,9 +148,9 @@ your Stash library, other files or your machine.
 
 - Stash runs one task at a time in a queue, so clip exports and uploads can be held up by Stash's own tasks such
   as scans and vice versa.
-- HDR videos are not tone-mapped; colours may look flat.
-- imaglr accepts videos up to 500 MB. A long clip is encoded at a lower bitrate to fit; the editor estimates the
-  size as you trim and warns when a smaller picture or H.265 would look better.
+- HDR videos are not tone-mapped.
+- imaglr accepts videos up to 500 MB. A long clip is automatically encoded at lower bitrates to fit; the editor
+  estimates the size as you trim and advises when to reduce the video resolution or encode in H.265.
 - imaglr accepts WebPs and GIFs up to 40 MB. A long clip, or one with a lot of movement, may only fit at a low frame
   rate and resolution; the editor estimates the size as you trim, and Send all can fall back to a video for any WebP
   or GIF that won't fit.
@@ -181,3 +193,25 @@ compliance, in line with the
 ## Licence
 
 [AGPL-3.0](LICENCE), the same licence as Stash.
+
+## About imaglr
+
+If you've used Tumblr, BDSMLR or ReblogMe, [imaglr](https://imaglr.com) will feel familiar: blogs, a feed of the
+creators you follow, tags, and reblogs that carry the original creator's credit with them - but with a slicker,
+more responsive and more stable platform.
+
+What sets imaglr apart:
+
+- community pages bring people together around what they love;
+- a queue keeps your blog posting while you're away;
+- an open API lets tools like this one build on it;
+- adult content is welcome, with NSFW filters for anyone who'd rather not see it;
+- supporters can post videos up to 500 MB.
+
+**Give as much as you take.** This plugin makes posting as easy as saving: pick the best of your Stash
+collection, trim it into a clip or a GIF, and share it to your blog in a few taps. Every post you share gives the
+community something new to discover, reblog and enjoy.
+
+---
+
+Made for [Stash](https://stashapp.cc) and [imaglr](https://imaglr.com).
