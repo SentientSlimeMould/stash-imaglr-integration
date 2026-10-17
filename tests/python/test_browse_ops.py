@@ -475,3 +475,16 @@ class ReviewTest(Harness):
     def test_find_names(self):
         with mock.patch.object(library, "search", lambda s, q: [{"kind": "tag", "id": "1", "name": q}]):
             self.assertEqual(self.run_op("stash_names_find", q="sun")["results"][0]["name"], "sun")
+
+
+class TopTagsTest(Harness):
+    def test_an_empty_search_lists_the_most_used_tags_without_the_workflow_tags(self):
+        class Lib:
+            def gql(self, query, variables=None):
+                return {"scenes": {"tags": [{"id": 1, "name": "Beach"}, {"id": 8, "name": "imaglr"}, {"id": 3, "name": "Dusk"}]},
+                        "images": {"tags": [{"id": 1, "name": "Beach"}, {"id": 4, "name": "Portrait"}, {"id": 9, "name": "Imaglr-Sent"}]}}
+        self.assertEqual([t["name"] for t in library.top_tags(Lib(), {"imaglr", "imaglr-sent"})], ["Beach", "Portrait", "Dusk"])
+        tops = [{"kind": "tag", "id": "5", "name": "AI_Housekeeping"}, {"kind": "tag", "id": "1", "name": "Beach"}]
+        with mock.patch.object(library, "top_tags", lambda s, exclude, limit: tops), \
+             mock.patch.object(library, "search", lambda s, q: self.fail("searched")):
+            self.assertEqual([t["name"] for t in self.run_op("stash_names_find", q="  ")["results"]], ["Beach"])  # "^AI_" by default

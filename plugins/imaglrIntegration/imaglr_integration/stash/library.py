@@ -56,6 +56,10 @@ query($q: String!) {
   findStudios(filter: { q: $q, per_page: 8, sort: "name" }) { studios { id name } }
 }
 """
+TOP_TAGS = """
+{ scenes: findTags(filter: { sort: "scenes_count", direction: DESC, per_page: 15 }) { tags { id name } }
+  images: findTags(filter: { sort: "images_count", direction: DESC, per_page: 15 }) { tags { id name } } }
+"""
 PLUGIN_CONFIG = "query($id: ID!) { configuration { plugins(include: [$id]) } }"
 CONFIGURE_PLUGIN = "mutation($id: ID!, $input: Map!) { configurePlugin(plugin_id: $id, input: $input) }"
 
@@ -151,6 +155,18 @@ def existing(client: StashClient, targets: list[dict[str, Any]]) -> list[dict[st
     parts = [f'x{n}: {FINDERS[t["kind"]]}(id: "{t["id"]}") {{ id name }}' for n, t in enumerate(wanted)]
     data = client.gql("{ " + " ".join(parts) + " }")
     return [{**t, "name": data[f"x{n}"]["name"]} for n, t in enumerate(wanted) if data.get(f"x{n}")]
+
+
+def top_tags(client: StashClient, exclude: set[str], limit: int = 12) -> list[dict[str, str]]:
+    """The library's most-used Stash tags, on scenes and on images taken in turn, for a picker opened before
+    anything is typed. `exclude` holds names (lower case) to leave out."""
+    data = client.gql(TOP_TAGS)
+    out: list[dict[str, str]] = []
+    for pair in zip(data["scenes"]["tags"], data["images"]["tags"]):
+        for t in pair:
+            if t["name"].casefold() not in exclude and all(o["id"] != str(t["id"]) for o in out):
+                out.append({"kind": "tag", "id": str(t["id"]), "name": t["name"]})
+    return out[:limit]
 
 
 def search(client: StashClient, text: str) -> list[dict[str, str]]:

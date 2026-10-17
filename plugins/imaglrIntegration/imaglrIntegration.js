@@ -2484,21 +2484,26 @@
     const Select = PluginApi.libraries.ReactSelect.default;
     const [input, setInput] = react_default.useState("");
     const [found, setFound] = react_default.useState([]);
+    const [top, setTop] = react_default.useState(null);
     react_default.useEffect(() => {
       if (!input.trim()) {
-        setFound([]);
+        setFound(top ?? []);
         return;
       }
       const timer = window.setTimeout(() => {
         runOperation("stash_names_find", { q: input }).then((r) => setFound(r.results), () => setFound([]));
       }, 200);
       return () => window.clearTimeout(timer);
-    }, [input]);
+    }, [input, top]);
+    function openMenu() {
+      if (top) return;
+      runOperation("stash_names_find", { q: "" }).then((r) => setTop(r.results), () => setTop([]));
+    }
     const text = input.trim();
     const exact = found.some((t) => t.kind === "tag" && t.name.toLowerCase() === text.toLowerCase());
     const options = [
       ...["tag", "performer", "studio"].map((kind) => ({
-        label: `${KIND_LABELS[kind]}s`,
+        label: text ? `${KIND_LABELS[kind]}s` : "Most used tags",
         options: found.filter((t) => t.kind === kind).map((t) => ({ value: `${t.kind}:${t.id}`, label: t.name, target: t }))
       })).filter((g) => g.options.length),
       ...text && !exact ? [{ label: "New", options: [{ value: `new:${text}`, label: `Create tag "${text}"`, target: { kind: "tag", name: text, create: true } }] }] : []
@@ -2517,12 +2522,14 @@
           if (o) onPick(o.target);
           setInput("");
         },
+        onMenuOpen: openMenu,
         filterOption: () => true,
         placeholder: "Add\u2026",
-        noOptionsMessage: () => text ? "Nothing in Stash by that name" : "Type a name",
-        styles: { option: (base) => ({ ...base, color: "#000" }) },
+        noOptionsMessage: () => text ? "Nothing in Stash by that name" : top ? "Type a name" : "Loading\u2026",
+        styles: { option: (base) => ({ ...base, color: "#000" }), menuPortal: (base) => ({ ...base, zIndex: 1100 }) },
         components: { IndicatorSeparator: () => null, DropdownIndicator: () => null },
-        menuPlacement: "auto"
+        menuPlacement: "auto",
+        menuPortalTarget: document.body
       }
     );
   }

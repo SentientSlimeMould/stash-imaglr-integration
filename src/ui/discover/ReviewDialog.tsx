@@ -48,21 +48,26 @@ function TargetPicker({ onPick, inputId }: { onPick: (t: Target) => void; inputI
   const Select = PluginApi.libraries.ReactSelect.default;
   const [input, setInput] = React.useState("");
   const [found, setFound] = React.useState<Target[]>([]);
+  const [top, setTop] = React.useState<Target[] | null>(null); // the most-used tags, shown before anything is typed
   React.useEffect(() => {
     if (!input.trim()) {
-      setFound([]);
+      setFound(top ?? []);
       return;
     }
     const timer = window.setTimeout(() => {
       runOperation<{ results: Target[] }>("stash_names_find", { q: input }).then((r) => setFound(r.results), () => setFound([]));
     }, 200);
     return () => window.clearTimeout(timer);
-  }, [input]);
+  }, [input, top]);
+  function openMenu() {
+    if (top) return;
+    runOperation<{ results: Target[] }>("stash_names_find", { q: "" }).then((r) => setTop(r.results), () => setTop([]));
+  }
   const text = input.trim();
   const exact = found.some((t) => t.kind === "tag" && t.name.toLowerCase() === text.toLowerCase());
   const options = [
     ...(["tag", "performer", "studio"] as TargetKind[]).map((kind) => ({
-      label: `${KIND_LABELS[kind]}s`,
+      label: text ? `${KIND_LABELS[kind]}s` : "Most used tags",
       options: found.filter((t) => t.kind === kind).map((t) => ({ value: `${t.kind}:${t.id}`, label: t.name, target: t })),
     })).filter((g) => g.options.length),
     ...(text && !exact ? [{ label: "New", options: [{ value: `new:${text}`, label: `Create tag "${text}"`, target: { kind: "tag", name: text, create: true } }] }] : []),
@@ -77,12 +82,14 @@ function TargetPicker({ onPick, inputId }: { onPick: (t: Target) => void; inputI
       inputValue={input}
       onInputChange={(v: string, meta: { action: string }) => meta.action === "input-change" && setInput(v)}
       onChange={(o: { target: Target } | null) => { if (o) onPick(o.target); setInput(""); }}
+      onMenuOpen={openMenu}
       filterOption={() => true}
       placeholder="Add…"
-      noOptionsMessage={() => (text ? "Nothing in Stash by that name" : "Type a name")}
-      styles={{ option: (base: object) => ({ ...base, color: "#000" }) }}
+      noOptionsMessage={() => (text ? "Nothing in Stash by that name" : top ? "Type a name" : "Loading…")}
+      styles={{ option: (base: object) => ({ ...base, color: "#000" }), menuPortal: (base: object) => ({ ...base, zIndex: 1100 }) }}
       components={{ IndicatorSeparator: () => null, DropdownIndicator: () => null }}
       menuPlacement="auto"
+      menuPortalTarget={document.body} // above the modal, not clipped by it
     />
   );
 }

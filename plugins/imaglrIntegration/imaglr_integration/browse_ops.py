@@ -24,6 +24,7 @@ from .imaglr import DisallowedEndpoint, ErrorClass, ImaglrError, MediaRefused, c
 from .settings import PLUGIN_ID, Settings
 from .settings import load as load_settings
 from .stash import StashError, api, library
+from .tags.pipeline import parse_patterns
 
 SOURCES = ("feed", "likes", "tag", "creator")
 PREVIEW_DIR = "_browse"  # under data/prepared, so Stash serves it from the plugin's assets
@@ -504,8 +505,15 @@ def op_import_rule_delete(ctx: Context) -> dict[str, Any]:
 
 
 def op_stash_names_find(ctx: Context) -> dict[str, Any]:
-    """Stash tags, performers and studios by name or alias, for choosing in the save review."""
-    return {"results": library.search(ctx.stash, str(ctx.args.get("q") or ""))}
+    """Stash tags, performers and studios by name or alias, for choosing in the save review; with nothing typed,
+    the library's most-used tags (never the plugin's own queue and sent tags, nor its "Tags never suggested")."""
+    text = str(ctx.args.get("q") or "").strip()
+    if not text:
+        config = _settings(ctx)
+        hidden = parse_patterns(config.exclude_patterns)
+        top = library.top_tags(ctx.stash, _workflow_names(config), limit=40)
+        return {"results": [t for t in top if not any(p.search(t["name"]) for p in hidden)][:12]}
+    return {"results": library.search(ctx.stash, text)}
 
 
 # ---- reblogging ----------------------------------------------------------------------------------------
