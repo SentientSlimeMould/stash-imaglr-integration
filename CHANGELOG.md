@@ -18,8 +18,12 @@
   add more, or leave a tag out; tick Remember to make it an import rule for every post from then on (kept in the
   plugin, listed under Settings → Import rules; never a Stash alias, which would feed Stash's Auto Tag). *Save
   without reviewing tags* skips the review and applies your rules and exact matches.
-- Files saved from imaglr are never uploaded again: their cards say "From imaglr", Send and Send all refuse them,
-  and the editor offers to reblog the original instead.
+- **From imaglr, in Stash.** A saved image's page opens its Details with "From imaglr": View the post, the creator,
+  and Reblog. A saved scene gets an "imaglr" tab with the same. (Galleries keep their links under Edit.)
+- Files saved from someone else's imaglr post are never uploaded again: their cards say "From imaglr", Send and
+  Send all refuse them, and the editor becomes a reblog composer: the post as it was, credited, with your own
+  caption and tags for the reblog, and no editing of the picture. Your own posts, saved back from imaglr, can be
+  edited and sent like anything else.
 - Fixed: on screens wider than a phone, a few of the clip editor's styles weren't applied (the section labels, the
   GIF preview bar, the cover row and the seamless-loop results). A style block meant for phones only was left open
   on 8 October and took everything after it with it.

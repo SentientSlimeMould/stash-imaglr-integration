@@ -71,8 +71,9 @@ class FakeClient:
         self._call("post", post_id)
         return self.posts[str(post_id)]
 
-    def repost(self, post_id):
+    def repost(self, post_id, body_html=None, tags=()):
         self._call("repost", post_id)
+        self.reposted = (post_id, body_html, list(tags))
         return {}
 
 
@@ -352,6 +353,9 @@ class ReblogTest(Harness):
     def test_reblog(self):
         self.assertTrue(self.run_op("reblog", post_id="7000", blog_id=self.blog["id"])["ok"])
         self.assertIn(("repost", "7000"), self.client.calls)
+        self.assertEqual(self.client.reposted, ("7000", None, []))
+        self.run_op("reblog", post_id="7000", blog_id=self.blog["id"], caption="So good <3\nAgain", tags=[" a  b ", "", "c"])
+        self.assertEqual(self.client.reposted, ("7000", "<p>So good &lt;3<br>Again</p>", ["a b", "c"]))
         self.client.error = ImaglrError("insufficient_scope")
         with self.assertRaises(UserError) as caught:
             self.run_op("reblog", post_id="7000", blog_id=self.blog["id"])
@@ -369,10 +373,11 @@ class GuardTest(unittest.TestCase):
         self.ctx = Context({"args": {}})
         self.ctx._db = self.db
         self.ctx._stash = FakeStash({})
-        saved = Image.parse({"id": "1", "title": "", "custom_fields": {"imaglr_post_id": "7000"}})
+        saved = Image.parse({"id": "1", "title": "", "custom_fields": {"imaglr_post_id": "7000", "imaglr_creator": "someone"}})
+        mine = Image.parse({"id": "4", "title": "", "custom_fields": {"imaglr_post_id": "7100", "imaglr_creator": "My-Blog"}})
         plain = Image.parse({"id": "2", "title": "", "custom_fields": {}})
         scene = Scene.parse({"id": "3", "title": "", "custom_fields": {"imaglr_post_id": "7002"}})
-        patches = [mock.patch.object(jobs.api, "find_image", lambda s, i: {"1": saved, "2": plain}.get(i)),
+        patches = [mock.patch.object(jobs.api, "find_image", lambda s, i: {"1": saved, "2": plain, "4": mine}.get(i)),
                    mock.patch.object(jobs.api, "find_scene", lambda s, i: scene if i == "3" else None)]
         for p in patches:
             p.start()
@@ -391,6 +396,17 @@ class GuardTest(unittest.TestCase):
         self.assertIsNone(jobs.saved_from_imaglr(self.ctx, [plain]))
         self.assertEqual(jobs.saved_from_imaglr(self.ctx, [scene]), "7002")
         self.assertEqual(jobs.saved_from_imaglr(self.ctx, [still]), "7002")
+
+    def test_your_own_posts_are_yours_to_send(self):
+        blog = blogs.add_blog(self.db, "pbk_mine_12345")
+        self.db.execute("UPDATE blogs SET name='my-blog' WHERE id=?", (blog["id"],))
+        mine = items.create_item(self.db, kind="image", stash_image_id="4")
+        saved = items.create_item(self.db, kind="image", stash_image_id="1")
+        self.assertIsNone(jobs.saved_from_imaglr(self.ctx, [mine]))  # whatever the case of the name
+        self.assertEqual(jobs.saved_from_imaglr(self.ctx, [saved]), "7000")
+        from imaglr_integration import services
+        card = services.allow_own({"saved_from": "7100", "saved_creator": "MY-BLOG"}, services.own_blog_names(self.db))
+        self.assertIsNone(card["saved_from"])
 
     def test_send_refuses_and_send_all_skips(self):
         saved = items.create_item(self.db, kind="image", stash_image_id="1")

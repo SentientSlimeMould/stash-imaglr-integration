@@ -10,6 +10,7 @@ import type { Blog } from "../model.ts";
 import { type ExploreOption, exploreOptions, type ImaglrPost, parseSearch, rememberSearch, SAVING, type SaveState, searchLabel } from "../lib/posts.ts";
 import { AutoplayContext, Avatar, PostCard } from "./PostCard.tsx";
 import { folderReady, SaveFolderDialog, type SaveSetup } from "./SaveFolderDialog.tsx";
+import { ReblogDialog } from "./ReblogDialog.tsx";
 import { ReviewDialog } from "./ReviewDialog.tsx";
 import { PostFeed } from "./PostFeed.tsx";
 
@@ -61,41 +62,6 @@ function useSaves() {
     return () => window.clearTimeout(timer);
   }, [saves, busy]);
   return { saves, put: (s: SaveState) => setSaves((old) => new Map(old).set(s.post_id, s)) };
-}
-
-function ReblogDialog({ post, blogs, onClose }: { post: ImaglrPost; blogs: Blog[]; onClose: () => void }) {
-  const { Form } = PluginApi.libraries.Bootstrap;
-  const Toast = PluginApi.hooks.useToast();
-  const [blogId, setBlogId] = React.useState<number | null>(blogs[0]?.id ?? null);
-  const [busy, setBusy] = React.useState(false);
-  const blog = blogs.find((b) => b.id === blogId);
-  async function accept() {
-    if (!blog) return;
-    setBusy(true);
-    try {
-      await runOperation("reblog", { post_id: post.id, blog_id: blog.id });
-      Toast.success(`Reblogged to ${blog.label}.`);
-      onClose();
-    } catch (e) {
-      Toast.error(e);
-      setBusy(false);
-    }
-  }
-  return (
-    <ConfirmDialog title="Reblog" accept="Reblog" busy={busy} disabled={!blog} onAccept={accept} onCancel={onClose}>
-      {blogs.length > 1 ? (
-        <Form.Group>
-          <Form.Label>To</Form.Label>
-          <Form.Control as="select" className="text-input" value={blogId ?? ""}
-            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setBlogId(Number(e.target.value))}>
-            {blogs.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
-          </Form.Control>
-        </Form.Group>
-      ) : null}
-      {blog ? <p className="mb-0">Reblog {post.creator.name ? `@${post.creator.name}'s post` : "this post"} to {blog.label}? It appears on
-        your blog straight away.</p> : <p className="mb-0">Add a blog in the plugin's settings first.</p>}
-    </ConfirmDialog>
-  );
 }
 
 /** The Explore box: Stash's own select, typed into like a search field. Its menu offers what Enter would do,
@@ -286,7 +252,7 @@ export function Discover({ tab, params, blogs, go }: Props) {
           if (folderReady(s)) startSave(post, s);
         }} />
       ) : null}
-      {reblogging ? <ReblogDialog post={reblogging} blogs={blogs} onClose={() => setReblogging(null)} /> : null}
+      {reblogging ? <ReblogDialog postId={reblogging.id} creator={reblogging.creator.name} blogs={blogs} onClose={() => setReblogging(null)} /> : null}
       {reviewing ? (
         <ReviewDialog post={reviewing} blogId={blogId} onCancel={() => setReviewing(null)}
           onDone={(s) => { put(s); setReviewing(null); }} />

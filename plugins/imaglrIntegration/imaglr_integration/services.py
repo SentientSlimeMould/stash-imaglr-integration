@@ -272,6 +272,7 @@ def image_card(item: dict[str, Any], image: Image | None, first_seen: str | None
         "first_seen": first_seen,
         "in_stash_queue": image is not None,
         "saved_from": image.imaglr_post_id if image else None,  # an imaglr post: reblog it, never upload it again
+        "saved_creator": image.imaglr_creator if image else None,
     }
 
 
@@ -301,7 +302,20 @@ def clip_card(item: dict[str, Any], marker: Marker | None, first_seen: str | Non
         "date": scene.date if scene else None,
         "first_seen": first_seen,
         "saved_from": scene.imaglr_post_id if scene else None,  # an imaglr post: reblog it, never upload it again
+        "saved_creator": scene.imaglr_creator if scene else None,
     }
+
+
+def own_blog_names(db: Database) -> set[str]:
+    """The user's own blog names (lower case): their posts, saved from imaglr, are theirs to post again."""
+    return {str(b["name"]).casefold() for b in db.fetchall("SELECT name FROM blogs") if b["name"]}
+
+
+def allow_own(card: dict[str, Any], own: set[str]) -> dict[str, Any]:
+    """A card saved from one of the user's own imaglr posts is not held back from sending."""
+    if card.get("saved_from") and str(card.get("saved_creator") or "").casefold() in own:
+        card["saved_from"] = None
+    return card
 
 
 def still_card(item: dict[str, Any]) -> dict[str, Any]:

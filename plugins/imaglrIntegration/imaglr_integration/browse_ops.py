@@ -24,6 +24,7 @@ from .imaglr import DisallowedEndpoint, ErrorClass, ImaglrError, MediaRefused, c
 from .settings import PLUGIN_ID, Settings
 from .settings import load as load_settings
 from .stash import StashError, api, library
+from .tags.caption import caption_to_html
 from .tags.pipeline import parse_patterns
 
 SOURCES = ("feed", "likes", "tag", "creator")
@@ -555,15 +556,21 @@ def op_stash_names_find(ctx: Context) -> dict[str, Any]:
 
 # ---- reblogging ----------------------------------------------------------------------------------------
 def op_reblog(ctx: Context) -> dict[str, Any]:
-    """Reblog a post to one of the user's blogs, straight away (the page asks first)."""
+    """Reblog a post to one of the user's blogs, straight away (the page asks first), with the user's own caption
+    and tags when given."""
     blog = blogs.get_blog(ctx.db, ctx.arg("blog_id", int))
     if blog is None:
         raise UserError("That blog has been removed. Choose another.")
     post_id = str(ctx.arg("post_id"))
     if not post_id.isdigit():
         raise UserError("That isn't an imaglr post.")
+    raw_tags = ctx.args.get("tags") or []
+    if not isinstance(raw_tags, list):
+        raise UserError("Tags must be a list.")
+    tags = [" ".join(str(t).split())[:64] for t in raw_tags if str(t).strip()][:30]
+    body = caption_to_html(ctx.args.get("caption") if isinstance(ctx.args.get("caption"), str) else None)
     try:
-        ctx.imaglr(blog).repost(post_id)
+        ctx.imaglr(blog).repost(post_id, body, tags)
     except ImaglrError as e:
         raise UserError(_imaglr_message(e, blog, doing="reblog")) from None
     return {"ok": True, "blog": {"id": blog["id"], "name": blog["name"]}}

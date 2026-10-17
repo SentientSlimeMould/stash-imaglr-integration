@@ -862,3 +862,39 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* "From imaglr" on Stash's image and scene pages: a label like Stash's own, then the links as buttons */
+.imaglr-credit {
+  margin: 1rem 0;
+}
+
+.imaglr-credit-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.imaglr-credit-links .btn {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* The reblog composer (a file saved from imaglr): the post's pictures as thumbnails, then its credit */
+.imaglr-reblog-source {
+  margin-bottom: 1rem;
+}
+
+.imaglr-reblog-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.imaglr-reblog-thumbs img {
+  max-height: 240px;
+  max-width: 100%;
+  border-radius: 0.25rem;
+}

@@ -161,3 +161,13 @@ export function shortCount(n: number): string {
   if (n < 10000) return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k`;
   return `${Math.round(n / 1000)}k`;
 }
+
+/** The imaglr credit Stash holds in an item's URLs (saved from imaglr: the post's link, then the creator's), or
+ *  null for anything not saved from imaglr. */
+export function imaglrCredit(urls: string[] | null | undefined): { postUrl: string; postId: string; creatorUrl: string | null; creator: string | null } | null {
+  const list = urls ?? [];
+  const post = list.map((u) => ({ u, m: u.match(/^https?:\/\/(?:www\.)?imaglr\.[a-z.]+\/post\/(\d+)/i) })).find((x) => x.m);
+  if (!post) return null;
+  const profile = list.map((u) => ({ u, m: u.match(/^https?:\/\/(?:www\.)?imaglr\.[a-z.]+\/profile\/([^/?#]+)/i) })).find((x) => x.m);
+  return { postUrl: post.u, postId: post.m![1], creatorUrl: profile?.u ?? null, creator: profile ? decodeURIComponent(profile.m![1]) : null };
+}

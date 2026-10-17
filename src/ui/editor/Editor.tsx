@@ -145,7 +145,10 @@ export function Editor({ itemId, onClose }: Props) {
   const blog = pickBlog(blogs, blogId);
   const sendAction = effectiveAction(blog, action);
   const problem = blog ? blogProblem(blog) : null;
+  // Saved from someone else's imaglr post: this editor becomes a reblog composer (the post as it was, your caption
+  // and tags); the picture can't be edited, since a reblog shares the original and re-uploading isn't allowed.
   const fromImaglr = files.find((f) => f.saved_from)?.saved_from ?? null;
+  const fromCreator = files.find((f) => f.saved_from)?.saved_creator ?? null;
   const single = files.length === 1 && item.kind !== "set";
   const isClip = item.kind === "clip";
 
@@ -259,7 +262,7 @@ export function Editor({ itemId, onClose }: Props) {
     if (!blog || !fromImaglr) return;
     setBusy(true);
     try {
-      await runOperation("reblog", { post_id: fromImaglr, blog_id: blog.id });
+      await runOperation("reblog", { post_id: fromImaglr, blog_id: blog.id, caption, tags });
       Toast.success(`Reblogged to ${blog.label}.`);
       await runOperation("remove_from_queue", { item_id: item.id });
       onClose(true);
@@ -296,7 +299,7 @@ export function Editor({ itemId, onClose }: Props) {
     <Modal show onHide={() => undefined} keyboard={false} size="lg" dialogClassName="imaglr-editor" scrollable>
       <Modal.Header>
         <Modal.Title>
-          Post to imaglr <small className="text-muted">{STATUS_LABELS[item.status]}</small>
+          {fromImaglr ? "Reblog on imaglr" : <>Post to imaglr <small className="text-muted">{STATUS_LABELS[item.status]}</small></>}
         </Modal.Title>
       </Modal.Header>
       <Modal.Body>
@@ -314,7 +317,21 @@ export function Editor({ itemId, onClose }: Props) {
         {item.hdr_warning ? (
           <Alert variant="info">This video is HDR. Colours may look flatter on imaglr (HDR isn't converted).</Alert>
         ) : null}
-        {isClip ? (
+        {fromImaglr ? (
+          <div className="imaglr-reblog-source">
+            <div className="imaglr-reblog-thumbs">
+              {files.map((f) => (f.thumb ? <img key={f.id} src={baseUrl() + f.thumb} alt="" /> : null))}
+            </div>
+            <p className="mb-0">
+              {fromCreator ? <>A post by <strong>@{fromCreator}</strong>, saved from imaglr. </> : "Saved from imaglr. "}
+              <a href={`https://imaglr.com/post/${fromImaglr}`} target="_blank" rel="noopener noreferrer">View the post</a>
+            </p>
+            <p className="small text-muted mb-0">
+              A reblog shares the post as it was posted, credited to its creator, so the picture can't be edited here.
+              Add your own caption and tags below.
+            </p>
+          </div>
+        ) : isClip ? (
           <ClipPanel
             itemId={item.id}
             sceneId={files[0].stash_scene_id}
@@ -357,7 +374,7 @@ export function Editor({ itemId, onClose }: Props) {
           onReset={() => { edit(setTags)(detail.suggestions.active.map((t) => t.tag)); setTagsAuto(true); setResetTags(true); }} />
 
         <Form.Group className="mt-3">
-          <Form.Label>Caption <small className="text-muted">(optional)</small></Form.Label>
+          <Form.Label>{fromImaglr ? "Your caption for the reblog" : "Caption"} <small className="text-muted">(optional)</small></Form.Label>
           <Form.Control className="text-input" as="textarea" rows={3} value={caption} disabled={locked}
             onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => edit(setCaption)(e.target.value)} />
         </Form.Group>
@@ -374,7 +391,7 @@ export function Editor({ itemId, onClose }: Props) {
           </Form.Group>
         ) : null}
 
-        <Form.Group>
+        {fromImaglr ? null : <Form.Group>
           <Form.Label>
             Send as{" "}
             {blog ? <small className="text-muted">(default for {blog.label}: {ACTION_LABELS[blog.default_action].toLowerCase()})</small> : null}
@@ -392,12 +409,9 @@ export function Editor({ itemId, onClose }: Props) {
               ))}
             </ButtonGroup>
           </div>
-        </Form.Group>
+        </Form.Group>}
         {blogs.length === 0 ? <Alert variant="info">Add your imaglr blog first: use the Settings button on the page.</Alert> : null}
         {problem ? <Alert variant="warning">{problem}</Alert> : null}
-        {fromImaglr ? (
-          <Alert variant="info">This came from imaglr, so it isn't uploaded again. Reblog the original post instead.</Alert>
-        ) : null}
       </Modal.Body>
       <Modal.Footer className="imaglr-editor-footer">
         {BUSY.includes(item.status) ? (
@@ -430,7 +444,7 @@ export function Editor({ itemId, onClose }: Props) {
       {confirmReblog && blog ? (
         <ConfirmDialog title={`Reblog to ${blog.label}`} accept="Reblog" busy={busy} onAccept={reblog}
           onCancel={() => setConfirmReblog(false)}>
-          The original post appears on {blog.label} straight away, and this comes off the page.
+          The original post appears on {blog.label} straight away, with your caption and tags, and this comes off the page.
         </ConfirmDialog>
       ) : null}
       {confirmRemove ? (

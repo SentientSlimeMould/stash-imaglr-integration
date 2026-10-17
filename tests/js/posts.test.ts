@@ -75,3 +75,13 @@ test("Explore remembers searches and offers them before the creators you follow"
   assert.equal(exploreOptions("@oc", [], people)[1].options[0].avatar, "https://cdn03.imaglr.com/o.jpg");
   assert.equal(exploreOptions("https://imaglr.com/post/5", [], [])[0].options[0].label, "Open this post");
 });
+
+test("the imaglr credit is read from an item's URLs", async () => {
+  const { imaglrCredit } = await import("../../src/ui/lib/posts.ts");
+  assert.deepEqual(imaglrCredit(["https://imaglr.com/post/96040950", "https://imaglr.com/profile/some%20one"]),
+    { postUrl: "https://imaglr.com/post/96040950", postId: "96040950", creatorUrl: "https://imaglr.com/profile/some%20one", creator: "some one" });
+  assert.equal(imaglrCredit(["https://example.com/post/1"]), null);
+  assert.equal(imaglrCredit([]), null);
+  assert.equal(imaglrCredit(undefined), null);
+  assert.equal(imaglrCredit(["https://imaglr.com/post/5"])?.creator, null);
+});
