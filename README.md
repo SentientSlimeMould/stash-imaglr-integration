@@ -1,7 +1,7 @@
 # Imaglr Integration for Stash
 
-A [Stash](https://github.com/stashapp/stash) plugin for sharing your favourite images and clips from Stash to
-your [imaglr](https://imaglr.com) blogs.
+A [Stash](https://github.com/stashapp/stash) plugin that brings Stash and [imaglr](https://imaglr.com) together: post
+your favourite images and clips to your imaglr blogs, and save the imaglr posts you love into your library.
 
 - **Share Images:** add the tag `imaglr` to an image, or multi-select them in any image list and choose **⋯ → Add to imaglr**. 
 - **Share Clips:** create a scene marker in Stash and tag it `imaglr`. You can fine-tune the edit if needed before sending.
