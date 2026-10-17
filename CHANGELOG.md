@@ -15,6 +15,8 @@
   library yet, with its credit, using your import rules and exact matches. It runs as a Stash task with progress
   and Stop on the tab, keeps within imaglr's rate limits, and by default stops where an earlier sync got to
   ("all my likes" goes through every page). The one bulk save: each like is a post you chose.
+- A picture or video your browser can't show (such as a TIFF uploaded as a .jpg, which imaglr serves as it is)
+  says so, with a link to open it on imaglr, instead of showing a broken image.
 - **Like** posts from Discover: the heart under each post likes it as your browsing blog, and tapping again takes
   the like back (needs the key's write permission).
 - Explore suggests as you type: your recent searches (kept in your browser) and the creators your blog follows.

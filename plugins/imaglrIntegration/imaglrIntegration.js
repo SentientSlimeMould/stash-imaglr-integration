@@ -2991,7 +2991,11 @@
       v.play().catch(() => void 0);
     });
   }
-  function VideoMedia({ media }) {
+  function Unshowable({ what, postUrl }) {
+    const { Icon } = PluginApi.components;
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-unshowable small" }, /* @__PURE__ */ react_default.createElement(Icon, { icon: PluginApi.libraries.FontAwesomeSolid.faEyeSlash }), /* @__PURE__ */ react_default.createElement("span", null, "This ", what, " can't be shown here."), postUrl ? /* @__PURE__ */ react_default.createElement("a", { href: postUrl, target: "_blank", rel: "noopener noreferrer" }, "Open it on imaglr") : null);
+  }
+  function VideoMedia({ media, postUrl }) {
     const { Icon } = PluginApi.components;
     const autoplay = react_default.useContext(AutoplayContext);
     const box = react_default.useRef(null);
@@ -3000,6 +3004,7 @@
     const [wanted, setWanted] = react_default.useState(false);
     const [src, setSrc] = react_default.useState(null);
     const [problem, setProblem] = react_default.useState(null);
+    const [unplayable, setUnplayable] = react_default.useState(false);
     react_default.useEffect(() => {
       if (!(autoplay ? near : wanted) || src || problem) return;
       let live = true;
@@ -3034,25 +3039,31 @@
         onPlay: (e) => {
           if (playing && playing !== e.currentTarget) playing.pause();
           playing = e.currentTarget;
+        },
+        onError: () => {
+          if (src) setUnplayable(true);
         }
       }
-    ), !autoplay && !wanted ? /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "imaglr-post-play", "aria-label": "Play", onClick: () => setWanted(true) }, /* @__PURE__ */ react_default.createElement(Icon, { icon: PluginApi.libraries.FontAwesomeSolid.faPlay })) : null, waiting2 ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-loading" }, /* @__PURE__ */ react_default.createElement("span", { className: "spinner-border spinner-border-sm" })) : null, problem ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-problem small" }, problem) : null);
+    ), !autoplay && !wanted ? /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "imaglr-post-play", "aria-label": "Play", onClick: () => setWanted(true) }, /* @__PURE__ */ react_default.createElement(Icon, { icon: PluginApi.libraries.FontAwesomeSolid.faPlay })) : null, waiting2 ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-loading" }, /* @__PURE__ */ react_default.createElement("span", { className: "spinner-border spinner-border-sm" })) : null, problem ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-problem small" }, problem) : null, unplayable ? /* @__PURE__ */ react_default.createElement(Unshowable, { what: "video", postUrl }) : null);
   }
-  function PictureMedia({ media }) {
+  function PictureMedia({ media, postUrl }) {
     const direct = media.url.startsWith("https://");
     const box = react_default.useRef(null);
     const { near } = useInView(box);
     const [src, setSrc] = react_default.useState(direct ? media.url : null);
+    const [broken, setBroken] = react_default.useState(false);
     react_default.useEffect(() => {
       if (!direct && near && !src) previewSrc(media.url).then(setSrc, () => void 0);
     }, [direct, near, src, media.url]);
-    return /* @__PURE__ */ react_default.createElement("div", { ref: box, className: "imaglr-post-media", style: { aspectRatio: String(mediaRatio(media)) } }, src ? /* @__PURE__ */ react_default.createElement("img", { src, alt: "", loading: "lazy", decoding: "async" }) : null);
+    return /* @__PURE__ */ react_default.createElement("div", { ref: box, className: "imaglr-post-media", style: { aspectRatio: String(mediaRatio(media)) } }, broken ? /* @__PURE__ */ react_default.createElement(Unshowable, { what: "picture", postUrl }) : src ? /* @__PURE__ */ react_default.createElement("img", { src, alt: "", loading: "lazy", decoding: "async", onError: () => setBroken(true) }) : null);
   }
-  function Media({ media }) {
+  function Media({ media, postUrl }) {
     const strip = react_default.useRef(null);
     const [index, setIndex] = react_default.useState(0);
     if (media.length === 0) return null;
-    if (media.length === 1) return media[0].kind === "video" ? /* @__PURE__ */ react_default.createElement(VideoMedia, { media: media[0] }) : /* @__PURE__ */ react_default.createElement(PictureMedia, { media: media[0] });
+    if (media.length === 1) {
+      return media[0].kind === "video" ? /* @__PURE__ */ react_default.createElement(VideoMedia, { media: media[0], postUrl }) : /* @__PURE__ */ react_default.createElement(PictureMedia, { media: media[0], postUrl });
+    }
     return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-carousel" }, /* @__PURE__ */ react_default.createElement(
       "div",
       {
@@ -3060,7 +3071,7 @@
         className: "imaglr-post-strip",
         onScroll: (e) => setIndex(Math.round(e.currentTarget.scrollLeft / Math.max(1, e.currentTarget.clientWidth)))
       },
-      media.map((m, n) => /* @__PURE__ */ react_default.createElement("div", { key: n, className: "imaglr-post-slide" }, m.kind === "video" ? /* @__PURE__ */ react_default.createElement(VideoMedia, { media: m }) : /* @__PURE__ */ react_default.createElement(PictureMedia, { media: m })))
+      media.map((m, n) => /* @__PURE__ */ react_default.createElement("div", { key: n, className: "imaglr-post-slide" }, m.kind === "video" ? /* @__PURE__ */ react_default.createElement(VideoMedia, { media: m, postUrl }) : /* @__PURE__ */ react_default.createElement(PictureMedia, { media: m, postUrl })))
     ), /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-post-counter badge badge-dark" }, index + 1, " / ", media.length));
   }
   function Avatar({ url, name, large, small }) {
@@ -3119,7 +3130,7 @@
     const inLibrary = savedPath(refs);
     const saving = !!state && SAVING.includes(state.status);
     const longCaption = post.summary.length > 160 || post.summary.split("\n").length > 3;
-    return /* @__PURE__ */ react_default.createElement("article", { className: "card imaglr-post" }, /* @__PURE__ */ react_default.createElement("header", { className: "imaglr-post-head" }, /* @__PURE__ */ react_default.createElement(Avatar, { url: post.creator.avatar, name: post.creator.name }), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-who" }, /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "btn btn-link imaglr-post-name", onClick: () => onCreator(post.creator.name) }, post.creator.name || "someone"), post.original ? /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted" }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faRetweet }), " ", /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "btn btn-link imaglr-post-original", onClick: () => onCreator(post.original.creator.name) }, post.original.creator.name || "the original")) : null), /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted imaglr-post-time" }, relativeTime(post.created_at)), post.url ? /* @__PURE__ */ react_default.createElement("a", { className: "btn btn-link imaglr-post-open", href: post.url, target: "_blank", rel: "noopener noreferrer", title: "Open on imaglr" }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faExternalLinkAlt })) : null), /* @__PURE__ */ react_default.createElement(Media, { media: post.media }), /* @__PURE__ */ react_default.createElement("div", { className: "card-body imaglr-post-body" }, post.summary ? /* @__PURE__ */ react_default.createElement("p", { className: `imaglr-post-caption${expanded || !longCaption ? "" : " imaglr-post-caption-short"}` }, post.summary) : null, longCaption && !expanded ? /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "btn btn-link p-0 small", onClick: () => setExpanded(true) }, "more") : null, post.tags.length ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-tags" }, post.tags.map((t) => /* @__PURE__ */ react_default.createElement("button", { key: t, type: "button", className: "tag-item badge badge-secondary", onClick: () => onTag(t) }, "#", t))) : null, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-actions" }, /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted imaglr-post-notes" }, /* @__PURE__ */ react_default.createElement(LikeButton, { post, onLike }), /* @__PURE__ */ react_default.createElement("span", { className: "ml-2" }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faRetweet }), " ", shortCount(post.notes.reposts))), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => onReblog(post) }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faRetweet }), " Reblog"), post.media.length === 0 ? null : inLibrary ? /* @__PURE__ */ react_default.createElement(Link, { className: "btn btn-secondary imaglr-post-saved", to: `/${inLibrary}` }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faCheck }), " In your library") : saving ? /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", disabled: true }, /* @__PURE__ */ react_default.createElement("span", { className: "spinner-border spinner-border-sm" }), " ", state.status === "scanning" ? "Adding to Stash\u2026" : `Saving\u2026 ${Math.round(state.progress * 100)}%`) : /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => onSave(post) }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faDownload }), " ", state?.status === "failed" ? "Try again" : "Save")), state?.status === "failed" && state.error ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning mt-2" }, state.error) : null));
+    return /* @__PURE__ */ react_default.createElement("article", { className: "card imaglr-post" }, /* @__PURE__ */ react_default.createElement("header", { className: "imaglr-post-head" }, /* @__PURE__ */ react_default.createElement(Avatar, { url: post.creator.avatar, name: post.creator.name }), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-who" }, /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "btn btn-link imaglr-post-name", onClick: () => onCreator(post.creator.name) }, post.creator.name || "someone"), post.original ? /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted" }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faRetweet }), " ", /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "btn btn-link imaglr-post-original", onClick: () => onCreator(post.original.creator.name) }, post.original.creator.name || "the original")) : null), /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted imaglr-post-time" }, relativeTime(post.created_at)), post.url ? /* @__PURE__ */ react_default.createElement("a", { className: "btn btn-link imaglr-post-open", href: post.url, target: "_blank", rel: "noopener noreferrer", title: "Open on imaglr" }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faExternalLinkAlt })) : null), /* @__PURE__ */ react_default.createElement(Media, { media: post.media, postUrl: post.url }), /* @__PURE__ */ react_default.createElement("div", { className: "card-body imaglr-post-body" }, post.summary ? /* @__PURE__ */ react_default.createElement("p", { className: `imaglr-post-caption${expanded || !longCaption ? "" : " imaglr-post-caption-short"}` }, post.summary) : null, longCaption && !expanded ? /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "btn btn-link p-0 small", onClick: () => setExpanded(true) }, "more") : null, post.tags.length ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-tags" }, post.tags.map((t) => /* @__PURE__ */ react_default.createElement("button", { key: t, type: "button", className: "tag-item badge badge-secondary", onClick: () => onTag(t) }, "#", t))) : null, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-actions" }, /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted imaglr-post-notes" }, /* @__PURE__ */ react_default.createElement(LikeButton, { post, onLike }), /* @__PURE__ */ react_default.createElement("span", { className: "ml-2" }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faRetweet }), " ", shortCount(post.notes.reposts))), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => onReblog(post) }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faRetweet }), " Reblog"), post.media.length === 0 ? null : inLibrary ? /* @__PURE__ */ react_default.createElement(Link, { className: "btn btn-secondary imaglr-post-saved", to: `/${inLibrary}` }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faCheck }), " In your library") : saving ? /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", disabled: true }, /* @__PURE__ */ react_default.createElement("span", { className: "spinner-border spinner-border-sm" }), " ", state.status === "scanning" ? "Adding to Stash\u2026" : `Saving\u2026 ${Math.round(state.progress * 100)}%`) : /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => onSave(post) }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faDownload }), " ", state?.status === "failed" ? "Try again" : "Save")), state?.status === "failed" && state.error ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning mt-2" }, state.error) : null));
   }
 
   // src/ui/discover/LikesSync.tsx
