@@ -388,6 +388,33 @@ def op_save_status(ctx: Context) -> dict[str, Any]:
     return {"saves": [_save_view(r) for r in rows]}
 
 
+def download_files(ctx: Context, post: dict[str, Any], folder: str, written: list[str], on_file=None) -> list[str]:
+    """Download a post's files into the save folder (a file already there is kept: saved before and removed from
+    Stash, it is still good). Files written now are added to `written`, so a failure can remove them."""
+    plan = saving.file_plan(folder, post)
+    for n, (media, path) in enumerate(plan):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if not os.path.exists(path):
+            fetch_media(media["url"], path, ctx.version, max_bytes=saving.MAX_BYTES[media["kind"]], extra_host=_extra_host())
+            written.append(path)
+        if on_file:
+            on_file((n + 1) / len(plan))
+    return [p for _, p in plan]
+
+
+def failure_message(post_id: str, e: Exception) -> str:
+    """What a failed download says on the post."""
+    if isinstance(e, (SaveFailed, MediaRefused)):
+        return str(e)
+    if isinstance(e, ImaglrError):
+        return _imaglr_message(e)
+    log.warning(f"saving post {post_id} failed: {e}")
+    if isinstance(e, OSError):
+        return (f"Stash couldn't write to the save folder ({e.strerror or e}). Choose another in the plugin's Settings, "
+                "then save again.")
+    return f"Stash refused: {e}"
+
+
 def task_save(ctx: Context) -> None:
     """Download a post's files into the save folder, then queue a scan of them and the task that credits them."""
     post_id = ctx.arg("post_id")
@@ -399,35 +426,19 @@ def task_save(ctx: Context) -> None:
         folder = _settings(ctx).save_folder
         if not folder:
             raise SaveFailed("Choose where saved posts go first.")
-        post = json.loads(row["post"])
-        plan = saving.file_plan(folder, post)
         _save_update(ctx, post_id, status="downloading", progress=0)
-        for n, (media, path) in enumerate(plan):
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            if not os.path.exists(path):  # saved before and removed from Stash: the file is still good
-                fetch_media(media["url"], path, ctx.version, max_bytes=saving.MAX_BYTES[media["kind"]],
-                            extra_host=_extra_host())
-                written.append(path)
-            fraction = (n + 1) / len(plan) * 0.8
-            _save_update(ctx, post_id, progress=fraction)
-            log.progress(fraction)
-        paths = [p for _, p in plan]
+
+        def progress(fraction: float) -> None:
+            _save_update(ctx, post_id, progress=fraction * 0.8)
+            log.progress(fraction * 0.8)
+        paths = download_files(ctx, json.loads(row["post"]), folder, written, progress)
         _, options = library.libraries(ctx.stash)
         library.scan(ctx.stash, paths, options)
         job = ctx.stash.gql(RUN_TASK, {"id": PLUGIN_ID, "description": "imaglr: crediting a saved post",
                                        "args": {"mode": "task_save_apply", "post_id": post_id}})["runPluginTask"]
         _save_update(ctx, post_id, status="scanning", progress=0.85, files=json.dumps(paths), stash_job_id=str(job))
-    except (SaveFailed, MediaRefused) as e:
-        _fail(ctx, post_id, str(e), written)
-    except ImaglrError as e:
-        _fail(ctx, post_id, _imaglr_message(e), written)
-    except OSError as e:
-        log.warning(f"saving post {post_id} failed: {e}")
-        _fail(ctx, post_id, f"Stash couldn't write to the save folder ({e.strerror or e}). Choose another in the "
-                            "plugin's Settings, then save again.", written)
-    except StashError as e:
-        log.warning(f"saving post {post_id} failed: {e}")
-        _fail(ctx, post_id, f"Stash refused: {e}", written)
+    except (SaveFailed, MediaRefused, ImaglrError, OSError, StashError) as e:
+        _fail(ctx, post_id, failure_message(post_id, e), written)
     return None
 
 
@@ -440,10 +451,9 @@ def _fail(ctx: Context, post_id: str, message: str, written: list[str]) -> None:
     _save_update(ctx, post_id, status="failed", error=message)
 
 
-def task_save_apply(ctx: Context) -> None:
-    """After the scan: find what Stash made of each saved file and write the credit, the matched tags,
-    performers and studio onto it; a post with several files also becomes a gallery."""
-    post_id = ctx.arg("post_id")
+def apply_one(ctx: Context, post_id: str) -> str | None:
+    """After the scan: find what Stash made of each of a post's saved files and write the credit, its tags,
+    performers and studio onto it; a post with several files also becomes a gallery. Returns the save's status."""
     row = _save_row(ctx, post_id)
     if row is None or row["status"] != "scanning":
         return None
@@ -480,12 +490,20 @@ def task_save_apply(ctx: Context) -> None:
         if missing:
             error = (f"Stash didn't add {len(missing)} of the files. Check the save folder is in a library that "
                      "takes pictures and videos.")
-        _save_update(ctx, post_id, status="failed" if missing else "done", progress=1, refs=json.dumps(refs), error=error)
+        status = "failed" if missing else "done"
+        _save_update(ctx, post_id, status=status, progress=1, refs=json.dumps(refs), error=error)
+        return status
     except SaveFailed as e:
         _save_update(ctx, post_id, status="failed", error=str(e))
     except StashError as e:
         log.warning(f"crediting saved post {post_id} failed: {e}")
         _save_update(ctx, post_id, status="failed", error=f"Stash refused the credit: {e}")
+    return "failed"
+
+
+def task_save_apply(ctx: Context) -> None:
+    """The credit step of a single save (see apply_one)."""
+    apply_one(ctx, ctx.arg("post_id"))
     return None
 
 

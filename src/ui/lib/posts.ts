@@ -171,3 +171,33 @@ export function imaglrCredit(urls: string[] | null | undefined): { postUrl: stri
   const profile = list.map((u) => ({ u, m: u.match(/^https?:\/\/(?:www\.)?imaglr\.[a-z.]+\/profile\/([^/?#]+)/i) })).find((x) => x.m);
   return { postUrl: post.u, postId: post.m![1], creatorUrl: profile?.u ?? null, creator: profile ? decodeURIComponent(profile.m![1]) : null };
 }
+
+export interface SyncState {
+  running?: boolean;
+  phase?: "reading" | "crediting" | "done";
+  everything?: boolean;
+  seen?: number; // likes read
+  new?: number; // downloaded this run
+  known?: number; // already in the library
+  skipped?: number; // nothing to save (text posts)
+  failed?: number;
+  saved?: number; // credited in Stash
+  error?: string | null;
+  note?: string | null;
+  finished_at?: string | null;
+}
+
+/** What the sync is doing, or did, in a sentence. */
+export function syncSummary(s: SyncState): string {
+  const n = (v?: number) => v ?? 0;
+  if (s.running && s.phase === "crediting") return `Adding ${n(s.new)} posts to Stash…`;
+  if (s.running) {
+    return `Syncing your likes: ${n(s.seen)} read, ${n(s.new)} new${n(s.failed) ? `, ${n(s.failed)} failed` : ""}${s.note ? `. ${s.note}` : ""}`;
+  }
+  if (!s.finished_at) return "";
+  const parts = [`${n(s.saved)} saved`, `${n(s.known)} already in your library`];
+  if (n(s.failed)) parts.push(`${n(s.failed)} failed`);
+  const when = relativeTime(s.finished_at);
+  const phrase = when === "now" ? "just now" : /^\d+ (min|h|d)$/.test(when) ? `${when} ago` : `on ${when}`;
+  return `Last sync ${phrase}: ${parts.join(", ")}.${s.error ? ` ${s.error}` : ""}`;
+}

@@ -286,6 +286,21 @@ def browse_and_save(stash, plugin, blog):
     for tag in ("night", "city"):
         plugin.op("import_rule_delete", imaglr_tag=tag)
 
+    print("sync likes")
+    # the fake's likes: 7000 and 7002 (saved above), 7003 and 7010 (not yet)
+    plugin.op("sync_likes")
+    deadline = time.time() + 300
+    while time.time() < deadline:
+        sync = plugin.op("sync_status")["sync"]
+        if not sync.get("running"):
+            break
+        time.sleep(2)
+    check(sync.get("saved") == 2 and sync.get("known") == 2 and not sync.get("error"),
+          f"two new likes saved, two already there ({sync.get('saved')} saved, {sync.get('known')} known, {sync.get('error')})")
+    synced = stash.gql("""{ findImages(image_filter: {custom_fields: [{field: "imaglr_post_id", modifier: MATCHES_REGEX, value: ["^(7003|7010)$"]}]}) {
+        count } }""")["findImages"]["count"]
+    check(synced == 2, "both are in Stash, credited")
+
     print("a saved post is reblogged, never uploaded again")
     image_id = stash.gql("""{ findImages(image_filter: {custom_fields: [{field: "imaglr_post_id", modifier: EQUALS, value: ["7000"]}]}) {
         images { id } } }""")["findImages"]["images"][0]["id"]

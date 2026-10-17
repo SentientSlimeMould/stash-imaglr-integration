@@ -11,6 +11,7 @@ import { type ExploreOption, exploreOptions, type ImaglrPost, parseSearch, remem
 import { AutoplayContext, Avatar, PostCard } from "./PostCard.tsx";
 import { folderReady, SaveFolderDialog, type SaveSetup } from "./SaveFolderDialog.tsx";
 import { ReblogDialog } from "./ReblogDialog.tsx";
+import { LikesSync } from "./LikesSync.tsx";
 import { ReviewDialog } from "./ReviewDialog.tsx";
 import { PostFeed } from "./PostFeed.tsx";
 
@@ -154,6 +155,8 @@ export function Discover({ tab, params, blogs, go }: Props) {
   const [pendingSave, setPendingSave] = React.useState<ImaglrPost | null>(null);
   const [reblogging, setReblogging] = React.useState<ImaglrPost | null>(null);
   const [reviewing, setReviewing] = React.useState<ImaglrPost | null>(null);
+  const [afterFolder, setAfterFolder] = React.useState<(() => void) | null>(null); // the sync waiting for a save folder
+  const [likesKey, setLikesKey] = React.useState(0); // bumped after a sync, so the Likes list shows what's saved
   const [visited, setVisited] = React.useState<Set<DiscoverTab>>(new Set([tab]));
   const [blogId, setBlogId] = React.useState<number | null>(() => {
     const stored = storedBlog();
@@ -247,7 +250,11 @@ export function Discover({ tab, params, blogs, go }: Props) {
         <div hidden={tab !== "feed"}><PostFeed source="feed" {...handlers} /></div>
       ) : null}
       {visited.has("likes") ? (
-        <div hidden={tab !== "likes"}><PostFeed source="likes" {...handlers} /></div>
+        <div hidden={tab !== "likes"}>
+          <LikesSync blogId={blogId} ready={folderReady(setup)} onNeedFolder={(then) => setAfterFolder(() => then)}
+            onFinished={() => setLikesKey((k) => k + 1)} />
+          <PostFeed key={likesKey} source="likes" {...handlers} />
+        </div>
       ) : null}
       {tab === "explore" ? (
         <Explore params={params} recent={recent} following={following} onSearch={search}>
@@ -263,6 +270,14 @@ export function Discover({ tab, params, blogs, go }: Props) {
           const post = pendingSave;
           setPendingSave(null);
           if (folderReady(s)) startSave(post, s);
+        }} />
+      ) : null}
+      {afterFolder && setup ? (
+        <SaveFolderDialog setup={setup} onCancel={() => setAfterFolder(null)} onDone={(s) => {
+          setSetup(s);
+          const then = afterFolder;
+          setAfterFolder(null);
+          if (folderReady(s)) then();
         }} />
       ) : null}
       {reblogging ? <ReblogDialog postId={reblogging.id} creator={reblogging.creator.name} blogs={blogs} onClose={() => setReblogging(null)} /> : null}

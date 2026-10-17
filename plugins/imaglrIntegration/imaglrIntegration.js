@@ -82,6 +82,19 @@
     const profile = list.map((u) => ({ u, m: u.match(/^https?:\/\/(?:www\.)?imaglr\.[a-z.]+\/profile\/([^/?#]+)/i) })).find((x) => x.m);
     return { postUrl: post.u, postId: post.m[1], creatorUrl: profile?.u ?? null, creator: profile ? decodeURIComponent(profile.m[1]) : null };
   }
+  function syncSummary(s) {
+    const n = (v) => v ?? 0;
+    if (s.running && s.phase === "crediting") return `Adding ${n(s.new)} posts to Stash\u2026`;
+    if (s.running) {
+      return `Syncing your likes: ${n(s.seen)} read, ${n(s.new)} new${n(s.failed) ? `, ${n(s.failed)} failed` : ""}${s.note ? `. ${s.note}` : ""}`;
+    }
+    if (!s.finished_at) return "";
+    const parts2 = [`${n(s.saved)} saved`, `${n(s.known)} already in your library`];
+    if (n(s.failed)) parts2.push(`${n(s.failed)} failed`);
+    const when = relativeTime(s.finished_at);
+    const phrase = when === "now" ? "just now" : /^\d+ (min|h|d)$/.test(when) ? `${when} ago` : `on ${when}`;
+    return `Last sync ${phrase}: ${parts2.join(", ")}.${s.error ? ` ${s.error}` : ""}`;
+  }
 
   // src/ui/api.ts
   var PLUGIN_ID = "imaglrIntegration";
@@ -3113,6 +3126,65 @@
     return /* @__PURE__ */ react_default.createElement("article", { className: "card imaglr-post" }, /* @__PURE__ */ react_default.createElement("header", { className: "imaglr-post-head" }, /* @__PURE__ */ react_default.createElement(Avatar, { url: post.creator.avatar, name: post.creator.name }), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-who" }, /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "btn btn-link imaglr-post-name", onClick: () => onCreator(post.creator.name) }, post.creator.name || "someone"), post.original ? /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted" }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faRetweet }), " ", /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "btn btn-link imaglr-post-original", onClick: () => onCreator(post.original.creator.name) }, post.original.creator.name || "the original")) : null), /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted imaglr-post-time" }, relativeTime(post.created_at)), post.url ? /* @__PURE__ */ react_default.createElement("a", { className: "btn btn-link imaglr-post-open", href: post.url, target: "_blank", rel: "noopener noreferrer", title: "Open on imaglr" }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faExternalLinkAlt })) : null), /* @__PURE__ */ react_default.createElement(Media, { media: post.media }), /* @__PURE__ */ react_default.createElement("div", { className: "card-body imaglr-post-body" }, post.summary ? /* @__PURE__ */ react_default.createElement("p", { className: `imaglr-post-caption${expanded || !longCaption ? "" : " imaglr-post-caption-short"}` }, post.summary) : null, longCaption && !expanded ? /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "btn btn-link p-0 small", onClick: () => setExpanded(true) }, "more") : null, post.tags.length ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-tags" }, post.tags.map((t) => /* @__PURE__ */ react_default.createElement("button", { key: t, type: "button", className: "tag-item badge badge-secondary", onClick: () => onTag(t) }, "#", t))) : null, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-actions" }, /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted imaglr-post-notes" }, /* @__PURE__ */ react_default.createElement(LikeButton, { post, onLike }), /* @__PURE__ */ react_default.createElement("span", { className: "ml-2" }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faRetweet }), " ", shortCount(post.notes.reposts))), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => onReblog(post) }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faRetweet }), " Reblog"), post.media.length === 0 ? null : inLibrary ? /* @__PURE__ */ react_default.createElement(Link, { className: "btn btn-secondary imaglr-post-saved", to: `/${inLibrary}` }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faCheck }), " In your library") : saving ? /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", disabled: true }, /* @__PURE__ */ react_default.createElement("span", { className: "spinner-border spinner-border-sm" }), " ", state.status === "scanning" ? "Adding to Stash\u2026" : `Saving\u2026 ${Math.round(state.progress * 100)}%`) : /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => onSave(post) }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faDownload }), " ", state?.status === "failed" ? "Try again" : "Save")), state?.status === "failed" && state.error ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-warning mt-2" }, state.error) : null));
   }
 
+  // src/ui/discover/LikesSync.tsx
+  var POLL_MS = 3e3;
+  function LikesSync({ blogId, ready, onNeedFolder, onFinished }) {
+    const { Button, Form } = PluginApi.libraries.Bootstrap;
+    const { Icon } = PluginApi.components;
+    const Toast = PluginApi.hooks.useToast();
+    const [sync, setSync] = react_default.useState({});
+    const [asking, setAsking] = react_default.useState(false);
+    const [everything, setEverything] = react_default.useState(false);
+    const [busy, setBusy] = react_default.useState(false);
+    const wasRunning = react_default.useRef(false);
+    const refresh = react_default.useCallback(() => runOperation("sync_status").then((r) => setSync(r.sync), () => void 0), []);
+    react_default.useEffect(() => {
+      refresh();
+    }, [refresh]);
+    react_default.useEffect(() => {
+      if (!sync.running) {
+        if (wasRunning.current) {
+          wasRunning.current = false;
+          if (sync.error) Toast.error(syncSummary(sync));
+          else Toast.success(syncSummary(sync));
+          onFinished();
+        }
+        return;
+      }
+      wasRunning.current = true;
+      const timer = window.setTimeout(refresh, POLL_MS);
+      return () => window.clearTimeout(timer);
+    }, [sync, refresh]);
+    async function start2() {
+      setBusy(true);
+      try {
+        setSync((await runOperation("sync_likes", { everything, blog_id: blogId ?? void 0 })).sync);
+        setAsking(false);
+      } catch (e) {
+        Toast.error(e);
+      } finally {
+        setBusy(false);
+      }
+    }
+    async function stop() {
+      try {
+        setSync((await runOperation("sync_stop")).sync);
+      } catch (e) {
+        Toast.error(e);
+      }
+    }
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-sync" }, sync.running ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("span", { className: "small" }, /* @__PURE__ */ react_default.createElement("span", { className: "spinner-border spinner-border-sm" }), " ", syncSummary(sync)), sync.phase !== "crediting" ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", size: "sm", onClick: stop, disabled: !!sync.stop }, "Stop") : null) : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => ready ? setAsking(true) : onNeedFolder(() => setAsking(true)) }, /* @__PURE__ */ react_default.createElement(Icon, { icon: PluginApi.libraries.FontAwesomeSolid.faSync }), " Sync likes to your library"), /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted" }, syncSummary(sync))), asking ? /* @__PURE__ */ react_default.createElement(ConfirmDialog, { title: "Sync your likes", accept: "Sync", busy, onAccept: start2, onCancel: () => setAsking(false) }, /* @__PURE__ */ react_default.createElement("p", null, "Saves every post you've liked that isn't in your library yet, each with its credit, using your import rules and exact name matches (there's no review for each post). It runs as a Stash task; you can stop it here."), /* @__PURE__ */ react_default.createElement(
+      Form.Check,
+      {
+        id: "imaglr-sync-everything",
+        type: "checkbox",
+        checked: everything,
+        label: "Go through all my likes, not just the new ones (slower; finds older likes an earlier sync missed)",
+        onChange: (e) => setEverything(e.target.checked)
+      }
+    )) : null);
+  }
+
   // src/ui/discover/PostFeed.tsx
   function CreatorHeader({ profile }) {
     const { Icon } = PluginApi.components;
@@ -3193,7 +3265,7 @@
     { key: "likes", title: "Likes" },
     { key: "explore", title: "Explore" }
   ];
-  var POLL_MS = 2e3;
+  var POLL_MS2 = 2e3;
   var BLOG_KEY = "imaglr.browseBlog";
   var RECENT_KEY = "imaglr.recentSearches";
   function storedSearches() {
@@ -3225,7 +3297,7 @@
             return fresh;
           });
         }, () => setSaves((old) => new Map(old)));
-      }, POLL_MS);
+      }, POLL_MS2);
       return () => window.clearTimeout(timer);
     }, [saves, busy]);
     return { saves, put: (s) => setSaves((old) => new Map(old).set(s.post_id, s)) };
@@ -3309,6 +3381,8 @@
     const [pendingSave, setPendingSave] = react_default.useState(null);
     const [reblogging, setReblogging] = react_default.useState(null);
     const [reviewing, setReviewing] = react_default.useState(null);
+    const [afterFolder, setAfterFolder] = react_default.useState(null);
+    const [likesKey, setLikesKey] = react_default.useState(0);
     const [visited, setVisited] = react_default.useState(/* @__PURE__ */ new Set([tab]));
     const [blogId, setBlogId] = react_default.useState(() => {
       const stored = storedBlog();
@@ -3390,11 +3464,24 @@
         }
       },
       blogs.map((b) => /* @__PURE__ */ react_default.createElement("option", { key: b.id, value: b.id }, b.label))
-    )) : null, visited.has("feed") ? /* @__PURE__ */ react_default.createElement("div", { hidden: tab !== "feed" }, /* @__PURE__ */ react_default.createElement(PostFeed, { source: "feed", ...handlers })) : null, visited.has("likes") ? /* @__PURE__ */ react_default.createElement("div", { hidden: tab !== "likes" }, /* @__PURE__ */ react_default.createElement(PostFeed, { source: "likes", ...handlers })) : null, tab === "explore" ? /* @__PURE__ */ react_default.createElement(Explore, { params, recent, following, onSearch: search }, creator ? /* @__PURE__ */ react_default.createElement(PostFeed, { source: "creator", name: creator, ...handlers }) : tag ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("h4", { className: "imaglr-explore-title" }, "#", tag), /* @__PURE__ */ react_default.createElement(PostFeed, { source: "tag", tag, ...handlers })) : postId ? /* @__PURE__ */ react_default.createElement(SinglePost, { id: postId, ...handlers }) : /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Find posts by tag, see everything a creator has posted, or paste a link to a post to save it.")) : null, pendingSave && setup ? /* @__PURE__ */ react_default.createElement(SaveFolderDialog, { setup, onCancel: () => setPendingSave(null), onDone: (s) => {
+    )) : null, visited.has("feed") ? /* @__PURE__ */ react_default.createElement("div", { hidden: tab !== "feed" }, /* @__PURE__ */ react_default.createElement(PostFeed, { source: "feed", ...handlers })) : null, visited.has("likes") ? /* @__PURE__ */ react_default.createElement("div", { hidden: tab !== "likes" }, /* @__PURE__ */ react_default.createElement(
+      LikesSync,
+      {
+        blogId,
+        ready: folderReady(setup),
+        onNeedFolder: (then) => setAfterFolder(() => then),
+        onFinished: () => setLikesKey((k) => k + 1)
+      }
+    ), /* @__PURE__ */ react_default.createElement(PostFeed, { key: likesKey, source: "likes", ...handlers })) : null, tab === "explore" ? /* @__PURE__ */ react_default.createElement(Explore, { params, recent, following, onSearch: search }, creator ? /* @__PURE__ */ react_default.createElement(PostFeed, { source: "creator", name: creator, ...handlers }) : tag ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("h4", { className: "imaglr-explore-title" }, "#", tag), /* @__PURE__ */ react_default.createElement(PostFeed, { source: "tag", tag, ...handlers })) : postId ? /* @__PURE__ */ react_default.createElement(SinglePost, { id: postId, ...handlers }) : /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Find posts by tag, see everything a creator has posted, or paste a link to a post to save it.")) : null, pendingSave && setup ? /* @__PURE__ */ react_default.createElement(SaveFolderDialog, { setup, onCancel: () => setPendingSave(null), onDone: (s) => {
       setSetup(s);
       const post = pendingSave;
       setPendingSave(null);
       if (folderReady(s)) startSave(post, s);
+    } }) : null, afterFolder && setup ? /* @__PURE__ */ react_default.createElement(SaveFolderDialog, { setup, onCancel: () => setAfterFolder(null), onDone: (s) => {
+      setSetup(s);
+      const then = afterFolder;
+      setAfterFolder(null);
+      if (folderReady(s)) then();
     } }) : null, reblogging ? /* @__PURE__ */ react_default.createElement(ReblogDialog, { postId: reblogging.id, creator: reblogging.creator.name, blogs, onClose: () => setReblogging(null) }) : null, reviewing ? /* @__PURE__ */ react_default.createElement(
       ReviewDialog,
       {
@@ -3421,7 +3508,7 @@
   function isDiscoverTab(key) {
     return DISCOVER_TABS.some((t) => t.key === key);
   }
-  var POLL_MS2 = 2e3;
+  var POLL_MS3 = 2e3;
   var BUSY3 = ["exporting", "sending"];
   function useQueue(paused) {
     const [data, setData] = react_default.useState(null);
@@ -3450,7 +3537,7 @@
           setError(e.message);
           setTick((t) => t + 1);
         });
-      }, POLL_MS2);
+      }, POLL_MS3);
       return () => window.clearTimeout(timer);
     }, [tick, inFlight, paused, load2]);
     return { data, error, load: load2 };

@@ -746,3 +746,14 @@
 .imaglr-liked:hover {
   color: #ff7373;
 }
+.imaglr-sync {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  max-width: 640px;
+  margin: 0 auto 1rem;
+}
+.imaglr-sync .btn {
+  min-height: 44px;
+}

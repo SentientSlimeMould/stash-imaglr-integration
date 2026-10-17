@@ -12,6 +12,10 @@
   post with several files becomes a gallery; a reblog is saved as the original. The save folder must be one Stash
   can write to (checked when you choose it); change it any time in the plugin's Settings. **Reblog** shares a post to one of
   your blogs.
+- **Sync likes.** On the Likes tab, *Sync likes to your library* saves every post you've liked that isn't in your
+  library yet, with its credit, using your import rules and exact matches. It runs as a Stash task with progress
+  and Stop on the tab, keeps within imaglr's rate limits, and by default stops where an earlier sync got to
+  ("all my likes" goes through every page). The one bulk save: each like is a post you chose.
 - **Like** posts from Discover: the heart under each post likes it as your browsing blog, and tapping again takes
   the like back (needs the key's write permission).
 - Explore suggests as you type: your recent searches (kept in your browser) and the creators your blog follows.

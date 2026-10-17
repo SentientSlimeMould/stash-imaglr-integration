@@ -86,3 +86,16 @@ test("the imaglr credit is read from an item's URLs", async () => {
   assert.equal(imaglrCredit(undefined), null);
   assert.equal(imaglrCredit(["https://imaglr.com/post/5"])?.creator, null);
 });
+
+test("the likes sync says what it's doing and what it did", async () => {
+  const { syncSummary } = await import("../../src/ui/lib/posts.ts");
+  assert.equal(syncSummary({ running: true, phase: "reading", seen: 120, new: 14, failed: 0 }), "Syncing your likes: 120 read, 14 new");
+  assert.equal(syncSummary({ running: true, phase: "reading", seen: 50, new: 2, failed: 1, note: "imaglr asked to slow down: waiting 30 s" }),
+    "Syncing your likes: 50 read, 2 new, 1 failed. imaglr asked to slow down: waiting 30 s");
+  assert.equal(syncSummary({ running: true, phase: "crediting", new: 14 }), "Adding 14 posts to Stash…");
+  assert.equal(syncSummary({}), "");
+  assert.match(syncSummary({ finished_at: new Date().toISOString(), saved: 12, known: 30, failed: 2 }),
+    /^Last sync just now: 12 saved, 30 already in your library, 2 failed\.$/);
+  assert.match(syncSummary({ finished_at: new Date(Date.now() - 2 * 3600e3).toISOString(), saved: 1 }), /^Last sync 2 h ago: /);
+  assert.match(syncSummary({ finished_at: "2020-10-03T12:00:00Z", saved: 1 }), /^Last sync on 3 Oct 2020: /);
+});
