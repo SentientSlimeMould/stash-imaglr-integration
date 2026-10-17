@@ -86,7 +86,7 @@ def op_sync_status(ctx: Context) -> dict[str, Any]:
 
 def op_sync_likes(ctx: Context) -> dict[str, Any]:
     """Start a sync as a Stash task. `everything`: go through all likes, not just the new ones."""
-    config = browse_ops._require_enabled(ctx)
+    config = browse_ops._settings(ctx)
     if not config.save_folder:
         raise UserError("Choose where saved posts go first.")
     libs, _ = library.libraries(ctx.stash)

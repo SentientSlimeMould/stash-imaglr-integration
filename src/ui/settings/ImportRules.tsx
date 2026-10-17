@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Import rules: what an imaglr tag becomes in Stash when you save a post, as remembered from the save review.
-// Shown once browsing is switched on. Rules are made in the review; here you see and remove them.
+// Rules are made in the save review; here you see and remove them.
 import React from "react";
 import { runOperation } from "../api.ts";
 import { ConfirmDialog } from "../ConfirmDialog.tsx";
@@ -15,14 +15,10 @@ export function ImportRules() {
   const { Button } = PluginApi.libraries.Bootstrap;
   const Toast = PluginApi.hooks.useToast();
   const [rules, setRules] = React.useState<Rule[] | null>(null);
-  const [enabled, setEnabled] = React.useState(false);
   const [removing, setRemoving] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    runOperation<{ rules: Rule[]; enabled: boolean }>("import_rule_list").then((r) => {
-      setRules(r.rules);
-      setEnabled(r.enabled);
-    }, () => undefined);
+    runOperation<{ rules: Rule[] }>("import_rule_list").then((r) => setRules(r.rules), () => undefined);
   }, []);
 
   async function remove(tag: string) {
@@ -34,7 +30,7 @@ export function ImportRules() {
     setRemoving(null);
   }
 
-  if (!enabled && !rules?.length) return null;
+  if (rules === null) return null;
   return (
     <div className="imaglr-settings-section">
       <h5>Import rules</h5>

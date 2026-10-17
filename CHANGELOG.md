@@ -2,8 +2,7 @@
 
 ## Unreleased
 
-- **Discover (preview, off until switched on).** With *Browse and save from imaglr* on in the plugin's settings,
-  the imaglr page has two sections: Share (Clips, Images, Sent, as before) and Discover: your imaglr feed, your
+- **Discover.** The imaglr page has two sections: Share (Clips, Images, Sent, as before) and Discover: your imaglr feed, your
   likes, and Explore by tag, by creator or from a post's link, as one scrolling column. Videos play when tapped,
   as on imaglr's website, or as you reach them with *Autoplay videos while browsing* on. **Save** puts a post into a folder of your choice inside a Stash library. Stash adds it like any file and
   the plugin credits it there: the post's and creator's links, a credit line, the post date and two custom fields

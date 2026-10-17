@@ -7,7 +7,7 @@
     python3 dev/seed.py 9931 auth off  remove the login again
     python3 dev/seed.py 9931 status    show version, setup state and whether login is on
     python3 dev/seed.py 9933 demo      the screenshot instance: setup + scan + friendly metadata (dev/demo_media.py first)
-    python3 dev/seed.py 9931 saving    add the writable /saved library and switch on browsing and saving from imaglr
+    python3 dev/seed.py 9931 saving    add the writable /saved library for posts saved from imaglr
 """
 
 import http.cookiejar
@@ -261,8 +261,8 @@ def auth(stash, on):
 
 
 def saving(stash):
-    """Browsing and saving from imaglr: a second, writable library at /saved (a volume of its own) and the
-    plugin's preview switch on. The save folder itself is left for the plugin's first save (or e2e) to choose."""
+    """Saving from imaglr: a second, writable library at /saved (a volume of its own). The save folder itself is
+    left for the plugin's first save (or e2e) to choose."""
     stash.wait_until_up()
     current = stash.gql("{ configuration { general { stashes { path excludeVideo excludeImage } } } }")
     libraries = [lib for lib in current["configuration"]["general"]["stashes"] if lib["path"] != "/saved"]
@@ -271,10 +271,9 @@ def saving(stash):
               input={"stashes": libraries})
     plugin = stash.gql('{ configuration { plugins(include: ["imaglrIntegration"]) } }')["configuration"]["plugins"]
     values = {k: v for k, v in (plugin or {}).get("imaglrIntegration", {}).items()
-              if k not in ("saveFromImaglr", "saveFolder")}  # the preview's first key names
-    values["browseImaglr"] = True
+              if k not in ("saveFromImaglr", "saveFolder", "browseImaglr")}  # the preview's old switch
     stash.gql("mutation($input: Map!) { configurePlugin(plugin_id: \"imaglrIntegration\", input: $input) }", input=values)
-    print("  /saved added as a library; Browse and save from imaglr switched on")
+    print("  /saved added as a library")
 
 
 def status(stash):

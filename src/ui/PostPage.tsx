@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The "Post to imaglr" page: Clips · Images · Sent, plus blog settings. With browsing switched on (the
-// plugin's "Browse and save from imaglr" setting), the page is "imaglr" in two sections: Share (those three
-// tabs, unchanged) and Discover (Feed · Likes · Explore, see discover/Discover.tsx).
+// The imaglr page, in two sections: Share (Clips · Images · Sent, sending from Stash to imaglr) and Discover
+// (Feed · Likes · Explore, browsing imaglr and saving into Stash; see discover/Discover.tsx), plus Settings.
 import React from "react";
 import { runOperation, type Ping } from "./api.ts";
 import type { Blog, QueueResponse } from "./model.ts";
@@ -108,8 +107,7 @@ export function PostPage() {
   const params = new URLSearchParams(useLocation().search);
   const openId = params.get("open");
   const requested = params.get("tab");
-  const [browsing, setBrowsing] = React.useState(false); // the Discover section is switched on
-  const discoverTab: DiscoverTab | null = browsing && isDiscoverTab(requested) ? requested : null;
+  const discoverTab: DiscoverTab | null = isDiscoverTab(requested) ? requested : null;
   const tab: TabKey = isTab(requested) ? requested : "clips";
   // Discover stays loaded once opened, so going to Share and back keeps your place in the feed.
   const [lastDiscover, setLastDiscover] = React.useState<DiscoverTab | null>(null);
@@ -130,17 +128,14 @@ export function PostPage() {
     runOperation<{ blogs: Blog[] }>("blogs_list").then((r) => setBlogs(r.blogs), () => setBlogs([]));
   }, []);
   React.useEffect(loadBlogs, [loadBlogs]);
-  React.useEffect(() => {
-    runOperation<{ enabled: boolean }>("save_setup").then((s) => setBrowsing(s.enabled), () => setBrowsing(false));
-  }, []);
 
   React.useEffect(() => {
     const previous = document.title;
-    document.title = browsing ? "imaglr | Stash" : "Post to imaglr | Stash";
+    document.title = "imaglr | Stash";
     return () => {
       document.title = previous;
     };
-  }, [browsing]);
+  }, []);
 
   function setTab(key: TabKey | DiscoverTab) {
     history.replace({ search: `?tab=${key}` });
@@ -173,7 +168,7 @@ export function PostPage() {
   return (
     <div className="imaglr-page container-fluid">
       <div className="imaglr-page-header">
-        <h2 className="imaglr-page-title">{browsing ? "imaglr" : "Post to imaglr"}</h2>
+        <h2 className="imaglr-page-title">imaglr</h2>
         <Button variant="secondary" onClick={() => setShowBlogs(true)}>
           <Icon icon={PluginApi.libraries.FontAwesomeSolid.faCog} /> Settings
         </Button>
@@ -184,12 +179,10 @@ export function PostPage() {
           <Button variant="primary" size="sm" onClick={() => setShowBlogs(true)}>Open settings</Button>
         </Alert>
       ) : null}
-      {browsing ? (
-        <ButtonGroup className="imaglr-segmented imaglr-sections">
-          <Button variant={discoverTab ? "secondary" : "primary"} onClick={() => setTab(tab)}>Share</Button>
-          <Button variant={discoverTab ? "primary" : "secondary"} onClick={() => setTab(discoverTab ?? "feed")}>Discover</Button>
-        </ButtonGroup>
-      ) : null}
+      <ButtonGroup className="imaglr-segmented imaglr-sections">
+        <Button variant={discoverTab ? "secondary" : "primary"} onClick={() => setTab(tab)}>Share</Button>
+        <Button variant={discoverTab ? "primary" : "secondary"} onClick={() => setTab(discoverTab ?? "feed")}>Discover</Button>
+      </ButtonGroup>
       {lastDiscover || discoverTab ? (
         <div hidden={!discoverTab}>
           <Tab.Container activeKey={discoverTab ?? lastDiscover} onSelect={(key: DiscoverTab) => key && setTab(key)}>

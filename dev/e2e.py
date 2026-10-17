@@ -186,8 +186,7 @@ def op_error(plugin, mode, **args):
 def browse_and_save(stash, plugin, blog):
     print("browse imaglr and save posts")
     setup = plugin.op("save_setup")
-    check(setup["enabled"] and any(lib["path"] == "/saved" for lib in setup["libraries"]),
-          "browsing is on and /saved is a library (dev/seed.py <port> saving)")
+    check(any(lib["path"] == "/saved" for lib in setup["libraries"]), "/saved is a library (dev/seed.py <port> saving)")
     check(plugin.op("save_folder_set", folder="/saved/imaglr")["folder_ok"], "save folder chosen inside /saved")
     # A clean start: whatever an earlier run saved goes, files and all, so the downloads happen again.
     found = stash.gql("""query($f: [CustomFieldCriterionInput!]) {

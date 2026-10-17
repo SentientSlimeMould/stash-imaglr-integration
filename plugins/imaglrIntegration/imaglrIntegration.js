@@ -2622,7 +2622,7 @@
     react_default.useEffect(() => {
       runOperation("save_setup").then(setSetup, () => setSetup(null));
     }, []);
-    if (!setup?.enabled) return null;
+    if (!setup) return null;
     const problem = folderProblem(setup);
     return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-settings-section" }, /* @__PURE__ */ react_default.createElement("h5", null, "Saving from imaglr"), /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted mb-2" }, setup.folder ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, "Saved posts go to ", /* @__PURE__ */ react_default.createElement("code", null, setup.folder), ".") : "You'll choose where saved posts go the first time you save one."), problem ? /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-warning" }, problem) : null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setChanging(true) }, setup.folder ? "Change folder" : "Choose folder"), changing ? /* @__PURE__ */ react_default.createElement(SaveFolderDialog, { setup, onCancel: () => setChanging(false), onDone: (s) => {
       setSetup(s);
@@ -2777,13 +2777,9 @@
     const { Button } = PluginApi.libraries.Bootstrap;
     const Toast = PluginApi.hooks.useToast();
     const [rules, setRules] = react_default.useState(null);
-    const [enabled, setEnabled] = react_default.useState(false);
     const [removing, setRemoving] = react_default.useState(null);
     react_default.useEffect(() => {
-      runOperation("import_rule_list").then((r) => {
-        setRules(r.rules);
-        setEnabled(r.enabled);
-      }, () => void 0);
+      runOperation("import_rule_list").then((r) => setRules(r.rules), () => void 0);
     }, []);
     async function remove(tag) {
       try {
@@ -2793,7 +2789,7 @@
       }
       setRemoving(null);
     }
-    if (!enabled && !rules?.length) return null;
+    if (rules === null) return null;
     return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-settings-section" }, /* @__PURE__ */ react_default.createElement("h5", null, "Import rules"), /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted" }, "When you save a post from imaglr, these imaglr tags become these Stash tags, performers or studio. Tick Remember in the save review to add one."), rules?.length ? /* @__PURE__ */ react_default.createElement("ul", { className: "imaglr-rules" }, rules.map((r) => /* @__PURE__ */ react_default.createElement("li", { key: r.imaglr_tag }, /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement("strong", null, "#", r.imaglr_tag), " \u2192", " ", r.targets.length ? r.targets.map((t) => /* @__PURE__ */ react_default.createElement(TargetBadge, { key: `${t.kind}${t.id}`, target: t })) : /* @__PURE__ */ react_default.createElement("em", null, "always left out")), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-rule-actions" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger p-0 imaglr-touch", onClick: () => setRemoving(r.imaglr_tag) }, "Remove"))))) : /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted" }, "None yet."), removing ? /* @__PURE__ */ react_default.createElement(
       ConfirmDialog,
       {
@@ -3564,8 +3560,7 @@
     const params = new URLSearchParams(useLocation().search);
     const openId = params.get("open");
     const requested = params.get("tab");
-    const [browsing, setBrowsing] = react_default.useState(false);
-    const discoverTab = browsing && isDiscoverTab(requested) ? requested : null;
+    const discoverTab = isDiscoverTab(requested) ? requested : null;
     const tab = isTab(requested) ? requested : "clips";
     const [lastDiscover, setLastDiscover] = react_default.useState(null);
     react_default.useEffect(() => {
@@ -3585,15 +3580,12 @@
     }, []);
     react_default.useEffect(loadBlogs, [loadBlogs]);
     react_default.useEffect(() => {
-      runOperation("save_setup").then((s) => setBrowsing(s.enabled), () => setBrowsing(false));
-    }, []);
-    react_default.useEffect(() => {
       const previous = document.title;
-      document.title = browsing ? "imaglr | Stash" : "Post to imaglr | Stash";
+      document.title = "imaglr | Stash";
       return () => {
         document.title = previous;
       };
-    }, [browsing]);
+    }, []);
     function setTab(key) {
       history.replace({ search: `?tab=${key}` });
     }
@@ -3603,7 +3595,7 @@
       else history.replace(location);
     }
     const shareTabs = /* @__PURE__ */ react_default.createElement(Tab.Container, { activeKey: tab, onSelect: (key) => key && setTab(key) }, /* @__PURE__ */ react_default.createElement(Nav, { variant: "tabs", className: "imaglr-tabs" }, TABS.map(({ key, title }) => /* @__PURE__ */ react_default.createElement(Nav.Item, { key }, /* @__PURE__ */ react_default.createElement(Nav.Link, { eventKey: key }, /* @__PURE__ */ react_default.createElement(TabTitle, { title, count: counts?.[key] }))))), /* @__PURE__ */ react_default.createElement(Tab.Content, { className: "imaglr-tab-content", key: reloadKey }, /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "clips" }, tab === "clips" ? /* @__PURE__ */ react_default.createElement(QueueTab, { tab: "clips", openId, ...queue }) : null), /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "images" }, tab === "images" ? /* @__PURE__ */ react_default.createElement(QueueTab, { tab: "images", openId, ...queue }) : null), /* @__PURE__ */ react_default.createElement(Tab.Pane, { eventKey: "sent" }, tab === "sent" ? /* @__PURE__ */ react_default.createElement(SentTab, { openId }) : null)));
-    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-page container-fluid" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-page-header" }, /* @__PURE__ */ react_default.createElement("h2", { className: "imaglr-page-title" }, browsing ? "imaglr" : "Post to imaglr"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setShowBlogs(true) }, /* @__PURE__ */ react_default.createElement(Icon, { icon: PluginApi.libraries.FontAwesomeSolid.faCog }), " Settings")), blogs && blogs.length === 0 ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info", className: "imaglr-welcome" }, /* @__PURE__ */ react_default.createElement("strong", null, "Add your imaglr blog to start."), " You'll need an API key from imaglr (paid supporters only).", " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", size: "sm", onClick: () => setShowBlogs(true) }, "Open settings")) : null, browsing ? /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented imaglr-sections" }, /* @__PURE__ */ react_default.createElement(Button, { variant: discoverTab ? "secondary" : "primary", onClick: () => setTab(tab) }, "Share"), /* @__PURE__ */ react_default.createElement(Button, { variant: discoverTab ? "primary" : "secondary", onClick: () => setTab(discoverTab ?? "feed") }, "Discover")) : null, lastDiscover || discoverTab ? /* @__PURE__ */ react_default.createElement("div", { hidden: !discoverTab }, /* @__PURE__ */ react_default.createElement(Tab.Container, { activeKey: discoverTab ?? lastDiscover, onSelect: (key) => key && setTab(key) }, /* @__PURE__ */ react_default.createElement(Nav, { variant: "tabs", className: "imaglr-tabs" }, DISCOVER_TABS.map(({ key, title }) => /* @__PURE__ */ react_default.createElement(Nav.Item, { key }, /* @__PURE__ */ react_default.createElement(Nav.Link, { eventKey: key }, title)))), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tab-content" }, blogs ? /* @__PURE__ */ react_default.createElement(Discover, { tab: discoverTab ?? lastDiscover, params, blogs, go }) : null))) : null, discoverTab ? null : shareTabs, /* @__PURE__ */ react_default.createElement(BackendStatus, null), showBlogs ? /* @__PURE__ */ react_default.createElement(
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-page container-fluid" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-page-header" }, /* @__PURE__ */ react_default.createElement("h2", { className: "imaglr-page-title" }, "imaglr"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setShowBlogs(true) }, /* @__PURE__ */ react_default.createElement(Icon, { icon: PluginApi.libraries.FontAwesomeSolid.faCog }), " Settings")), blogs && blogs.length === 0 ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "info", className: "imaglr-welcome" }, /* @__PURE__ */ react_default.createElement("strong", null, "Add your imaglr blog to start."), " You'll need an API key from imaglr (paid supporters only).", " ", /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", size: "sm", onClick: () => setShowBlogs(true) }, "Open settings")) : null, /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "imaglr-segmented imaglr-sections" }, /* @__PURE__ */ react_default.createElement(Button, { variant: discoverTab ? "secondary" : "primary", onClick: () => setTab(tab) }, "Share"), /* @__PURE__ */ react_default.createElement(Button, { variant: discoverTab ? "primary" : "secondary", onClick: () => setTab(discoverTab ?? "feed") }, "Discover")), lastDiscover || discoverTab ? /* @__PURE__ */ react_default.createElement("div", { hidden: !discoverTab }, /* @__PURE__ */ react_default.createElement(Tab.Container, { activeKey: discoverTab ?? lastDiscover, onSelect: (key) => key && setTab(key) }, /* @__PURE__ */ react_default.createElement(Nav, { variant: "tabs", className: "imaglr-tabs" }, DISCOVER_TABS.map(({ key, title }) => /* @__PURE__ */ react_default.createElement(Nav.Item, { key }, /* @__PURE__ */ react_default.createElement(Nav.Link, { eventKey: key }, title)))), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tab-content" }, blogs ? /* @__PURE__ */ react_default.createElement(Discover, { tab: discoverTab ?? lastDiscover, params, blogs, go }) : null))) : null, discoverTab ? null : shareTabs, /* @__PURE__ */ react_default.createElement(BackendStatus, null), showBlogs ? /* @__PURE__ */ react_default.createElement(
       Settings,
       {
         onClose: (changed) => {

@@ -27,7 +27,6 @@ class Settings:
     gif_target_mb: float = 20.0  # the GIF export aims under this; imaglr's hard limit is 40 MB
     clips_hevc: bool = False  # new clips start as H.265 instead of H.264
     clip_max_edge: int | None = None  # new clips' picture size as a long edge (1280 = 720p, 854 = 480p); None = as the source
-    save_enabled: bool = False  # browsing imaglr and saving posts into Stash (in preview: off until switched on)
     save_folder: str = ""  # where saved posts go: a folder inside one of Stash's libraries
     browse_autoplay: bool = False  # videos play as they scroll into view; off: tap to play, as on imaglr's website
     quick_save: bool = False  # Save skips the tag review and applies rules and exact matches straight away
@@ -35,7 +34,6 @@ class Settings:
 
 # Stash setting name -> (field, converter). Keep in step with `settings:` in imaglrIntegration.yml.
 _FIELDS = {
-    "browseImaglr": ("save_enabled", bool),
     "browseImaglrAutoplay": ("browse_autoplay", bool),
     "browseImaglrQuickSave": ("quick_save", bool),
     "browseImaglrSaveFolder": ("save_folder", str),

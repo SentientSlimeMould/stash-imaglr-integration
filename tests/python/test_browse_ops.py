@@ -86,7 +86,7 @@ class Harness(unittest.TestCase):
         self.db = Database(":memory:")
         self.addCleanup(self.db.close)
         self.blog = blogs.add_blog(self.db, "pbk_test_key_123")
-        self.stash = FakeStash({"browseImaglr": True, "browseImaglrSaveFolder": self.folder})
+        self.stash = FakeStash({"browseImaglrSaveFolder": self.folder})
         self.client = FakeClient()
         self.refs = {}
         self.credited = []
@@ -112,11 +112,6 @@ class Harness(unittest.TestCase):
 
 
 class BrowseTest(Harness):
-    def test_off_until_switched_on(self):
-        self.stash.settings = {}
-        with self.assertRaises(UserError):
-            self.run_op("browse", source="feed")
-
     def test_a_page_says_what_is_saved_and_what_is_saving(self):
         self.refs = {"7000": [{"kind": "image", "id": "14"}]}
         now = "2026-10-17T10:00:00+00:00"
@@ -158,10 +153,10 @@ class BrowseTest(Harness):
 
 class SaveTest(Harness):
     def test_needs_a_folder_inside_a_library(self):
-        self.stash.settings = {"browseImaglr": True}
+        self.stash.settings = {}
         with self.assertRaises(UserError):
             self.run_op("save_post", post_id="7000")
-        self.stash.settings = {"browseImaglr": True, "browseImaglrSaveFolder": os.path.join(self.tmp.name, "elsewhere")}
+        self.stash.settings = {"browseImaglrSaveFolder": os.path.join(self.tmp.name, "elsewhere")}
         with self.assertRaises(UserError):
             self.run_op("save_post", post_id="7000")
         self.assertEqual(self.stash.tasks, [])
@@ -282,7 +277,7 @@ class FolderTest(Harness):
             with self.assertRaises(UserError):
                 self.run_op("save_folder_set", folder=self.folder)
         setup = self.run_op("save_setup")
-        self.assertEqual((setup["enabled"], setup["folder_ok"], setup["folder_writable"]), (True, True, True))
+        self.assertEqual((setup["folder_ok"], setup["folder_writable"]), (True, True))
         self.assertTrue(setup["libraries"][0]["writable"])
 
     def test_a_folder_stash_cant_write_to_is_refused(self):

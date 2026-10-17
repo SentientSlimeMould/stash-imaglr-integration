@@ -62,10 +62,10 @@ class SyncTest(Harness):
         return json.loads(self.db.kv_get(likes_sync.STATE_KEY) or "{}")
 
     def test_needs_a_folder_and_starts_a_task(self):
-        self.stash.settings = {"browseImaglr": True}
+        self.stash.settings = {}
         with self.assertRaises(UserError):
             self.run_op("sync_likes")
-        self.stash.settings = {"browseImaglr": True, "browseImaglrSaveFolder": self.folder}
+        self.stash.settings = {"browseImaglrSaveFolder": self.folder}
         out = self.run_op("sync_likes", everything=True)["sync"]
         self.assertEqual((out["running"], out["everything"], out["phase"]), (True, True, "reading"))
         self.assertEqual(self.stash.tasks[-1], {"mode": "task_sync_likes"})

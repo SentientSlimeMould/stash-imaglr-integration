@@ -24,7 +24,7 @@ docker compose run --rm make-media             # synthetic test media (≈25 MB)
 docker compose up -d
 python3 seed.py 9931 setup                     # first-run setup, scan, generate, sample metadata
 python3 seed.py 9932 setup
-python3 seed.py 9931 saving                    # a writable /saved library for posts saved from imaglr, and browsing on
+python3 seed.py 9931 saving                    # a writable /saved library for posts saved from imaglr
 python3 seed.py 9932 saving
 ```
 

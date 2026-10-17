@@ -48,13 +48,6 @@ def _settings(ctx: Context) -> Settings:
     return load_settings(ctx.stash)
 
 
-def _require_enabled(ctx: Context) -> Settings:
-    config = _settings(ctx)
-    if not config.save_enabled:
-        raise UserError("Browsing imaglr is switched off. Turn it on in Settings → Plugins → Imaglr Integration.")
-    return config
-
-
 def _blog(ctx: Context) -> dict[str, Any]:
     """The blog whose key reads imaglr: the one asked for, else the first that works."""
     if ctx.args.get("blog_id") is not None:
@@ -126,7 +119,6 @@ def _annotate(ctx: Context, posts: list[dict[str, Any]]) -> None:
 def op_browse(ctx: Context) -> dict[str, Any]:
     """One page of posts: the feed, the user's likes, a tag or a creator. `next` is the link a previous page
     returned. A creator's first page also carries their profile."""
-    _require_enabled(ctx)
     blog = _blog(ctx)
     source = ctx.arg("source")
     if source not in SOURCES:
@@ -163,7 +155,6 @@ def op_browse(ctx: Context) -> dict[str, Any]:
 
 def op_post_find(ctx: Context) -> dict[str, Any]:
     """One post, from its imaglr link or id (Save a link)."""
-    _require_enabled(ctx)
     blog = _blog(ctx)
     text = (ctx.arg("link") or "").strip()
     post_id = text.rstrip("/").rsplit("/", 1)[-1].split("?", 1)[0]
@@ -199,7 +190,6 @@ def _prune_previews(folder: str, keep: str) -> None:
 def op_media_preview(ctx: Context) -> dict[str, Any]:
     """A post's video, fetched once into the plugin's folder so Stash's page may play it; returns its address
     (relative to Stash's base). Pictures don't need this: the page shows them straight from imaglr."""
-    _require_enabled(ctx)
     url = ctx.arg("url")
     if not media_url_ok(url, _extra_host()):
         raise UserError("That file isn't on imaglr.")
@@ -222,11 +212,11 @@ def op_media_preview(ctx: Context) -> dict[str, Any]:
 
 # ---- the save folder -----------------------------------------------------------------------------------
 def op_save_setup(ctx: Context) -> dict[str, Any]:
-    """Whether browsing is on, where saves go, and the libraries a save folder may be in."""
+    """Discover's options, where saves go, and the libraries a save folder may be in."""
     config = _settings(ctx)
     libs, _ = library.libraries(ctx.stash)
     lib = saving.library_for(config.save_folder, libs) if config.save_folder else None
-    return {"enabled": config.save_enabled, "autoplay": config.browse_autoplay, "quick_save": config.quick_save,
+    return {"autoplay": config.browse_autoplay, "quick_save": config.quick_save,
             "folder": config.save_folder or None,
             "folder_ok": lib is not None, "folder_writable": bool(config.save_folder) and saving.writable(config.save_folder),
             "libraries": [{"path": l["path"], "videos": not l.get("excludeVideo"), "images": not l.get("excludeImage"),
@@ -310,7 +300,7 @@ def automatic_mapping(rows: list[dict[str, Any]]) -> dict[str, Any]:
 def op_save_review(ctx: Context) -> dict[str, Any]:
     """The save review: the post as it will be saved, and what each of its imaglr tags would become in Stash.
     Nothing is saved."""
-    config = _require_enabled(ctx)
+    config = _settings(ctx)
     blog = _blog(ctx)
     post = _post_to_save(ctx, blog)
     credited = saving.credit(post)["id"]
@@ -347,7 +337,7 @@ def _reviewed(ctx: Context) -> dict[str, Any] | None:
 def op_save_post(ctx: Context) -> dict[str, Any]:
     """Start saving one post (see _post_to_save), with the review's choices when there was one, by queueing the
     download as a Stash task. A post already in the library is not saved twice."""
-    config = _require_enabled(ctx)
+    config = _settings(ctx)
     if not config.save_folder:
         raise UserError("Choose where saved posts go first.")
     libs, _ = library.libraries(ctx.stash)
@@ -514,7 +504,6 @@ FOLLOWING_FRESH = timedelta(hours=1)
 def op_following(ctx: Context) -> dict[str, Any]:
     """The creators the browsing blog follows ({name, avatar}), for Explore's suggestions. Kept for an hour, so
     typing in Explore doesn't ask imaglr again."""
-    _require_enabled(ctx)
     blog = _blog(ctx)
     key = f"following:{blog['id']}"
     cached = json.loads(ctx.db.kv_get(key) or "null")
@@ -551,8 +540,7 @@ def op_import_rule_list(ctx: Context) -> dict[str, Any]:
     alive = {(t["kind"], t["id"]): t for t in library.existing(ctx.stash, [t for r in rules for t in r["targets"]])}
     return {"rules": [{"imaglr_tag": r["imaglr_tag"],
                        "targets": [alive[(t["kind"], t["id"])] for t in r["targets"] if (t["kind"], t["id"]) in alive]}
-                      for r in rules],
-            "enabled": _settings(ctx).save_enabled}
+                      for r in rules]}
 
 
 def op_import_rule_delete(ctx: Context) -> dict[str, Any]:
@@ -596,7 +584,6 @@ def op_reblog(ctx: Context) -> dict[str, Any]:
 
 def op_like(ctx: Context) -> dict[str, Any]:
     """Like a post on imaglr as the browsing blog, or take the like back (imaglr toggles)."""
-    _require_enabled(ctx)
     blog = _blog(ctx)
     post_id = str(ctx.arg("post_id"))
     if not post_id.isdigit():
