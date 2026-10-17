@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The "Post to imaglr" page: Clips · Images · Sent, plus blog settings.
+// The "Post to imaglr" page: Clips · Images · Sent, plus blog settings. With browsing switched on (the
+// plugin's "Browse and save from imaglr" setting), the page is "imaglr" in two sections: Share (those three
+// tabs, unchanged) and Discover (Feed · Likes · Explore, see discover/Discover.tsx).
 import React from "react";
 import { runOperation, type Ping } from "./api.ts";
 import type { Blog, QueueResponse } from "./model.ts";
@@ -7,6 +9,7 @@ import type { Status } from "./lib/types.ts";
 import { QueueTab } from "./queue/QueueTab.tsx";
 import { SentTab } from "./sent/SentTab.tsx";
 import { Settings } from "./settings/Settings.tsx";
+import { Discover, DISCOVER_TABS, type DiscoverTab } from "./discover/Discover.tsx";
 
 const TABS = [
   { key: "clips", title: "Clips" },
@@ -18,6 +21,10 @@ type TabKey = (typeof TABS)[number]["key"];
 
 function isTab(key: string | null): key is TabKey {
   return TABS.some((t) => t.key === key);
+}
+
+function isDiscoverTab(key: string | null): key is DiscoverTab {
+  return DISCOVER_TABS.some((t) => t.key === key);
 }
 
 const POLL_MS = 2000;
@@ -94,14 +101,21 @@ function BackendStatus() {
 }
 
 export function PostPage() {
-  const { Nav, Tab, Button, Alert } = PluginApi.libraries.Bootstrap;
+  const { Nav, Tab, Button, Alert, ButtonGroup } = PluginApi.libraries.Bootstrap;
   const { useHistory, useLocation } = PluginApi.libraries.ReactRouterDOM;
   const { Icon } = PluginApi.components;
   const history = useHistory();
   const params = new URLSearchParams(useLocation().search);
   const openId = params.get("open");
   const requested = params.get("tab");
+  const [browsing, setBrowsing] = React.useState(false); // the Discover section is switched on
+  const discoverTab: DiscoverTab | null = browsing && isDiscoverTab(requested) ? requested : null;
   const tab: TabKey = isTab(requested) ? requested : "clips";
+  // Discover stays loaded once opened, so going to Share and back keeps your place in the feed.
+  const [lastDiscover, setLastDiscover] = React.useState<DiscoverTab | null>(null);
+  React.useEffect(() => {
+    if (discoverTab) setLastDiscover(discoverTab);
+  }, [discoverTab]);
   const [blogs, setBlogs] = React.useState<Blog[] | null>(null);
   const [showBlogs, setShowBlogs] = React.useState(false);
   const [reloadKey, setReloadKey] = React.useState(0);
@@ -116,23 +130,50 @@ export function PostPage() {
     runOperation<{ blogs: Blog[] }>("blogs_list").then((r) => setBlogs(r.blogs), () => setBlogs([]));
   }, []);
   React.useEffect(loadBlogs, [loadBlogs]);
+  React.useEffect(() => {
+    runOperation<{ enabled: boolean }>("save_setup").then((s) => setBrowsing(s.enabled), () => setBrowsing(false));
+  }, []);
 
   React.useEffect(() => {
     const previous = document.title;
-    document.title = "Post to imaglr | Stash";
+    document.title = browsing ? "imaglr | Stash" : "Post to imaglr | Stash";
     return () => {
       document.title = previous;
     };
-  }, []);
+  }, [browsing]);
 
-  function setTab(key: TabKey) {
+  function setTab(key: TabKey | DiscoverTab) {
     history.replace({ search: `?tab=${key}` });
   }
+
+  /** Discover's own moves: exploring a tag or creator is a new history entry, so Back returns to the feed. */
+  function go(search: Record<string, string>, push = false) {
+    const location = { search: `?${new URLSearchParams(search).toString()}` };
+    if (push) history.push(location);
+    else history.replace(location);
+  }
+
+  const shareTabs = (
+    <Tab.Container activeKey={tab} onSelect={(key: TabKey) => key && setTab(key)}>
+      <Nav variant="tabs" className="imaglr-tabs">
+        {TABS.map(({ key, title }) => (
+          <Nav.Item key={key}>
+            <Nav.Link eventKey={key}><TabTitle title={title} count={counts?.[key]} /></Nav.Link>
+          </Nav.Item>
+        ))}
+      </Nav>
+      <Tab.Content className="imaglr-tab-content" key={reloadKey}>
+        <Tab.Pane eventKey="clips">{tab === "clips" ? <QueueTab tab="clips" openId={openId} {...queue} /> : null}</Tab.Pane>
+        <Tab.Pane eventKey="images">{tab === "images" ? <QueueTab tab="images" openId={openId} {...queue} /> : null}</Tab.Pane>
+        <Tab.Pane eventKey="sent">{tab === "sent" ? <SentTab openId={openId} /> : null}</Tab.Pane>
+      </Tab.Content>
+    </Tab.Container>
+  );
 
   return (
     <div className="imaglr-page container-fluid">
       <div className="imaglr-page-header">
-        <h2 className="imaglr-page-title">Post to imaglr</h2>
+        <h2 className="imaglr-page-title">{browsing ? "imaglr" : "Post to imaglr"}</h2>
         <Button variant="secondary" onClick={() => setShowBlogs(true)}>
           <Icon icon={PluginApi.libraries.FontAwesomeSolid.faCog} /> Settings
         </Button>
@@ -143,20 +184,27 @@ export function PostPage() {
           <Button variant="primary" size="sm" onClick={() => setShowBlogs(true)}>Open settings</Button>
         </Alert>
       ) : null}
-      <Tab.Container activeKey={tab} onSelect={(key: TabKey) => key && setTab(key)}>
-        <Nav variant="tabs" className="imaglr-tabs">
-          {TABS.map(({ key, title }) => (
-            <Nav.Item key={key}>
-              <Nav.Link eventKey={key}><TabTitle title={title} count={counts?.[key]} /></Nav.Link>
-            </Nav.Item>
-          ))}
-        </Nav>
-        <Tab.Content className="imaglr-tab-content" key={reloadKey}>
-          <Tab.Pane eventKey="clips">{tab === "clips" ? <QueueTab tab="clips" openId={openId} {...queue} /> : null}</Tab.Pane>
-          <Tab.Pane eventKey="images">{tab === "images" ? <QueueTab tab="images" openId={openId} {...queue} /> : null}</Tab.Pane>
-          <Tab.Pane eventKey="sent">{tab === "sent" ? <SentTab openId={openId} /> : null}</Tab.Pane>
-        </Tab.Content>
-      </Tab.Container>
+      {browsing ? (
+        <ButtonGroup className="imaglr-segmented imaglr-sections">
+          <Button variant={discoverTab ? "secondary" : "primary"} onClick={() => setTab(tab)}>Share</Button>
+          <Button variant={discoverTab ? "primary" : "secondary"} onClick={() => setTab(discoverTab ?? "feed")}>Discover</Button>
+        </ButtonGroup>
+      ) : null}
+      {lastDiscover || discoverTab ? (
+        <div hidden={!discoverTab}>
+          <Tab.Container activeKey={discoverTab ?? lastDiscover} onSelect={(key: DiscoverTab) => key && setTab(key)}>
+            <Nav variant="tabs" className="imaglr-tabs">
+              {DISCOVER_TABS.map(({ key, title }) => (
+                <Nav.Item key={key}><Nav.Link eventKey={key}>{title}</Nav.Link></Nav.Item>
+              ))}
+            </Nav>
+            <div className="imaglr-tab-content">
+              {blogs ? <Discover tab={(discoverTab ?? lastDiscover)!} params={params} blogs={blogs} go={go} /> : null}
+            </div>
+          </Tab.Container>
+        </div>
+      ) : null}
+      {discoverTab ? null : shareTabs}
       <BackendStatus />
       {showBlogs ? (
         <Settings

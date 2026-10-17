@@ -13,7 +13,7 @@ import platform
 import traceback
 from typing import Any
 
-from . import blog_ops, clip_ops, log, queue_ops, send_ops
+from . import blog_ops, browse_ops, clip_ops, log, queue_ops, send_ops
 from .settings import SettingsError
 from .context import Context, imaglr_base_override, UserError, plugin_version
 
@@ -46,7 +46,9 @@ OPERATIONS = {
     **queue_ops.OPERATIONS,
     **send_ops.OPERATIONS,
     **clip_ops.OPERATIONS,
+    **browse_ops.OPERATIONS,
     **send_ops.TASKS,
+    **browse_ops.TASKS,
 }
 
 

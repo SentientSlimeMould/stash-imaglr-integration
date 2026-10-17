@@ -271,6 +271,7 @@ def image_card(item: dict[str, Any], image: Image | None, first_seen: str | None
         "date": image.date if image else None,
         "first_seen": first_seen,
         "in_stash_queue": image is not None,
+        "saved_from": image.imaglr_post_id if image else None,  # an imaglr post: reblog it, never upload it again
     }
 
 
@@ -299,6 +300,7 @@ def clip_card(item: dict[str, Any], marker: Marker | None, first_seen: str | Non
         "created_at": (marker.created_at if marker else scene.created_at if scene else None) or item["created_at"],
         "date": scene.date if scene else None,
         "first_seen": first_seen,
+        "saved_from": scene.imaglr_post_id if scene else None,  # an imaglr post: reblog it, never upload it again
     }
 
 

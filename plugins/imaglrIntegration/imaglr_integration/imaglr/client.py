@@ -1,10 +1,15 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""imaglr API v2 client: create drafts, then optionally queue or publish them.
+"""imaglr API v2 client: create drafts, then optionally queue or publish them; read feeds and posts so the user
+can browse imaglr and save the posts they choose; reblog a post.
 
 The allowlist below is the complete set of endpoints this plugin may ever call (spec Amendment 6, extended
-2026-10-08 with imaglr's chunked uploads). tests/python/test_imaglr_allowlist.py fails if any other route
-appears in this module. Every call goes through `_request`, which refuses anything not on the list, and
-redirects are never followed.
+2026-10-08 with imaglr's chunked uploads and 2026-10-17 with reading and reblogging, which imaglr approved for
+browsing and saving chosen posts). tests/python/test_imaglr_allowlist.py fails if any other route appears in
+this module. Every API call goes through `_request`, which refuses anything not on the list, and redirects are
+never followed. imaglr's "next page" links are followed only after they are matched back to an allowed route.
+
+Media files (the pictures and videos of a post) come from imaglr's CDN through `fetch_media`, the one other
+gateway: https to imaglr's own hosts only, never with the API key, never following a redirect.
 
 Requests pass through an edge that refuses any request body over 100 MB (a bare HTML 413, measured). A draft
 whose files would exceed that is sent the way imaglr documents for large files: each file goes up in 50 MB
@@ -18,6 +23,7 @@ import json
 import math
 import mimetypes
 import os
+import re
 import secrets
 import urllib.error
 import urllib.parse
@@ -39,8 +45,21 @@ ALLOWED_ENDPOINTS: frozenset[tuple[str, str]] = frozenset(
         ("PUT", "/uploads/{id}/chunks/{index}"),
         ("POST", "/uploads/{id}/complete"),
         ("DELETE", "/uploads/{id}"),
+        # reading: browsing imaglr and saving the posts the user chooses
+        ("GET", "/user/feed"),
+        ("GET", "/user/likes"),
+        ("GET", "/tagged"),
+        ("GET", "/profiles/{name}"),
+        ("GET", "/profiles/{name}/posts"),
+        ("GET", "/posts/{id}"),
+        # reblogging a post to one of the user's blogs (instead of re-uploading a saved copy)
+        ("POST", "/posts/{id}/repost"),
     }
 )
+PAGE_SIZE = 20  # posts per page while browsing (imaglr allows 1-50)
+# Where a post's pictures and videos are served from: imaglr.com itself or its numbered CDN hosts, over https.
+MEDIA_HOST = re.compile(r"^(?:cdn\d{0,3}\.)?imaglr\.com$")
+MEDIA_TIMEOUT = 120.0
 
 DEFAULT_BASE_URL = "https://imaglr.com/api/v2"
 MAX_FILES_PER_DRAFT = 10  # imaglr: "up to 10 files per post"
@@ -77,6 +96,14 @@ class DraftResult:
     url: str | None
     tags: list[str]
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
+
+
+@dataclass
+class Page:
+    """One page of posts and imaglr's link to the next (None at the end). The link is opaque: pass it back
+    unchanged to read on."""
+    posts: list[dict[str, Any]]
+    next: str | None
 
 
 class UploadCancelled(Exception):
@@ -122,12 +149,15 @@ class ImaglrClient:
         data: Any = None,
         headers: dict[str, str] | None = None,
         timeout: float | None = None,
+        query: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         method = method.upper()
         if (method, route) not in ALLOWED_ENDPOINTS:
             raise DisallowedEndpoint(f"{method} {route} is not permitted")
         # Quote every path argument whole, so an id can never add path segments.
         path = route.format(**{k: urllib.parse.quote(v, safe="") for k, v in (route_args or {}).items()})
+        if query:
+            path += "?" + urllib.parse.urlencode(query)
         req = urllib.request.Request(
             self._base_url + path, data=data, method=method, headers={**self._headers, **(headers or {})}
         )
@@ -149,7 +179,77 @@ class ImaglrClient:
             raise err from e
         return _parse(status, resp_headers, body)
 
+    def _route_for(self, href: str) -> tuple[str, dict[str, str], dict[str, str]]:
+        """Match one of imaglr's "next page" links back to an allowed GET route: (route, its arguments, the
+        query). A link to anywhere else, or to another host, is refused."""
+        base = urllib.parse.urlsplit(self._base_url)
+        link = urllib.parse.urlsplit(href)
+        if (link.scheme, link.netloc) != (base.scheme, base.netloc) or not link.path.startswith(base.path + "/"):
+            raise DisallowedEndpoint("a next-page link that leaves imaglr's API is not followed")
+        rest = link.path[len(base.path):]
+        for method, route in ALLOWED_ENDPOINTS:
+            if method != "GET":
+                continue
+            pattern = "^" + re.sub(r"\\\{(\w+)\\\}", r"(?P<\1>[^/]+)", re.escape(route)) + "$"
+            match = re.match(pattern, rest)
+            if match:
+                args = {k: urllib.parse.unquote(v) for k, v in match.groupdict().items()}
+                return route, args, dict(urllib.parse.parse_qsl(link.query, keep_blank_values=True))
+        raise DisallowedEndpoint(f"GET {rest} is not permitted")
+
+    def _page(self, route: str, route_args: dict[str, str] | None, query: dict[str, str], next_link: str | None) -> Page:
+        """A page of posts from a list route, or the page `next_link` points at (which must be the same route)."""
+        if next_link:
+            linked, args, linked_query = self._route_for(next_link)
+            if linked != route or args != (route_args or {}):
+                raise DisallowedEndpoint("that next-page link belongs to another list")
+            query = linked_query
+        response = self._request("GET", route, route_args, query=query)
+        posts = [p for p in response.get("posts") or [] if isinstance(p, dict) and p.get("id") is not None]
+        links = response.get("_links") if isinstance(response.get("_links"), dict) else {}
+        nxt = links.get("next") if isinstance(links.get("next"), dict) else {}
+        href = nxt.get("href")
+        return Page(posts, href if isinstance(href, str) and href else None)
+
     # ---- the permitted operations ----------------------------------------------------------
+    def feed(self, next_link: str | None = None, limit: int = PAGE_SIZE) -> Page:
+        """The user's dashboard feed."""
+        return self._page("/user/feed", None, {"limit": str(limit)}, next_link)
+
+    def likes(self, next_link: str | None = None, limit: int = PAGE_SIZE) -> Page:
+        """Posts the user has liked, as imaglr lists them."""
+        return self._page("/user/likes", None, {"limit": str(limit)}, next_link)
+
+    def tagged(self, tag: str, next_link: str | None = None, limit: int = PAGE_SIZE) -> Page:
+        """Posts carrying a tag."""
+        return self._page("/tagged", None, {"tag": tag, "limit": str(limit)}, next_link)
+
+    def profile(self, name: str) -> dict[str, Any]:
+        """A creator's profile."""
+        response = self._request("GET", "/profiles/{name}", {"name": name})
+        return response.get("profile") if isinstance(response.get("profile"), dict) else response
+
+    def profile_posts(self, name: str, next_link: str | None = None, limit: int = PAGE_SIZE) -> Page:
+        """A creator's posts, newest first."""
+        return self._page("/profiles/{name}/posts", {"name": name}, {"limit": str(limit)}, next_link)
+
+    def post(self, post_id: str | int) -> dict[str, Any]:
+        """One post."""
+        response = self._request("GET", "/posts/{id}", {"id": _draft_id(post_id)})
+        post = response.get("post") if isinstance(response.get("post"), dict) else response
+        if not isinstance(post, dict) or post.get("id") is None:
+            raise ImaglrError("unexpected_response", detail="no post in response")
+        return post
+
+    def repost(self, post_id: str | int, body_html: str | None = None, tags: Sequence[str] = ()) -> dict[str, Any]:
+        """Reblog a post to this key's blog, straight away. Returns imaglr's response."""
+        fields = [("tags[]", str(t)) for t in tags]
+        if body_html:
+            fields.insert(0, ("body", body_html))
+        data = urllib.parse.urlencode(fields).encode("utf-8")
+        return self._request("POST", "/posts/{id}/repost", {"id": _draft_id(post_id)}, data=data,
+                             headers={"Content-Type": "application/x-www-form-urlencoded"})
+
     def user_info(self) -> dict[str, Any]:
         return self._request("GET", "/user/info")
 
@@ -265,6 +365,71 @@ class ImaglrClient:
     def queue_draft(self, draft_id: str | int) -> dict[str, Any]:
         """Move a draft into the publish queue. Returns imaglr's `response` object as sent."""
         return self._request("POST", "/drafts/{id}/queue", {"id": _draft_id(draft_id)})
+
+
+class MediaRefused(ValueError):
+    """A media address that isn't imaglr's own, or a file over the size it may be."""
+
+
+def media_url_ok(url: str, extra_host: str | None = None) -> bool:
+    """True for an https address on imaglr's own hosts; `extra_host` (scheme://host:port, development only)
+    allows the fake server's address too."""
+    parts = urllib.parse.urlsplit(url)
+    if extra_host:
+        extra = urllib.parse.urlsplit(extra_host)
+        if (parts.scheme, parts.netloc) == (extra.scheme, extra.netloc):
+            return True
+    return parts.scheme == "https" and bool(MEDIA_HOST.match(parts.hostname or "")) and not parts.username
+
+
+def fetch_media(url: str, dest: str, version: str, *, max_bytes: int, extra_host: str | None = None,
+                should_cancel: Callable[[], bool] | None = None, timeout: float = MEDIA_TIMEOUT) -> tuple[int, str | None]:
+    """Download a post's picture or video to `dest` (through `dest`.part, renamed when complete) and return
+    (bytes, content type). Only imaglr's media hosts, never with the API key, never following a redirect, and
+    never more than `max_bytes`."""
+    if not media_url_ok(url, extra_host):
+        raise MediaRefused("that file isn't on imaglr")
+    req = urllib.request.Request(url, headers={"User-Agent": f"stash-imaglr-integration/{version}"})
+    opener = urllib.request.build_opener(_NoRedirect)
+    part = f"{dest}.{os.getpid()}.part"  # two previews of the same file at once must not share a part file
+    written = 0
+    try:
+        with opener.open(req, timeout=timeout) as resp:
+            declared = resp.headers.get("Content-Length")
+            if declared and declared.isdigit() and int(declared) > max_bytes:
+                raise MediaRefused(f"the file is over {max_bytes // 1048576} MB")
+            content_type = resp.headers.get_content_type() if resp.headers.get("Content-Type") else None
+            with open(part, "wb") as f:
+                while True:
+                    if should_cancel and should_cancel():
+                        raise UploadCancelled()
+                    chunk = resp.read(CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    written += len(chunk)
+                    if written > max_bytes:
+                        raise MediaRefused(f"the file is over {max_bytes // 1048576} MB")
+                    f.write(chunk)
+        os.replace(part, dest)
+    except urllib.error.HTTPError as e:
+        e.close()
+        _remove_quietly(part)
+        raise ImaglrError("not_found" if e.code == 404 else "server_error" if e.code >= 500 else "unknown",
+                          detail=f"HTTP {e.code} for a media file", http_status=e.code) from None
+    except (OSError, http.client.HTTPException) as e:
+        _remove_quietly(part)
+        raise ImaglrError("network_error", detail=f"{type(e).__name__}: {getattr(e, 'reason', None) or e}") from e
+    except BaseException:
+        _remove_quietly(part)
+        raise
+    return written, content_type
+
+
+def _remove_quietly(path: str) -> None:
+    try:
+        os.remove(path)
+    except OSError:
+        pass
 
 
 def _draft_id(draft_id: str | int) -> str:

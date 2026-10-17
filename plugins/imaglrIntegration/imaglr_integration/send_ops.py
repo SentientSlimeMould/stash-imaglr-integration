@@ -175,6 +175,8 @@ def op_send(ctx: Context) -> dict[str, Any]:
         raise UserError("This has already been sent.")
     if repo.set_of(ctx.db, item["id"]):
         raise UserError("This file is part of a post. Send the post instead.")
+    if jobs.saved_from_imaglr(ctx, repo.set_members(ctx.db, item["id"]) if item["kind"] == "set" else [item]):
+        raise UserError(jobs.FROM_IMAGLR)
     changes: dict[str, Any] = {}
     if ctx.args.get("blog_id") is not None:
         changes["blog_id"] = ctx.arg("blog_id", int)
@@ -223,6 +225,7 @@ SKIP_REASONS = {
     "sent": "already sent",
     "gone": "no longer on the page",
     "in_post": "part of a post (send the post)",
+    "from_imaglr": "saved from imaglr (reblog it instead)",
 }
 
 
@@ -242,6 +245,8 @@ def plan_send_all(ctx: Context, item_ids: list[str]) -> list[dict[str, Any]]:
             entry["skip"] = "sent"
         elif repo.set_of(ctx.db, item_id):
             entry["skip"] = "in_post"
+        elif jobs.saved_from_imaglr(ctx, repo.set_members(ctx.db, item_id) if item["kind"] == "set" else [item]):
+            entry["skip"] = "from_imaglr"
         else:
             blog = blogs.get_blog(ctx.db, item["blog_id"]) if item["blog_id"] else (all_blogs[0] if len(all_blogs) == 1 else None)
             if blog is None:

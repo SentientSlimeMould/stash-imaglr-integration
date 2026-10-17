@@ -100,6 +100,7 @@ export function Editor({ itemId, onClose }: Props) {
   const [action, setAction] = React.useState<SendAction | null>(null);
   const [confirmPublish, setConfirmPublish] = React.useState(false);
   const [confirmRemove, setConfirmRemove] = React.useState(false);
+  const [confirmReblog, setConfirmReblog] = React.useState(false); // a file saved from imaglr: reblog, don't upload
   const [tagsAuto, setTagsAuto] = React.useState(true);
   const [resetTags, setResetTags] = React.useState(false); // "use the suggested tags again" pressed
   const [busy, setBusy] = React.useState(false);
@@ -144,6 +145,7 @@ export function Editor({ itemId, onClose }: Props) {
   const blog = pickBlog(blogs, blogId);
   const sendAction = effectiveAction(blog, action);
   const problem = blog ? blogProblem(blog) : null;
+  const fromImaglr = files.find((f) => f.saved_from)?.saved_from ?? null;
   const single = files.length === 1 && item.kind !== "set";
   const isClip = item.kind === "clip";
 
@@ -251,6 +253,22 @@ export function Editor({ itemId, onClose }: Props) {
     ? "Delete this still? It only exists in the plugin."
     : `Remove the "${queueTag}" tag in Stash${item.kind === "set" ? " from every file in this post" : ""}? ` +
       "It leaves this page. Nothing on imaglr is changed and nothing is deleted.";
+
+  /** Reblog the imaglr post a saved file came from, then take the item off the page (its job is done). */
+  async function reblog() {
+    if (!blog || !fromImaglr) return;
+    setBusy(true);
+    try {
+      await runOperation("reblog", { post_id: fromImaglr, blog_id: blog.id });
+      Toast.success(`Reblogged to ${blog.label}.`);
+      await runOperation("remove_from_queue", { item_id: item.id });
+      onClose(true);
+    } catch (e) {
+      setConfirmReblog(false);
+      setBusy(false);
+      Toast.error(e);
+    }
+  }
 
   async function remove() {
     setBusy(true);
@@ -377,6 +395,9 @@ export function Editor({ itemId, onClose }: Props) {
         </Form.Group>
         {blogs.length === 0 ? <Alert variant="info">Add your imaglr blog first: use the Settings button on the page.</Alert> : null}
         {problem ? <Alert variant="warning">{problem}</Alert> : null}
+        {fromImaglr ? (
+          <Alert variant="info">This came from imaglr, so it isn't uploaded again. Reblog the original post instead.</Alert>
+        ) : null}
       </Modal.Body>
       <Modal.Footer className="imaglr-editor-footer">
         {BUSY.includes(item.status) ? (
@@ -388,9 +409,15 @@ export function Editor({ itemId, onClose }: Props) {
             </Button>
             <Button variant="secondary" onClick={cancel} disabled={busy}>Cancel</Button>
             <Button variant="secondary" onClick={saveAndClose} disabled={locked || !dirty || busy}>Save</Button>
-            <Button variant="primary" onClick={send} disabled={locked || !blog || !!problem || busy}>
-              {busy ? "Starting…" : sendButtonLabel(sendAction, blog)}
-            </Button>
+            {fromImaglr ? (
+              <Button variant="primary" onClick={() => setConfirmReblog(true)} disabled={locked || !blog || busy}>
+                Reblog{blog ? ` to ${blog.label}` : ""}
+              </Button>
+            ) : (
+              <Button variant="primary" onClick={send} disabled={locked || !blog || !!problem || busy}>
+                {busy ? "Starting…" : sendButtonLabel(sendAction, blog)}
+              </Button>
+            )}
           </>
         )}
       </Modal.Footer>
@@ -398,6 +425,12 @@ export function Editor({ itemId, onClose }: Props) {
         <ConfirmDialog title={`Publish now on ${blog?.label}`} accept="Publish now" variant="danger" busy={busy}
           onAccept={send} onCancel={() => setConfirmPublish(false)}>
           This posts publicly on {blog?.label} right away, not as a draft.
+        </ConfirmDialog>
+      ) : null}
+      {confirmReblog && blog ? (
+        <ConfirmDialog title={`Reblog to ${blog.label}`} accept="Reblog" busy={busy} onAccept={reblog}
+          onCancel={() => setConfirmReblog(false)}>
+          The original post appears on {blog.label} straight away, and this comes off the page.
         </ConfirmDialog>
       ) : null}
       {confirmRemove ? (

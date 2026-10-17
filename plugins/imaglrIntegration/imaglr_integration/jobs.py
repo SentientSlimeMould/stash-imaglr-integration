@@ -72,6 +72,31 @@ def media_tools(ctx: Context) -> tuple[str, str]:
     return status["ffmpegPath"], status["ffprobePath"]
 
 
+FROM_IMAGLR = ("This came from imaglr, so it isn't uploaded again (imaglr's terms don't allow re-uploading saved "
+               "posts). Reblog the original instead.")
+
+
+def saved_from_imaglr(ctx: Context, members: list[dict[str, Any]]) -> str | None:
+    """The imaglr post any of these items was saved from, if one was: such files are reblogged, never sent."""
+    for member in members:
+        source = member
+        if member["kind"] == "still" and member.get("source_item_id"):
+            source = repo.get_item(ctx.db, member["source_item_id"]) or member
+        post = None
+        if source.get("stash_marker_id"):
+            marker = api.find_marker(ctx.stash, source["stash_marker_id"])
+            post = marker.scene.imaglr_post_id if marker and marker.scene else None
+        elif source.get("stash_image_id"):
+            image = api.find_image(ctx.stash, source["stash_image_id"])
+            post = image.imaglr_post_id if image else None
+        elif source.get("stash_scene_id"):
+            scene = api.find_scene(ctx.stash, source["stash_scene_id"])
+            post = scene.imaglr_post_id if scene else None
+        if post:
+            return post
+    return None
+
+
 def choose_blog(ctx: Context, item: dict[str, Any]) -> dict[str, Any]:
     all_blogs = blogs.list_blogs(ctx.db)
     if not all_blogs:
@@ -486,6 +511,8 @@ def run_send(ctx: Context, item_id: str, action: str | None = None, gif_fallback
     try:
         if not members:
             raise JobFailed("post_empty", "This post has no files.")
+        if saved_from_imaglr(ctx, members):
+            raise JobFailed("from_imaglr", FROM_IMAGLR)
         blog = choose_blog(ctx, item)
         if action not in blogs.ACTIONS:
             action = blogs.resolve_action(blog, item["action"])

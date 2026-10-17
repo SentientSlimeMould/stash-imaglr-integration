@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """Allowlist guarantee: the imaglr client can reach exactly the listed endpoints (spec Amendment 6, extended
-on 2026-10-08 with imaglr's chunked uploads for files over the edge's 100 MB request limit).
+on 2026-10-08 with imaglr's chunked uploads for files over the edge's 100 MB request limit, and on 2026-10-17
+with reading feeds, likes, tags, creators and posts, and reblogging, for browsing and saving chosen posts).
 
-Drafts first, then optionally queue or publish them; large files in pieces through /uploads. Never editing or
-deleting posts, scheduling, or changing queue settings.
+Drafts first, then optionally queue or publish them; large files in pieces through /uploads; reading; reblogging.
+Never editing or deleting posts, liking, following, scheduling, or changing queue settings. Media files come
+through the one other gateway, which only reaches imaglr's own hosts and never carries the key.
 """
 
 from __future__ import annotations
@@ -18,10 +20,12 @@ from imaglr_integration.imaglr.client import ALLOWED_ENDPOINTS, DisallowedEndpoi
 from tests.python.test_imaglr_client import FakeImaglr
 
 ALLOWED_ROUTES = {"/user/info", "/user/limits", "/drafts", "/drafts/{id}/publish", "/drafts/{id}/queue",
-                  "/uploads", "/uploads/{id}/chunks/{index}", "/uploads/{id}/complete", "/uploads/{id}"}
+                  "/uploads", "/uploads/{id}/chunks/{index}", "/uploads/{id}/complete", "/uploads/{id}",
+                  "/user/feed", "/user/likes", "/tagged", "/profiles/{name}", "/profiles/{name}/posts", "/posts/{id}",
+                  "/posts/{id}/repost"}
 FORBIDDEN = [
-    "/posts", "/schedule", "/settings", "/reorder", "/pages", "/submissions", "/accept", "/delete", "/follow",
-    "/like", "/reblog", "/repost", "/blocks", "/draft\"", "/queue/",
+    "/schedule", "/settings", "/reorder", "/pages", "/submissions", "/accept", "/delete", "/follow",
+    "/like\"", "/{id}/like", "/blocks", "/muted", "/filtered-tags", "/draft\"", "/queue/", "PATCH", "\"DELETE\", \"/posts",
 ]
 
 
@@ -40,6 +44,13 @@ class AllowlistTest(unittest.TestCase):
                     ("PUT", "/uploads/{id}/chunks/{index}"),
                     ("POST", "/uploads/{id}/complete"),
                     ("DELETE", "/uploads/{id}"),
+                    ("GET", "/user/feed"),
+                    ("GET", "/user/likes"),
+                    ("GET", "/tagged"),
+                    ("GET", "/profiles/{name}"),
+                    ("GET", "/profiles/{name}/posts"),
+                    ("GET", "/posts/{id}"),
+                    ("POST", "/posts/{id}/repost"),
                 }
             ),
         )
@@ -51,21 +62,29 @@ class AllowlistTest(unittest.TestCase):
         for bad in FORBIDDEN:
             self.assertFalse(bad in src, bad)
 
-    def test_single_gateway(self):
-        """Only `_request` builds a request, and it checks the allowlist before doing so."""
+    def test_two_gateways(self):
+        """Only `_request` (the API, with the key, allowlist checked first) and `fetch_media` (imaglr's media
+        hosts checked first, never the key) build a request."""
         src = inspect.getsource(mod)
         gateway = inspect.getsource(ImaglrClient._request)
-        self.assertEqual(src.count("Request("), 1)
+        media = inspect.getsource(mod.fetch_media)
+        self.assertEqual(src.count("Request("), 2)
         self.assertIn("urllib.request.Request(", gateway)
-        self.assertEqual(src.count(".open("), 1)
+        self.assertIn("urllib.request.Request(", media)
+        self.assertEqual(src.count(".open("), 2)
         self.assertIn("self._opener.open(", gateway)
+        self.assertIn("opener.open(", media)
         self.assertLess(gateway.index("ALLOWED_ENDPOINTS"), gateway.index("Request("))
+        self.assertLess(media.index("media_url_ok("), media.index("Request("))
+        self.assertNotIn("Authorization", media)
+        self.assertNotIn("_headers", media)
         for other in ("urlopen", "HTTPConnection", "HTTPSConnection", "socket", "subprocess", "curl"):
             self.assertFalse(other in src, other)
 
     def test_public_methods_are_the_permitted_operations(self):
         public = {n for n, v in vars(ImaglrClient).items() if callable(v) and not n.startswith("_")}
-        self.assertEqual(public, {"user_info", "user_limits", "create_draft", "publish_draft", "queue_draft", "upload_in_pieces"})
+        self.assertEqual(public, {"user_info", "user_limits", "create_draft", "publish_draft", "queue_draft", "upload_in_pieces",
+                                  "feed", "likes", "tagged", "profile", "profile_posts", "post", "repost"})
 
     def test_only_client_module_knows_the_api_url(self):
         root = os.path.dirname(os.path.dirname(os.path.abspath(mod.__file__)))
@@ -105,6 +124,14 @@ class GatewayTest(unittest.TestCase):
             ("POST", "/drafts/"),
             ("POST", "/drafts?x=1"),
             ("POST", "/submissions/{id}/accept"),
+            ("POST", "/posts/{id}/like"),
+            ("POST", "/posts"),
+            ("PATCH", "/posts/{id}"),
+            ("DELETE", "/posts/{id}"),
+            ("GET", "/pages/feed"),
+            ("POST", "/user/blocks"),
+            ("POST", "/posts/{id}"),
+            ("GET", "/posts/{id}/repost"),
         ]:
             with self.subTest(method=method, path=path):
                 with self.assertRaises(DisallowedEndpoint):
@@ -118,3 +145,41 @@ class GatewayTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NextLinkTest(unittest.TestCase):
+    """imaglr's next-page links are followed only back to the same allowed list."""
+
+    def setUp(self):
+        self.client = ImaglrClient("k", "1.0", "https://imaglr.com/api/v2")
+
+    def test_links_match_back_to_allowed_routes(self):
+        self.assertEqual(self.client._route_for("https://imaglr.com/api/v2/user/likes?limit=20&cursor=abc"),
+                         ("/user/likes", {}, {"limit": "20", "cursor": "abc"}))
+        self.assertEqual(self.client._route_for("https://imaglr.com/api/v2/profiles/some%2Fone/posts?cursor=x")[1],
+                         {"name": "some/one"})
+
+    def test_links_elsewhere_are_refused(self):
+        for href in ("https://evil.example/api/v2/user/feed", "http://imaglr.com/api/v2/user/feed",
+                     "https://imaglr.com/api/v2/drafts", "https://imaglr.com/api/v2/posts/1/like",
+                     "https://imaglr.com/api/v2x/user/feed", "https://imaglr.com/user/feed",
+                     "https://imaglr.com/api/v2/posts/1/repost"):
+            with self.subTest(href=href), self.assertRaises(DisallowedEndpoint):
+                self.client._route_for(href)
+
+    def test_a_link_from_another_list_is_refused(self):
+        with self.assertRaises(DisallowedEndpoint):
+            self.client._page("/user/likes", None, {}, "https://imaglr.com/api/v2/user/feed?cursor=x")
+
+
+class MediaHostTest(unittest.TestCase):
+    def test_only_imaglrs_own_hosts_over_https(self):
+        ok = mod.media_url_ok
+        self.assertTrue(ok("https://cdn03.imaglr.com/a/b.mp4"))
+        self.assertTrue(ok("https://imaglr.com/media/x.jpg"))
+        for bad in ("http://cdn03.imaglr.com/a.mp4", "https://cdn03.imaglr.com.evil.example/a",
+                    "https://evil.example/cdn03.imaglr.com/a", "https://user\x40cdn03.imaglr.com/a"  # a username before the host, "file:///etc/passwd",
+                    "https://xcdn03imaglr.com/a"):
+            self.assertFalse(ok(bad), bad)
+        self.assertTrue(ok("http://fake-imaglr:8900/files/a.jpg", "http://fake-imaglr:8900/api/v2"))  # development only
+        self.assertFalse(ok("http://other:8900/files/a.jpg", "http://fake-imaglr:8900/api/v2"))

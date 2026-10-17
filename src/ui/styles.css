@@ -520,3 +520,255 @@
 .imaglr-loop-candidates .btn {
   text-align: left;
 }
+
+/* ---- Discover: browsing imaglr ---------------------------------------------------------------------------
+   One centred column of posts, as wide as imaglr's own feed, full width on a phone. Stash's card colours and
+   buttons; the picture runs edge to edge inside the card. */
+.imaglr-sections {
+  margin-bottom: 0.75rem;
+}
+
+.imaglr-discover-as {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 640px;
+  margin: 0 auto 0.75rem;
+}
+
+.imaglr-discover-as select {
+  width: auto;
+}
+
+.imaglr-feed {
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.imaglr-post {
+  margin-bottom: 1.25rem;
+  overflow: hidden;
+  padding: 0; /* Stash pads its cards; the picture here runs edge to edge */
+}
+
+.imaglr-post-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.75rem;
+}
+
+.imaglr-post-who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  line-height: 1.2;
+}
+
+.imaglr-post-name,
+.imaglr-post-original {
+  padding: 0;
+  border: 0;
+  text-align: left;
+  font-weight: 600;
+  color: inherit;
+}
+
+.imaglr-post-original {
+  font-weight: normal;
+  color: inherit;
+}
+
+.imaglr-post-time {
+  white-space: nowrap;
+}
+
+.imaglr-post-open {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.imaglr-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: none;
+}
+
+.imaglr-avatar-large {
+  width: 64px;
+  height: 64px;
+  font-size: 1.6rem;
+}
+
+.imaglr-avatar-letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #394b59;
+  font-weight: 600;
+}
+
+.imaglr-post-media {
+  position: relative;
+  width: 100%;
+  max-height: 80vh;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.imaglr-post-media img,
+.imaglr-post-media video {
+  width: 100%;
+  height: 100%;
+  max-height: 80vh;
+  object-fit: contain;
+  display: block;
+}
+
+.imaglr-post-loading,
+.imaglr-post-problem {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.imaglr-post-problem {
+  padding: 1rem;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.imaglr-post-carousel {
+  position: relative;
+}
+
+.imaglr-post-strip {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.imaglr-post-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.imaglr-post-slide {
+  flex: 0 0 100%;
+  scroll-snap-align: center;
+}
+
+.imaglr-post-counter {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+}
+
+.imaglr-post-body {
+  padding: 0.75rem;
+}
+
+.imaglr-post-caption {
+  white-space: pre-line;
+  margin-bottom: 0.25rem;
+}
+
+.imaglr-post-caption-short {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.imaglr-post-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.5rem 0;
+}
+
+.imaglr-post-tags .tag-item {
+  border: 0;
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.6rem;
+}
+
+.imaglr-post-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.imaglr-post-actions .btn {
+  min-height: 44px;
+}
+
+.imaglr-post-notes {
+  margin-right: auto;
+}
+
+.imaglr-post-saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.imaglr-feed-end {
+  margin: 1rem 0 2rem;
+}
+
+.imaglr-creator {
+  margin-bottom: 1.25rem;
+}
+
+.imaglr-creator-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.imaglr-creator-bio {
+  white-space: pre-line;
+}
+
+.imaglr-explore-search {
+  margin-bottom: 1rem;
+}
+
+.imaglr-explore-search .btn {
+  min-height: 44px;
+}
+
+.imaglr-explore-title {
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 575.98px) {
+  /* On a phone the post runs the full width of the screen, like a feed app. */
+  .imaglr-tab-content .imaglr-post,
+  .imaglr-tab-content .imaglr-creator {
+    margin-left: -15px;
+    margin-right: -15px;
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+  }
+
+  .imaglr-post-actions .btn {
+    padding-left: 0.6rem;
+    padding-right: 0.6rem;
+  }
+}
