@@ -71,12 +71,15 @@ function Explore({ params, recent, following, onSearch, children }: { params: UR
   const { Button } = PluginApi.libraries.Bootstrap;
   const { Icon } = PluginApi.components;
   const Select = PluginApi.libraries.ReactSelect.default;
-  const initial = params.get("creator") ? `@${params.get("creator")}` : params.get("tag") ? `#${params.get("tag")}` : params.get("post") ?? "";
-  const [text, setText] = React.useState(initial);
+  // What's being shown, as the select's chosen value (so the box says what you're looking at, as Stash's pickers
+  // show their choice); typing starts a new search in its place.
+  const current = params.get("creator") ? `@${params.get("creator")}` : params.get("tag") ? `#${params.get("tag")}`
+    : params.get("post") ? `Post ${params.get("post")}` : "";
+  const shown: ExploreOption | null = current ? { value: current, label: current, kind: "search" } : null;
+  const [text, setText] = React.useState("");
   const [open, setOpen] = React.useState(false);
-  React.useEffect(() => setText(initial), [initial]);
   const go = (value: string) => {
-    setText(value);
+    setText("");
     setOpen(false);
     onSearch(value);
   };
@@ -87,7 +90,7 @@ function Explore({ params, recent, following, onSearch, children }: { params: UR
           inputId="imaglr-explore"
           className="react-select imaglr-explore-select"
           classNamePrefix="react-select"
-          value={null}
+          value={shown}
           inputValue={text}
           options={exploreOptions(text, recent, following)}
           menuIsOpen={open}
@@ -102,7 +105,7 @@ function Explore({ params, recent, following, onSearch, children }: { params: UR
           filterOption={() => true}
           placeholder="#tag, @creator or a post link"
           noOptionsMessage={() => null}
-          formatOptionLabel={(o: ExploreOption) => (
+          formatOptionLabel={(o: ExploreOption, meta: { context: string }) => meta.context === "value" ? o.label : (
             <span className="imaglr-explore-option">
               {o.kind === "follow" ? <Avatar url={o.avatar ?? null} name={o.label} small />
                 : <Icon icon={o.kind === "recent" ? PluginApi.libraries.FontAwesomeSolid.faHistory : PluginApi.libraries.FontAwesomeSolid.faSearch} />}
@@ -113,7 +116,7 @@ function Explore({ params, recent, following, onSearch, children }: { params: UR
           components={{ IndicatorSeparator: () => null, DropdownIndicator: () => null }}
           menuPortalTarget={document.body}
         />
-        <Button variant="primary" onClick={() => text.trim() && go(text)}>Go</Button>
+        <Button variant="primary" onClick={() => (text.trim() ? go(text) : shown ? onSearch(shown.value) : undefined)}>Go</Button>
       </div>
       {children}
     </div>

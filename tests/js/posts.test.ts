@@ -29,6 +29,7 @@ test("the Explore box understands tags, creators and links", () => {
   assert.deepEqual(parseSearch("https://imaglr.com/profile/some%20one"), { kind: "creator", value: "some one" });
   assert.deepEqual(parseSearch("https://imaglr.com/post/96040950?x=1"), { kind: "post", value: "96040950" });
   assert.deepEqual(parseSearch("96040950"), { kind: "post", value: "96040950" });
+  assert.deepEqual(parseSearch("Post 96040950"), { kind: "post", value: "96040950" }); // as the box shows it
   assert.equal(parseSearch("  "), null);
   assert.equal(parseSearch("@"), null);
   assert.equal(parseSearch("#"), null);

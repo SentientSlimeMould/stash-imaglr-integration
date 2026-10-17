@@ -90,7 +90,7 @@ export function savedPath(refs: StashRef[]): string | null {
 export function parseSearch(text: string): { kind: "creator" | "tag" | "post"; value: string } | null {
   const value = text.trim();
   if (!value) return null;
-  const link = value.match(/imaglr\.[a-z.]+\/post\/(\d+)/i) ?? value.match(/^(\d{3,})$/);
+  const link = value.match(/imaglr\.[a-z.]+\/post\/(\d+)/i) ?? value.match(/^(?:post\s+)?(\d{3,})$/i);
   if (link) return { kind: "post", value: link[1] };
   const profile = value.match(/imaglr\.[a-z.]+\/profile\/([^/?#\s]+)/i);
   if (profile) return { kind: "creator", value: decodeURIComponent(profile[1]) };

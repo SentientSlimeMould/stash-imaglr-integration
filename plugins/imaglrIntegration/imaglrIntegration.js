@@ -28,7 +28,7 @@
   function parseSearch(text) {
     const value = text.trim();
     if (!value) return null;
-    const link = value.match(/imaglr\.[a-z.]+\/post\/(\d+)/i) ?? value.match(/^(\d{3,})$/);
+    const link = value.match(/imaglr\.[a-z.]+\/post\/(\d+)/i) ?? value.match(/^(?:post\s+)?(\d{3,})$/i);
     if (link) return { kind: "post", value: link[1] };
     const profile = value.match(/imaglr\.[a-z.]+\/profile\/([^/?#\s]+)/i);
     if (profile) return { kind: "creator", value: decodeURIComponent(profile[1]) };
@@ -3195,12 +3195,12 @@
     const { Button } = PluginApi.libraries.Bootstrap;
     const { Icon } = PluginApi.components;
     const Select = PluginApi.libraries.ReactSelect.default;
-    const initial = params.get("creator") ? `@${params.get("creator")}` : params.get("tag") ? `#${params.get("tag")}` : params.get("post") ?? "";
-    const [text, setText] = react_default.useState(initial);
+    const current = params.get("creator") ? `@${params.get("creator")}` : params.get("tag") ? `#${params.get("tag")}` : params.get("post") ? `Post ${params.get("post")}` : "";
+    const shown = current ? { value: current, label: current, kind: "search" } : null;
+    const [text, setText] = react_default.useState("");
     const [open, setOpen] = react_default.useState(false);
-    react_default.useEffect(() => setText(initial), [initial]);
     const go = (value) => {
-      setText(value);
+      setText("");
       setOpen(false);
       onSearch(value);
     };
@@ -3210,7 +3210,7 @@
         inputId: "imaglr-explore",
         className: "react-select imaglr-explore-select",
         classNamePrefix: "react-select",
-        value: null,
+        value: shown,
         inputValue: text,
         options: exploreOptions(text, recent, following),
         menuIsOpen: open,
@@ -3233,12 +3233,12 @@
         filterOption: () => true,
         placeholder: "#tag, @creator or a post link",
         noOptionsMessage: () => null,
-        formatOptionLabel: (o) => /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-explore-option" }, o.kind === "follow" ? /* @__PURE__ */ react_default.createElement(Avatar, { url: o.avatar ?? null, name: o.label, small: true }) : /* @__PURE__ */ react_default.createElement(Icon, { icon: o.kind === "recent" ? PluginApi.libraries.FontAwesomeSolid.faHistory : PluginApi.libraries.FontAwesomeSolid.faSearch }), /* @__PURE__ */ react_default.createElement("span", null, o.label)),
+        formatOptionLabel: (o, meta) => meta.context === "value" ? o.label : /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-explore-option" }, o.kind === "follow" ? /* @__PURE__ */ react_default.createElement(Avatar, { url: o.avatar ?? null, name: o.label, small: true }) : /* @__PURE__ */ react_default.createElement(Icon, { icon: o.kind === "recent" ? PluginApi.libraries.FontAwesomeSolid.faHistory : PluginApi.libraries.FontAwesomeSolid.faSearch }), /* @__PURE__ */ react_default.createElement("span", null, o.label)),
         styles: { menuPortal: (base) => ({ ...base, zIndex: 1100 }) },
         components: { IndicatorSeparator: () => null, DropdownIndicator: () => null },
         menuPortalTarget: document.body
       }
-    ), /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => text.trim() && go(text) }, "Go")), children);
+    ), /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => text.trim() ? go(text) : shown ? onSearch(shown.value) : void 0 }, "Go")), children);
   }
   function SinglePost({ id, ...handlers }) {
     const [post, setPost] = react_default.useState(null);
