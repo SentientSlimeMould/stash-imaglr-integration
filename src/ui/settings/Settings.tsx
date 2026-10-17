@@ -8,6 +8,7 @@ import { fmtDate } from "../lib/format.ts";
 import { ACTION_LABELS, blogProblem } from "../lib/send.ts";
 import type { Blog, SendAction } from "../model.ts";
 import { TagRules } from "./TagRules.tsx";
+import { SaveFolderSection } from "../discover/SaveFolderDialog.tsx";
 
 export function Settings({ onClose }: { onClose: (changed: boolean) => void }) {
   const { Modal, Button, Form, Alert, Badge } = PluginApi.libraries.Bootstrap;
@@ -169,6 +170,7 @@ export function Settings({ onClose }: { onClose: (changed: boolean) => void }) {
         </Form>
 
         <TagRules />
+        <SaveFolderSection />
 
         <div className="imaglr-danger-zone">
           <h5>Delete all plugin data</h5>

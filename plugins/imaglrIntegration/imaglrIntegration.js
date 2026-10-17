@@ -2391,6 +2391,81 @@
     ) : null);
   }
 
+  // src/ui/discover/SaveFolderDialog.tsx
+  function folderReady(setup) {
+    return !!setup && setup.folder_ok && setup.folder_writable;
+  }
+  function folderProblem(setup) {
+    if (!setup?.folder) return null;
+    if (!setup.folder_ok) return `${setup.folder} isn't inside one of your Stash libraries any more.`;
+    if (!setup.folder_writable) return `Stash can't write to ${setup.folder}. Its library may be read-only.`;
+    return null;
+  }
+  function SaveFolderDialog({ setup, onDone, onCancel }) {
+    const { Form } = PluginApi.libraries.Bootstrap;
+    const Toast = PluginApi.hooks.useToast();
+    const usable = setup.libraries.filter((l) => l.videos && l.images).sort((a, b) => Number(b.writable) - Number(a.writable));
+    const suggest = (path) => `${path.replace(/[\\/]+$/, "")}${path.includes("\\") ? "\\" : "/"}imaglr`;
+    const firstWritable = usable.find((l) => l.writable);
+    const [folder, setFolder] = react_default.useState(folderReady(setup) && setup.folder ? setup.folder : firstWritable ? suggest(firstWritable.path) : setup.folder ?? "");
+    const [busy, setBusy] = react_default.useState(false);
+    const problem = folderProblem(setup);
+    async function accept() {
+      setBusy(true);
+      try {
+        onDone(await runOperation("save_folder_set", { folder }));
+      } catch (e) {
+        Toast.error(e);
+        setBusy(false);
+      }
+    }
+    return /* @__PURE__ */ react_default.createElement(
+      ConfirmDialog,
+      {
+        title: "Where should saved posts go?",
+        accept: "Use this folder",
+        busy,
+        disabled: !folder.trim(),
+        onAccept: accept,
+        onCancel
+      },
+      problem ? /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-warning" }, problem) : null,
+      /* @__PURE__ */ react_default.createElement("p", null, "Saved posts go into a folder inside one of your Stash libraries, so Stash adds them like any other file. Each creator gets a folder of their own."),
+      usable.length > 1 ? /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Library"), /* @__PURE__ */ react_default.createElement(
+        Form.Control,
+        {
+          as: "select",
+          className: "text-input",
+          defaultValue: firstWritable?.path,
+          onChange: (e) => setFolder(suggest(e.target.value))
+        },
+        usable.map((l) => /* @__PURE__ */ react_default.createElement("option", { key: l.path, value: l.path }, l.path, l.writable ? "" : " (read-only)"))
+      )) : null,
+      /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mb-0" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Folder"), /* @__PURE__ */ react_default.createElement(
+        Form.Control,
+        {
+          className: "text-input",
+          value: folder,
+          onChange: (e) => setFolder(e.target.value)
+        }
+      ), usable.length === 0 ? /* @__PURE__ */ react_default.createElement(Form.Text, { className: "text-warning" }, "None of your Stash libraries takes both pictures and videos.") : !firstWritable ? /* @__PURE__ */ react_default.createElement(Form.Text, { className: "text-warning" }, "Stash can't write to any of your libraries. Saving needs one it can write to.") : null)
+    );
+  }
+  function SaveFolderSection() {
+    const { Button } = PluginApi.libraries.Bootstrap;
+    const [setup, setSetup] = react_default.useState(null);
+    const [changing, setChanging] = react_default.useState(false);
+    react_default.useEffect(() => {
+      runOperation("save_setup").then(setSetup, () => setSetup(null));
+    }, []);
+    if (!setup?.enabled) return null;
+    const problem = folderProblem(setup);
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-settings-section" }, /* @__PURE__ */ react_default.createElement("h5", null, "Saving from imaglr"), /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted mb-2" }, setup.folder ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, "Saved posts go to ", /* @__PURE__ */ react_default.createElement("code", null, setup.folder), ".") : "You'll choose where saved posts go the first time you save one."), problem ? /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-warning" }, problem) : null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setChanging(true) }, setup.folder ? "Change folder" : "Choose folder"), changing ? /* @__PURE__ */ react_default.createElement(SaveFolderDialog, { setup, onCancel: () => setChanging(false), onDone: (s) => {
+      setSetup(s);
+      setChanging(false);
+    } }) : null);
+  }
+
   // src/ui/settings/Settings.tsx
   function Settings({ onClose }) {
     const { Modal, Button, Form, Alert, Badge } = PluginApi.libraries.Bootstrap;
@@ -2494,7 +2569,7 @@
         onChange: (e) => setDefaultAction(e.target.value)
       },
       Object.keys(ACTION_LABELS).map((a) => /* @__PURE__ */ react_default.createElement("option", { key: a, value: a }, ACTION_LABELS[a]))
-    ), /* @__PURE__ */ react_default.createElement(Form.Text, { muted: true }, "You can still choose differently each time you send.")), error ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "danger" }, error) : null, /* @__PURE__ */ react_default.createElement(Button, { type: "submit", variant: "primary", disabled: adding || !key.trim() }, adding ? "Checking the key\u2026" : "Add blog")), /* @__PURE__ */ react_default.createElement(TagRules, null), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-danger-zone" }, /* @__PURE__ */ react_default.createElement("h5", null, "Delete all plugin data"), /* @__PURE__ */ react_default.createElement("p", { className: "text-muted small mb-2" }, "Removes every blog and its key, the sent history, tag rules and working files. Do this before uninstalling if you don't want the keys left behind: Stash's plugin manager leaves the plugin's data folder in place. Nothing in Stash or on imaglr changes."), /* @__PURE__ */ react_default.createElement(Button, { variant: "danger", onClick: () => setResetting(true) }, "Delete all plugin data\u2026"))), /* @__PURE__ */ react_default.createElement(Modal.Footer, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => onClose(changed) }, "Close")), resetting ? /* @__PURE__ */ react_default.createElement(
+    ), /* @__PURE__ */ react_default.createElement(Form.Text, { muted: true }, "You can still choose differently each time you send.")), error ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "danger" }, error) : null, /* @__PURE__ */ react_default.createElement(Button, { type: "submit", variant: "primary", disabled: adding || !key.trim() }, adding ? "Checking the key\u2026" : "Add blog")), /* @__PURE__ */ react_default.createElement(TagRules, null), /* @__PURE__ */ react_default.createElement(SaveFolderSection, null), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-danger-zone" }, /* @__PURE__ */ react_default.createElement("h5", null, "Delete all plugin data"), /* @__PURE__ */ react_default.createElement("p", { className: "text-muted small mb-2" }, "Removes every blog and its key, the sent history, tag rules and working files. Do this before uninstalling if you don't want the keys left behind: Stash's plugin manager leaves the plugin's data folder in place. Nothing in Stash or on imaglr changes."), /* @__PURE__ */ react_default.createElement(Button, { variant: "danger", onClick: () => setResetting(true) }, "Delete all plugin data\u2026"))), /* @__PURE__ */ react_default.createElement(Modal.Footer, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => onClose(changed) }, "Close")), resetting ? /* @__PURE__ */ react_default.createElement(
       ConfirmDialog,
       {
         title: "Delete all plugin data",
@@ -2822,44 +2897,6 @@
     }, [saves, busy]);
     return { saves, put: (s) => setSaves((old) => new Map(old).set(s.post_id, s)) };
   }
-  function SaveFolderDialog({ setup, onDone, onCancel }) {
-    const { Form } = PluginApi.libraries.Bootstrap;
-    const Toast = PluginApi.hooks.useToast();
-    const usable = setup.libraries.filter((l) => l.videos && l.images);
-    const suggest = (path) => `${path.replace(/[\\/]+$/, "")}${path.includes("\\") ? "\\" : "/"}imaglr`;
-    const [folder, setFolder] = react_default.useState(setup.folder ?? (usable[0] ? suggest(usable[0].path) : ""));
-    const [busy, setBusy] = react_default.useState(false);
-    async function accept() {
-      setBusy(true);
-      try {
-        onDone(await runOperation("save_folder_set", { folder }));
-      } catch (e) {
-        Toast.error(e);
-        setBusy(false);
-      }
-    }
-    return /* @__PURE__ */ react_default.createElement(
-      ConfirmDialog,
-      {
-        title: "Where should saved posts go?",
-        accept: "Use this folder",
-        busy,
-        disabled: !folder.trim(),
-        onAccept: accept,
-        onCancel
-      },
-      /* @__PURE__ */ react_default.createElement("p", null, "Saved posts go into a folder inside one of your Stash libraries, so Stash adds them like any other file. Each creator gets a folder of their own."),
-      usable.length > 1 ? /* @__PURE__ */ react_default.createElement(Form.Group, null, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Library"), /* @__PURE__ */ react_default.createElement(Form.Control, { as: "select", className: "text-input", onChange: (e) => setFolder(suggest(e.target.value)) }, usable.map((l) => /* @__PURE__ */ react_default.createElement("option", { key: l.path, value: l.path }, l.path)))) : null,
-      /* @__PURE__ */ react_default.createElement(Form.Group, { className: "mb-0" }, /* @__PURE__ */ react_default.createElement(Form.Label, null, "Folder"), /* @__PURE__ */ react_default.createElement(
-        Form.Control,
-        {
-          className: "text-input",
-          value: folder,
-          onChange: (e) => setFolder(e.target.value)
-        }
-      ), usable.length === 0 ? /* @__PURE__ */ react_default.createElement(Form.Text, { className: "text-warning" }, "None of your Stash libraries takes both pictures and videos.") : null)
-    );
-  }
   function ReblogDialog({ post, blogs, onClose }) {
     const { Form } = PluginApi.libraries.Bootstrap;
     const Toast = PluginApi.hooks.useToast();
@@ -2951,7 +2988,7 @@
       onTag: (tag2) => go({ tab: "explore", tag: tag2 }, true)
     };
     async function startSave(post, ready = setup) {
-      if (!ready?.folder_ok) {
+      if (!folderReady(ready)) {
         setPendingSave(post);
         return;
       }
@@ -2997,7 +3034,7 @@
       setSetup(s);
       const post = pendingSave;
       setPendingSave(null);
-      if (s.folder_ok) startSave(post, s);
+      if (folderReady(s)) startSave(post, s);
     } }) : null, reblogging ? /* @__PURE__ */ react_default.createElement(ReblogDialog, { post: reblogging, blogs, onClose: () => setReblogging(null) }) : null));
   }
 

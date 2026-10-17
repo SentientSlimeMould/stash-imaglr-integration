@@ -218,6 +218,31 @@ def inside(path: str, root: str) -> bool:
         return False
 
 
+def writable(folder: str) -> bool:
+    """Whether Stash could create and write files in this folder: judged on the folder or, if it doesn't exist
+    yet, the nearest folder above it that does (a read-only library mount answers no)."""
+    path = os.path.abspath(folder)
+    while not os.path.exists(path):
+        parent = os.path.dirname(path)
+        if parent == path:
+            return False
+        path = parent
+    return os.path.isdir(path) and os.access(path, os.W_OK | os.X_OK)
+
+
+def probe_write(folder: str) -> str | None:
+    """Actually create the folder and a file in it, then remove the file: None when that works, else why not."""
+    try:
+        os.makedirs(folder, exist_ok=True)
+        probe = os.path.join(folder, ".imaglr-write-test")
+        with open(probe, "w", encoding="utf-8") as f:
+            f.write("ok")
+        os.remove(probe)
+        return None
+    except OSError as e:
+        return e.strerror or str(e)
+
+
 def library_for(folder: str, libraries: list[dict[str, Any]]) -> dict[str, Any] | None:
     """The Stash library a folder sits in (the deepest, if they nest), or None."""
     found = [lib for lib in libraries if lib.get("path") and inside(folder, lib["path"])]

@@ -9,7 +9,8 @@
   the plugin credits it there: the post's and creator's links, a credit line, the post date and two custom fields
   (so the credit outlives the plugin), filed under the creator's name. Its imaglr tags link to Stash tags,
   performers and a studio whose name or alias matches exactly; the plugin's own queue and sent tags never match. A
-  post with several files becomes a gallery; a reblog is saved as the original. **Reblog** shares a post to one of
+  post with several files becomes a gallery; a reblog is saved as the original. The save folder must be one Stash
+  can write to (checked when you choose it); change it any time in the plugin's Settings. **Reblog** shares a post to one of
   your blogs.
 - Files saved from imaglr are never uploaded again: their cards say "From imaglr", Send and Send all refuse them,
   and the editor offers to reblog the original instead.

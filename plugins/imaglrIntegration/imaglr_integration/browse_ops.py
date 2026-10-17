@@ -225,9 +225,9 @@ def op_save_setup(ctx: Context) -> dict[str, Any]:
     libs, _ = library.libraries(ctx.stash)
     lib = saving.library_for(config.save_folder, libs) if config.save_folder else None
     return {"enabled": config.save_enabled, "autoplay": config.browse_autoplay, "folder": config.save_folder or None,
-            "folder_ok": lib is not None,
-            "libraries": [{"path": l["path"], "videos": not l.get("excludeVideo"), "images": not l.get("excludeImage")}
-                          for l in libs]}
+            "folder_ok": lib is not None, "folder_writable": bool(config.save_folder) and saving.writable(config.save_folder),
+            "libraries": [{"path": l["path"], "videos": not l.get("excludeVideo"), "images": not l.get("excludeImage"),
+                           "writable": saving.writable(l["path"])} for l in libs]}
 
 
 def op_save_folder_set(ctx: Context) -> dict[str, Any]:
@@ -239,6 +239,9 @@ def op_save_folder_set(ctx: Context) -> dict[str, Any]:
         raise UserError("Choose a folder inside one of your Stash libraries, so Stash finds what you save.")
     if lib.get("excludeVideo") or lib.get("excludeImage"):
         raise UserError("That library skips videos or pictures. Choose one that takes both.")
+    problem = saving.probe_write(folder)
+    if problem:
+        raise UserError(f"Stash can't write to that folder ({problem}). Choose a folder in a library that isn't read-only.")
     library.set_plugin_config(ctx.stash, PLUGIN_ID, {"browseImaglrSaveFolder": folder})
     return op_save_setup(ctx)
 
@@ -254,6 +257,8 @@ def op_save_post(ctx: Context) -> dict[str, Any]:
     libs, _ = library.libraries(ctx.stash)
     if saving.library_for(config.save_folder, libs) is None:
         raise UserError("The save folder isn't inside a Stash library any more. Choose it again.")
+    if not saving.writable(config.save_folder):
+        raise UserError(f"Stash can't write to the save folder ({config.save_folder}). Choose another in the plugin's Settings.")
     blog = _blog(ctx)
     client = ctx.imaglr(blog)
     try:
@@ -331,9 +336,13 @@ def task_save(ctx: Context) -> None:
         _fail(ctx, post_id, str(e), written)
     except ImaglrError as e:
         _fail(ctx, post_id, _imaglr_message(e), written)
-    except (OSError, StashError) as e:
+    except OSError as e:
         log.warning(f"saving post {post_id} failed: {e}")
-        _fail(ctx, post_id, f"Couldn't save the files: {e}", written)
+        _fail(ctx, post_id, f"Stash couldn't write to the save folder ({e.strerror or e}). Choose another in the "
+                            "plugin's Settings, then save again.", written)
+    except StashError as e:
+        log.warning(f"saving post {post_id} failed: {e}")
+        _fail(ctx, post_id, f"Stash refused: {e}", written)
     return None
 
 

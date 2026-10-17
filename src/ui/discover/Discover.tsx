@@ -9,6 +9,7 @@ import { ConfirmDialog } from "../ConfirmDialog.tsx";
 import type { Blog } from "../model.ts";
 import { type ImaglrPost, parseSearch, SAVING, type SaveState } from "../lib/posts.ts";
 import { AutoplayContext, PostCard } from "./PostCard.tsx";
+import { folderReady, SaveFolderDialog, type SaveSetup } from "./SaveFolderDialog.tsx";
 import { PostFeed } from "./PostFeed.tsx";
 
 export const DISCOVER_TABS = [
@@ -18,13 +19,6 @@ export const DISCOVER_TABS = [
 ] as const;
 export type DiscoverTab = (typeof DISCOVER_TABS)[number]["key"];
 
-interface SaveSetup {
-  enabled: boolean;
-  autoplay: boolean;
-  folder: string | null;
-  folder_ok: boolean;
-  libraries: { path: string; videos: boolean; images: boolean }[];
-}
 
 const POLL_MS = 2000;
 const BLOG_KEY = "imaglr.browseBlog";
@@ -56,47 +50,6 @@ function useSaves() {
     return () => window.clearTimeout(timer);
   }, [saves, busy]);
   return { saves, put: (s: SaveState) => setSaves((old) => new Map(old).set(s.post_id, s)) };
-}
-
-function SaveFolderDialog({ setup, onDone, onCancel }: { setup: SaveSetup; onDone: (s: SaveSetup) => void; onCancel: () => void }) {
-  const { Form } = PluginApi.libraries.Bootstrap;
-  const Toast = PluginApi.hooks.useToast();
-  const usable = setup.libraries.filter((l) => l.videos && l.images);
-  const suggest = (path: string) => `${path.replace(/[\\/]+$/, "")}${path.includes("\\") ? "\\" : "/"}imaglr`;
-  const [folder, setFolder] = React.useState(setup.folder ?? (usable[0] ? suggest(usable[0].path) : ""));
-  const [busy, setBusy] = React.useState(false);
-  async function accept() {
-    setBusy(true);
-    try {
-      onDone(await runOperation<SaveSetup>("save_folder_set", { folder }));
-    } catch (e) {
-      Toast.error(e);
-      setBusy(false);
-    }
-  }
-  return (
-    <ConfirmDialog title="Where should saved posts go?" accept="Use this folder" busy={busy} disabled={!folder.trim()}
-      onAccept={accept} onCancel={onCancel}>
-      <p>Saved posts go into a folder inside one of your Stash libraries, so Stash adds them like any other file.
-        Each creator gets a folder of their own.</p>
-      {usable.length > 1 ? (
-        <Form.Group>
-          <Form.Label>Library</Form.Label>
-          <Form.Control as="select" className="text-input" onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFolder(suggest(e.target.value))}>
-            {usable.map((l) => <option key={l.path} value={l.path}>{l.path}</option>)}
-          </Form.Control>
-        </Form.Group>
-      ) : null}
-      <Form.Group className="mb-0">
-        <Form.Label>Folder</Form.Label>
-        <Form.Control className="text-input" value={folder}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFolder(e.target.value)} />
-        {usable.length === 0 ? (
-          <Form.Text className="text-warning">None of your Stash libraries takes both pictures and videos.</Form.Text>
-        ) : null}
-      </Form.Group>
-    </ConfirmDialog>
-  );
 }
 
 function ReblogDialog({ post, blogs, onClose }: { post: ImaglrPost; blogs: Blog[]; onClose: () => void }) {
@@ -200,8 +153,8 @@ export function Discover({ tab, params, blogs, go }: Props) {
   };
 
   async function startSave(post: ImaglrPost, ready = setup) {
-    if (!ready?.folder_ok) {
-      setPendingSave(post);
+    if (!folderReady(ready)) {
+      setPendingSave(post); // first save, or the folder can't take saves: choose one, then this post saves
       return;
     }
     put({ post_id: post.credit_id, status: "queued", progress: 0, error: null, refs: [] });
@@ -266,7 +219,7 @@ export function Discover({ tab, params, blogs, go }: Props) {
           setSetup(s);
           const post = pendingSave;
           setPendingSave(null);
-          if (s.folder_ok) startSave(post, s);
+          if (folderReady(s)) startSave(post, s);
         }} />
       ) : null}
       {reblogging ? <ReblogDialog post={reblogging} blogs={blogs} onClose={() => setReblogging(null)} /> : null}

@@ -280,7 +280,32 @@ class FolderTest(Harness):
             with self.assertRaises(UserError):
                 self.run_op("save_folder_set", folder=self.folder)
         setup = self.run_op("save_setup")
-        self.assertEqual((setup["enabled"], setup["folder_ok"]), (True, True))
+        self.assertEqual((setup["enabled"], setup["folder_ok"], setup["folder_writable"]), (True, True, True))
+        self.assertTrue(setup["libraries"][0]["writable"])
+
+    def test_a_folder_stash_cant_write_to_is_refused(self):
+        with mock.patch.object(library, "set_plugin_config", lambda s, pid, values: self.fail("stored")), \
+             mock.patch.object(browse_ops.saving, "probe_write", lambda folder: "Read-only file system"):
+            with self.assertRaises(UserError) as caught:
+                self.run_op("save_folder_set", folder=self.folder)
+        self.assertIn("can't write to that folder (Read-only file system)", str(caught.exception))
+        with mock.patch.object(browse_ops.saving, "writable", lambda folder: False):
+            self.assertFalse(self.run_op("save_setup")["folder_writable"])
+            with self.assertRaises(UserError) as caught:
+                self.run_op("save_post", post_id="7000")
+        self.assertIn("can't write to the save folder", str(caught.exception))
+        self.assertEqual(self.stash.tasks, [])
+
+    def test_a_write_failure_while_saving_says_what_to_do(self):
+        self.run_op("save_post", post_id="7000")
+
+        def read_only(url, dest, version, **kw):
+            raise OSError(30, "Read-only file system")
+        with mock.patch.object(browse_ops, "fetch_media", read_only):
+            self.run_op("task_save", post_id="7000")
+        row = self.save_row("7000")
+        self.assertEqual(row["status"], "failed")
+        self.assertIn("couldn't write to the save folder (Read-only file system). Choose another", row["error"])
 
 
 class PreviewTest(Harness):

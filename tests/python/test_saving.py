@@ -105,6 +105,28 @@ class MatchTest(unittest.TestCase):
         self.assertEqual(saving.matches([], candidates), [])
 
 
+class WritableTest(unittest.TestCase):
+    def test_a_folder_that_doesnt_exist_yet_is_judged_by_its_parent(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertTrue(saving.writable(os.path.join(tmp, "imaglr", "deeper")))
+            self.assertIsNone(saving.probe_write(os.path.join(tmp, "imaglr")))
+            self.assertEqual(os.listdir(os.path.join(tmp, "imaglr")), [])  # the test file is gone again
+
+    @unittest.skipIf(os.name == "nt" or (hasattr(os, "geteuid") and os.geteuid() == 0), "permissions don't bind here")
+    def test_a_read_only_folder_is_not_writable(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            locked = os.path.join(tmp, "locked")
+            os.makedirs(locked)
+            os.chmod(locked, 0o555)
+            try:
+                self.assertFalse(saving.writable(os.path.join(locked, "imaglr")))
+                self.assertIsNotNone(saving.probe_write(os.path.join(locked, "imaglr")))
+            finally:
+                os.chmod(locked, 0o755)
+
+
 class LibraryTest(unittest.TestCase):
     def test_folder_must_be_inside_a_library(self):
         libs = [{"path": "/data"}, {"path": "/data/saved"}, {"path": "/media"}]
