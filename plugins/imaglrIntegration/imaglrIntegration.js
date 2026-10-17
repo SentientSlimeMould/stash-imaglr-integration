@@ -2552,6 +2552,11 @@
   function mediaRatio(m) {
     return m.width && m.height ? m.width / m.height : 4 / 5;
   }
+  function avatarFallback(url) {
+    if (!url) return null;
+    const fixed = url.replace(/^(https:\/\/cdn\d{0,3}\.imaglr\.com)\/storage\/avatars\//, "$1/avatars/");
+    return fixed === url ? null : fixed;
+  }
   function shortCount(n) {
     if (n < 1e3) return String(n);
     if (n < 1e4) return `${(n / 1e3).toFixed(1).replace(/\.0$/, "")}k`;
@@ -2559,6 +2564,7 @@
   }
 
   // src/ui/discover/PostCard.tsx
+  var AutoplayContext = react_default.createContext(false);
   var previews = /* @__PURE__ */ new Map();
   var waiting = [];
   var running = 0;
@@ -2607,33 +2613,42 @@
     }, [ref]);
     return state;
   }
+  function start(v, withSound) {
+    if (playing && playing !== v) playing.pause();
+    playing = v;
+    v.muted = !withSound;
+    v.play().catch(() => {
+      v.muted = true;
+      v.play().catch(() => void 0);
+    });
+  }
   function VideoMedia({ media }) {
+    const { Icon } = PluginApi.components;
+    const autoplay = react_default.useContext(AutoplayContext);
     const box = react_default.useRef(null);
     const video = react_default.useRef(null);
     const { near, visible } = useInView(box);
+    const [wanted, setWanted] = react_default.useState(false);
     const [src, setSrc] = react_default.useState(null);
     const [problem, setProblem] = react_default.useState(null);
     react_default.useEffect(() => {
-      if (!near || src || problem) return;
+      if (!(autoplay ? near : wanted) || src || problem) return;
       let live = true;
       previewSrc(media.url).then((s) => live && setSrc(s), (e) => live && setProblem(e.message));
       return () => {
         live = false;
       };
-    }, [near, src, problem, media.url]);
+    }, [autoplay, near, wanted, src, problem, media.url]);
     react_default.useEffect(() => {
       const v = video.current;
       if (!v || !src) return;
-      if (visible >= 0.6) {
-        if (playing && playing !== v) playing.pause();
-        playing = v;
-        v.muted = !wantsSound;
-        v.play().catch(() => {
-          v.muted = true;
-          v.play().catch(() => void 0);
-        });
-      } else if (!v.paused) v.pause();
-    }, [visible, src]);
+      if (autoplay && visible >= 0.6) start(v, wantsSound);
+      else if (visible < 0.25 && !v.paused) v.pause();
+    }, [autoplay, visible, src]);
+    react_default.useEffect(() => {
+      if (!autoplay && wanted && src && video.current) start(video.current, true);
+    }, [autoplay, wanted, src]);
+    const waiting2 = autoplay ? !src && !problem : wanted && !src && !problem;
     return /* @__PURE__ */ react_default.createElement("div", { ref: box, className: "imaglr-post-media", style: { aspectRatio: String(mediaRatio(media)) } }, /* @__PURE__ */ react_default.createElement(
       "video",
       {
@@ -2646,9 +2661,13 @@
         preload: "metadata",
         onVolumeChange: (e) => {
           wantsSound = !e.currentTarget.muted;
+        },
+        onPlay: (e) => {
+          if (playing && playing !== e.currentTarget) playing.pause();
+          playing = e.currentTarget;
         }
       }
-    ), !src && !problem ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-loading" }, /* @__PURE__ */ react_default.createElement("span", { className: "spinner-border spinner-border-sm" })) : null, problem ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-problem small" }, problem) : null);
+    ), !autoplay && !wanted ? /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "imaglr-post-play", "aria-label": "Play", onClick: () => setWanted(true) }, /* @__PURE__ */ react_default.createElement(Icon, { icon: PluginApi.libraries.FontAwesomeSolid.faPlay })) : null, waiting2 ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-loading" }, /* @__PURE__ */ react_default.createElement("span", { className: "spinner-border spinner-border-sm" })) : null, problem ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-post-problem small" }, problem) : null);
   }
   function PictureMedia({ media }) {
     const direct = media.url.startsWith("https://");
@@ -2675,8 +2694,12 @@
       media.map((m, n) => /* @__PURE__ */ react_default.createElement("div", { key: n, className: "imaglr-post-slide" }, m.kind === "video" ? /* @__PURE__ */ react_default.createElement(VideoMedia, { media: m }) : /* @__PURE__ */ react_default.createElement(PictureMedia, { media: m })))
     ), /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-post-counter badge badge-dark" }, index + 1, " / ", media.length));
   }
-  function Avatar({ url, name }) {
-    return url ? /* @__PURE__ */ react_default.createElement("img", { className: "imaglr-avatar", src: url, alt: "", loading: "lazy" }) : /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-avatar imaglr-avatar-letter", "aria-hidden": "true" }, (name[0] ?? "?").toUpperCase());
+  function Avatar({ url, name, large }) {
+    const [src, setSrc] = react_default.useState(url);
+    react_default.useEffect(() => setSrc(url), [url]);
+    const className = `imaglr-avatar${large ? " imaglr-avatar-large" : ""}`;
+    if (!src) return /* @__PURE__ */ react_default.createElement("span", { className: `${className} imaglr-avatar-letter`, "aria-hidden": "true" }, (name[0] ?? "?").toUpperCase());
+    return /* @__PURE__ */ react_default.createElement("img", { className, src, alt: "", loading: "lazy", onError: () => setSrc(src === url ? avatarFallback(url) : null) });
   }
   function PostCard({ post, save: save2, onCreator, onTag, onSave, onReblog }) {
     const { Button } = PluginApi.libraries.Bootstrap;
@@ -2696,7 +2719,7 @@
   function CreatorHeader({ profile }) {
     const { Icon } = PluginApi.components;
     const fa = PluginApi.libraries.FontAwesomeSolid;
-    return /* @__PURE__ */ react_default.createElement("div", { className: "card imaglr-creator" }, /* @__PURE__ */ react_default.createElement("div", { className: "card-body" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-creator-head" }, profile.avatar ? /* @__PURE__ */ react_default.createElement("img", { className: "imaglr-avatar imaglr-avatar-large", src: profile.avatar, alt: "" }) : /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-avatar imaglr-avatar-large imaglr-avatar-letter" }, (profile.name[0] ?? "?").toUpperCase()), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement("h4", { className: "mb-1" }, profile.name), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted" }, shortCount(profile.counts.posts), " posts \xB7 ", shortCount(profile.counts.followers), " followers")), profile.url ? /* @__PURE__ */ react_default.createElement("a", { className: "btn btn-secondary ml-auto", href: profile.url, target: "_blank", rel: "noopener noreferrer" }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faExternalLinkAlt }), " imaglr") : null), profile.description ? /* @__PURE__ */ react_default.createElement("p", { className: "imaglr-creator-bio mt-2 mb-0" }, profile.description) : null));
+    return /* @__PURE__ */ react_default.createElement("div", { className: "card imaglr-creator" }, /* @__PURE__ */ react_default.createElement("div", { className: "card-body" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-creator-head" }, /* @__PURE__ */ react_default.createElement(Avatar, { url: profile.avatar, name: profile.name, large: true }), /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement("h4", { className: "mb-1" }, profile.name), /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted" }, shortCount(profile.counts.posts), " posts \xB7 ", shortCount(profile.counts.followers), " followers")), profile.url ? /* @__PURE__ */ react_default.createElement("a", { className: "btn btn-secondary ml-auto", href: profile.url, target: "_blank", rel: "noopener noreferrer" }, /* @__PURE__ */ react_default.createElement(Icon, { icon: fa.faExternalLinkAlt }), " imaglr") : null), profile.description ? /* @__PURE__ */ react_default.createElement("p", { className: "imaglr-creator-bio mt-2 mb-0" }, profile.description) : null));
   }
   function PostFeed({ source, tag, name, blogId, saves, onCreator, onTag, onSave, onReblog }) {
     const { Button } = PluginApi.libraries.Bootstrap;
@@ -2953,7 +2976,7 @@
     const creator = params.get("creator");
     const tag = params.get("tag");
     const postId = params.get("post");
-    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-discover" }, blogs.length > 1 ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-discover-as" }, /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted" }, "Browsing as"), /* @__PURE__ */ react_default.createElement(
+    return /* @__PURE__ */ react_default.createElement(AutoplayContext.Provider, { value: !!setup?.autoplay }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-discover" }, blogs.length > 1 ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-discover-as" }, /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted" }, "Browsing as"), /* @__PURE__ */ react_default.createElement(
       Form.Control,
       {
         as: "select",
@@ -2975,7 +2998,7 @@
       const post = pendingSave;
       setPendingSave(null);
       if (s.folder_ok) startSave(post, s);
-    } }) : null, reblogging ? /* @__PURE__ */ react_default.createElement(ReblogDialog, { post: reblogging, blogs, onClose: () => setReblogging(null) }) : null);
+    } }) : null, reblogging ? /* @__PURE__ */ react_default.createElement(ReblogDialog, { post: reblogging, blogs, onClose: () => setReblogging(null) }) : null));
   }
 
   // src/ui/PostPage.tsx

@@ -649,6 +649,27 @@
   background: rgba(0, 0, 0, 0.6);
 }
 
+/* Tap to play (when videos don't start on their own): a round button over the poster, like a player's own */
+.imaglr-post-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 64px;
+  height: 64px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 1.5rem;
+  padding-left: 0.3rem; /* the triangle's visual centre */
+}
+
+.imaglr-post-play:hover,
+.imaglr-post-play:focus {
+  background: rgba(0, 0, 0, 0.8);
+}
+
 .imaglr-post-carousel {
   position: relative;
 }

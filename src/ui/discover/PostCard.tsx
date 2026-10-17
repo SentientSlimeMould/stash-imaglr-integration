@@ -6,7 +6,11 @@
 // buttons, tag badges, Font Awesome icons); every control is thumb-sized.
 import React from "react";
 import { baseUrl, runOperation } from "../api.ts";
-import { type ImaglrPost, mediaRatio, type PostMedia, relativeTime, SAVING, type SaveState, savedPath, shortCount } from "../lib/posts.ts";
+import { avatarFallback, type ImaglrPost, mediaRatio, type PostMedia, relativeTime, SAVING, type SaveState, savedPath, shortCount } from "../lib/posts.ts";
+
+/** Whether videos start on their own as they scroll into view (the plugin's "Autoplay videos while browsing"),
+ *  or wait for a tap, as on imaglr's website. */
+export const AutoplayContext = React.createContext(false);
 
 // ---- videos: fetched a couple at a time, once each, and only one plays -----------------------------------
 const previews = new Map<string, Promise<string>>();
@@ -58,41 +62,59 @@ function useInView(ref: React.RefObject<HTMLElement>): { near: boolean; visible:
   return state;
 }
 
+function start(v: HTMLVideoElement, withSound: boolean) {
+  if (playing && playing !== v) playing.pause();
+  playing = v;
+  v.muted = !withSound;
+  v.play().catch(() => {
+    v.muted = true; // the browser wants a tap before sound
+    v.play().catch(() => undefined);
+  });
+}
+
 function VideoMedia({ media }: { media: PostMedia }) {
+  const { Icon } = PluginApi.components;
+  const autoplay = React.useContext(AutoplayContext);
   const box = React.useRef<HTMLDivElement>(null);
   const video = React.useRef<HTMLVideoElement>(null);
   const { near, visible } = useInView(box);
+  const [wanted, setWanted] = React.useState(false); // tapped to play (when videos don't start on their own)
   const [src, setSrc] = React.useState<string | null>(null);
   const [problem, setProblem] = React.useState<string | null>(null);
 
+  // Autoplay fetches each video as it nears the screen; otherwise only the one you tap.
   React.useEffect(() => {
-    if (!near || src || problem) return;
+    if (!(autoplay ? near : wanted) || src || problem) return;
     let live = true;
     previewSrc(media.url).then((s) => live && setSrc(s), (e: Error) => live && setProblem(e.message));
     return () => {
       live = false;
     };
-  }, [near, src, problem, media.url]);
+  }, [autoplay, near, wanted, src, problem, media.url]);
 
   React.useEffect(() => {
     const v = video.current;
     if (!v || !src) return;
-    if (visible >= 0.6) {
-      if (playing && playing !== v) playing.pause();
-      playing = v;
-      v.muted = !wantsSound;
-      v.play().catch(() => {
-        v.muted = true; // the browser wants a tap before sound
-        v.play().catch(() => undefined);
-      });
-    } else if (!v.paused) v.pause();
-  }, [visible, src]);
+    if (autoplay && visible >= 0.6) start(v, wantsSound);
+    else if (visible < 0.25 && !v.paused) v.pause(); // scrolled away: stop, and stay stopped until played again
+  }, [autoplay, visible, src]);
 
+  React.useEffect(() => {
+    if (!autoplay && wanted && src && video.current) start(video.current, true); // you asked: with sound
+  }, [autoplay, wanted, src]);
+
+  const waiting = autoplay ? !src && !problem : wanted && !src && !problem;
   return (
     <div ref={box} className="imaglr-post-media" style={{ aspectRatio: String(mediaRatio(media)) }}>
       <video ref={video} src={src ?? undefined} poster={media.thumb ?? undefined} loop playsInline controls={!!src}
-        preload="metadata" onVolumeChange={(e) => { wantsSound = !e.currentTarget.muted; }} />
-      {!src && !problem ? <div className="imaglr-post-loading"><span className="spinner-border spinner-border-sm" /></div> : null}
+        preload="metadata" onVolumeChange={(e) => { wantsSound = !e.currentTarget.muted; }}
+        onPlay={(e) => { if (playing && playing !== e.currentTarget) playing.pause(); playing = e.currentTarget; }} />
+      {!autoplay && !wanted ? (
+        <button type="button" className="imaglr-post-play" aria-label="Play" onClick={() => setWanted(true)}>
+          <Icon icon={PluginApi.libraries.FontAwesomeSolid.faPlay} />
+        </button>
+      ) : null}
+      {waiting ? <div className="imaglr-post-loading"><span className="spinner-border spinner-border-sm" /></div> : null}
       {problem ? <div className="imaglr-post-problem small">{problem}</div> : null}
     </div>
   );
@@ -135,9 +157,14 @@ function Media({ media }: { media: PostMedia[] }) {
   );
 }
 
-function Avatar({ url, name }: { url: string | null; name: string }) {
-  return url ? <img className="imaglr-avatar" src={url} alt="" loading="lazy" />
-    : <span className="imaglr-avatar imaglr-avatar-letter" aria-hidden="true">{(name[0] ?? "?").toUpperCase()}</span>;
+/** A creator's picture: imaglr's address, then the one that works when imaglr's is broken (see avatarFallback),
+ *  then their initial. */
+export function Avatar({ url, name, large }: { url: string | null; name: string; large?: boolean }) {
+  const [src, setSrc] = React.useState(url);
+  React.useEffect(() => setSrc(url), [url]);
+  const className = `imaglr-avatar${large ? " imaglr-avatar-large" : ""}`;
+  if (!src) return <span className={`${className} imaglr-avatar-letter`} aria-hidden="true">{(name[0] ?? "?").toUpperCase()}</span>;
+  return <img className={className} src={src} alt="" loading="lazy" onError={() => setSrc(src === url ? avatarFallback(url) : null)} />;
 }
 
 interface Props {

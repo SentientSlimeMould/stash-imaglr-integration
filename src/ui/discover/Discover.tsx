@@ -8,7 +8,7 @@ import { runOperation } from "../api.ts";
 import { ConfirmDialog } from "../ConfirmDialog.tsx";
 import type { Blog } from "../model.ts";
 import { type ImaglrPost, parseSearch, SAVING, type SaveState } from "../lib/posts.ts";
-import { PostCard } from "./PostCard.tsx";
+import { AutoplayContext, PostCard } from "./PostCard.tsx";
 import { PostFeed } from "./PostFeed.tsx";
 
 export const DISCOVER_TABS = [
@@ -20,6 +20,7 @@ export type DiscoverTab = (typeof DISCOVER_TABS)[number]["key"];
 
 interface SaveSetup {
   enabled: boolean;
+  autoplay: boolean;
   folder: string | null;
   folder_ok: boolean;
   libraries: { path: string; videos: boolean; images: boolean }[];
@@ -230,6 +231,7 @@ export function Discover({ tab, params, blogs, go }: Props) {
   const tag = params.get("tag");
   const postId = params.get("post");
   return (
+    <AutoplayContext.Provider value={!!setup?.autoplay}>
     <div className="imaglr-discover">
       {blogs.length > 1 ? (
         <div className="imaglr-discover-as">
@@ -269,5 +271,6 @@ export function Discover({ tab, params, blogs, go }: Props) {
       ) : null}
       {reblogging ? <ReblogDialog post={reblogging} blogs={blogs} onClose={() => setReblogging(null)} /> : null}
     </div>
+    </AutoplayContext.Provider>
   );
 }

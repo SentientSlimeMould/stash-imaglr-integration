@@ -270,7 +270,9 @@ def saving(stash):
     stash.gql("mutation($input: ConfigGeneralInput!) { configureGeneral(input: $input) { stashes { path } } }",
               input={"stashes": libraries})
     plugin = stash.gql('{ configuration { plugins(include: ["imaglrIntegration"]) } }')["configuration"]["plugins"]
-    values = {**(plugin or {}).get("imaglrIntegration", {}), "saveFromImaglr": True}
+    values = {k: v for k, v in (plugin or {}).get("imaglrIntegration", {}).items()
+              if k not in ("saveFromImaglr", "saveFolder")}  # the preview's first key names
+    values["browseImaglr"] = True
     stash.gql("mutation($input: Map!) { configurePlugin(plugin_id: \"imaglrIntegration\", input: $input) }", input=values)
     print("  /saved added as a library; Browse and save from imaglr switched on")
 

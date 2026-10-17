@@ -85,7 +85,7 @@ class Harness(unittest.TestCase):
         self.db = Database(":memory:")
         self.addCleanup(self.db.close)
         self.blog = blogs.add_blog(self.db, "pbk_test_key_123")
-        self.stash = FakeStash({"saveFromImaglr": True, "saveFolder": self.folder})
+        self.stash = FakeStash({"browseImaglr": True, "browseImaglrSaveFolder": self.folder})
         self.client = FakeClient()
         self.refs = {}
         self.credited = []
@@ -157,10 +157,10 @@ class BrowseTest(Harness):
 
 class SaveTest(Harness):
     def test_needs_a_folder_inside_a_library(self):
-        self.stash.settings = {"saveFromImaglr": True}
+        self.stash.settings = {"browseImaglr": True}
         with self.assertRaises(UserError):
             self.run_op("save_post", post_id="7000")
-        self.stash.settings = {"saveFromImaglr": True, "saveFolder": os.path.join(self.tmp.name, "elsewhere")}
+        self.stash.settings = {"browseImaglr": True, "browseImaglrSaveFolder": os.path.join(self.tmp.name, "elsewhere")}
         with self.assertRaises(UserError):
             self.run_op("save_post", post_id="7000")
         self.assertEqual(self.stash.tasks, [])
@@ -275,7 +275,7 @@ class FolderTest(Harness):
             with self.assertRaises(UserError):
                 self.run_op("save_folder_set", folder=os.path.join(self.tmp.name, "outside"))
             self.run_op("save_folder_set", folder=os.path.join(self.library, "mine"))
-        self.assertEqual(stored, [{"saveFolder": os.path.join(self.library, "mine")}])
+        self.assertEqual(stored, [{"browseImaglrSaveFolder": os.path.join(self.library, "mine")}])
         with mock.patch.object(library, "libraries", lambda s: ([{"path": self.library, "excludeVideo": True}], {})):
             with self.assertRaises(UserError):
                 self.run_op("save_folder_set", folder=self.folder)

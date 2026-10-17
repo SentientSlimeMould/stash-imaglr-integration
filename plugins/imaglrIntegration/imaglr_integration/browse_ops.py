@@ -224,7 +224,8 @@ def op_save_setup(ctx: Context) -> dict[str, Any]:
     config = _settings(ctx)
     libs, _ = library.libraries(ctx.stash)
     lib = saving.library_for(config.save_folder, libs) if config.save_folder else None
-    return {"enabled": config.save_enabled, "folder": config.save_folder or None, "folder_ok": lib is not None,
+    return {"enabled": config.save_enabled, "autoplay": config.browse_autoplay, "folder": config.save_folder or None,
+            "folder_ok": lib is not None,
             "libraries": [{"path": l["path"], "videos": not l.get("excludeVideo"), "images": not l.get("excludeImage")}
                           for l in libs]}
 
@@ -238,7 +239,7 @@ def op_save_folder_set(ctx: Context) -> dict[str, Any]:
         raise UserError("Choose a folder inside one of your Stash libraries, so Stash finds what you save.")
     if lib.get("excludeVideo") or lib.get("excludeImage"):
         raise UserError("That library skips videos or pictures. Choose one that takes both.")
-    library.set_plugin_config(ctx.stash, PLUGIN_ID, {"saveFolder": folder})
+    library.set_plugin_config(ctx.stash, PLUGIN_ID, {"browseImaglrSaveFolder": folder})
     return op_save_setup(ctx)
 
 

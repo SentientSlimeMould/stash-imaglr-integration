@@ -42,3 +42,11 @@ test("space kept for media before it loads, and short counts", () => {
   assert.equal(shortCount(3000), "3k");
   assert.equal(shortCount(45600), "46k");
 });
+
+test("a broken imaglr avatar address has a working twin", async () => {
+  const { avatarFallback } = await import("../../src/ui/lib/posts.ts");
+  assert.equal(avatarFallback("https://cdn03.imaglr.com/storage/avatars/2026/7/1/a.webp"), "https://cdn03.imaglr.com/avatars/2026/7/1/a.webp");
+  assert.equal(avatarFallback("https://cdn03.imaglr.com/avatars/2026/7/1/a.webp"), null); // already fine
+  assert.equal(avatarFallback("https://ui-avatars.com/api/?name=x"), null);
+  assert.equal(avatarFallback(null), null);
+});

@@ -29,12 +29,14 @@ class Settings:
     clip_max_edge: int | None = None  # new clips' picture size as a long edge (1280 = 720p, 854 = 480p); None = as the source
     save_enabled: bool = False  # browsing imaglr and saving posts into Stash (in preview: off until switched on)
     save_folder: str = ""  # where saved posts go: a folder inside one of Stash's libraries
+    browse_autoplay: bool = False  # videos play as they scroll into view; off: tap to play, as on imaglr's website
 
 
 # Stash setting name -> (field, converter). Keep in step with `settings:` in imaglrIntegration.yml.
 _FIELDS = {
-    "saveFolder": ("save_folder", str),
-    "saveFromImaglr": ("save_enabled", bool),
+    "browseImaglr": ("save_enabled", bool),
+    "browseImaglrAutoplay": ("browse_autoplay", bool),
+    "browseImaglrSaveFolder": ("save_folder", str),
     "tagQueue": ("queue_tag", str),
     "tagSent": ("done_tag", str),
     "tagsKeepCapitals": ("keep_tag_case", bool),

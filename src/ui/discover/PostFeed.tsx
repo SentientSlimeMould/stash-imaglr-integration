@@ -5,7 +5,7 @@ import React from "react";
 import { runOperation } from "../api.ts";
 import type { BrowsePage, BrowseSource, CreatorProfile, ImaglrPost, SaveState } from "../lib/posts.ts";
 import { shortCount } from "../lib/posts.ts";
-import { PostCard } from "./PostCard.tsx";
+import { Avatar, PostCard } from "./PostCard.tsx";
 
 interface Props {
   source: BrowseSource;
@@ -26,8 +26,7 @@ function CreatorHeader({ profile }: { profile: CreatorProfile }) {
     <div className="card imaglr-creator">
       <div className="card-body">
         <div className="imaglr-creator-head">
-          {profile.avatar ? <img className="imaglr-avatar imaglr-avatar-large" src={profile.avatar} alt="" />
-            : <span className="imaglr-avatar imaglr-avatar-large imaglr-avatar-letter">{(profile.name[0] ?? "?").toUpperCase()}</span>}
+          <Avatar url={profile.avatar} name={profile.name} large />
           <div>
             <h4 className="mb-1">{profile.name}</h4>
             <div className="small text-muted">

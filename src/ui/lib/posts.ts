@@ -104,6 +104,14 @@ export function mediaRatio(m: PostMedia): number {
   return m.width && m.height ? m.width / m.height : 4 / 5;
 }
 
+/** imaglr's API gives uploaded avatars an address on its CDN with an extra "/storage" that the CDN answers 404
+ *  for (seen 2026-10-17); the same file is at that address without it. The other address to try, or null. */
+export function avatarFallback(url: string | null): string | null {
+  if (!url) return null;
+  const fixed = url.replace(/^(https:\/\/cdn\d{0,3}\.imaglr\.com)\/storage\/avatars\//, "$1/avatars/");
+  return fixed === url ? null : fixed;
+}
+
 /** "1.2k" for counts. */
 export function shortCount(n: number): string {
   if (n < 1000) return String(n);
