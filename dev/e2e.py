@@ -255,7 +255,9 @@ def browse_and_save(stash, plugin, blog):
         plugin.op("import_rule_delete", imaglr_tag=tag)
     review = plugin.op("save_review", post_id="7001")
     rows = {r["tag"]: r for r in review["rows"]}
-    check(set(rows) == {"night", "city"} and all(r["source"] == "none" for r in rows.values()), "the review lists the post's tags")
+    # ("night" matches the Stash tag "Night" once an earlier run has made it)
+    check(set(rows) == {"night", "city"} and rows["city"]["source"] == "none" and rows["night"]["source"] in ("none", "match"),
+          "the review lists the post's tags")
     performer = stash.gql('{ findPerformers(performer_filter: {name: {value: "Test Performer", modifier: EQUALS}}) { performers { id } } }')
     performer_id = performer["findPerformers"]["performers"][0]["id"]
     plugin.op("save_post", post_id="7001", mapping=[
