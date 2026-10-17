@@ -50,3 +50,17 @@ test("a broken imaglr avatar address has a working twin", async () => {
   assert.equal(avatarFallback("https://ui-avatars.com/api/?name=x"), null);
   assert.equal(avatarFallback(null), null);
 });
+
+test("Explore remembers searches and suggests them before the creators you follow", async () => {
+  const { exploreSuggestions, rememberSearch, searchLabel, RECENT_SEARCHES } = await import("../../src/ui/lib/posts.ts");
+  assert.equal(searchLabel({ kind: "tag", value: "wam" }, "#wam "), "#wam");
+  assert.equal(searchLabel({ kind: "creator", value: "sunny" }, "https://imaglr.com/profile/sunny"), "@sunny");
+  assert.equal(searchLabel({ kind: "post", value: "123" }, " https://imaglr.com/post/123 "), "https://imaglr.com/post/123");
+  let recent = rememberSearch([], "#wam");
+  recent = rememberSearch(recent, "@sunny");
+  recent = rememberSearch(recent, "#WAM"); // again, whatever the case: to the front, once
+  assert.deepEqual(recent, ["#WAM", "@sunny"]);
+  for (let n = 0; n < 20; n++) recent = rememberSearch(recent, `#t${n}`);
+  assert.equal(recent.length, RECENT_SEARCHES);
+  assert.deepEqual(exploreSuggestions(["@Sunny", "#wam"], ["sunny", "ocean"]), ["@Sunny", "#wam", "@ocean"]);
+});

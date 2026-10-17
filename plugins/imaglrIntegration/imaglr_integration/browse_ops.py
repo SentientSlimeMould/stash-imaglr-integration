@@ -488,6 +488,38 @@ def task_save_apply(ctx: Context) -> None:
     return None
 
 
+FOLLOWING_PAGES = 5  # up to 250 creators, for suggestions
+FOLLOWING_FRESH = timedelta(hours=1)
+
+
+def op_following(ctx: Context) -> dict[str, Any]:
+    """The creators the browsing blog follows, for Explore's suggestions. Kept for an hour, so typing in Explore
+    doesn't ask imaglr again."""
+    _require_enabled(ctx)
+    blog = _blog(ctx)
+    key = f"following:{blog['id']}"
+    cached = json.loads(ctx.db.kv_get(key) or "null")
+    now = datetime.now(timezone.utc)
+    if cached and now - datetime.fromisoformat(cached["at"]) < FOLLOWING_FRESH:
+        return {"names": cached["names"]}
+    if not blog.get("name"):
+        return {"names": []}
+    names: list[str] = []
+    nxt = None
+    try:
+        for _ in range(FOLLOWING_PAGES):
+            people, nxt = ctx.imaglr(blog).following(blog["name"], nxt)
+            names += [p["name"] for p in people if p["name"] not in names]
+            if not nxt:
+                break
+    except ImaglrError as e:
+        if cached:
+            return {"names": cached["names"]}  # stale beats nothing
+        raise UserError(_imaglr_message(e, blog)) from None
+    ctx.db.kv_set(key, json.dumps({"at": now.isoformat(timespec="seconds"), "names": names}))
+    return {"names": names}
+
+
 # ---- import rules --------------------------------------------------------------------------------------
 def op_import_rule_list(ctx: Context) -> dict[str, Any]:
     """The remembered import rules, with their targets' current names (deleted ones dropped)."""
@@ -540,6 +572,7 @@ OPERATIONS = {
     "save_folder_set": op_save_folder_set,
     "save_review": op_save_review,
     "save_post": op_save_post,
+    "following": op_following,
     "import_rule_list": op_import_rule_list,
     "import_rule_delete": op_import_rule_delete,
     "stash_names_find": op_stash_names_find,

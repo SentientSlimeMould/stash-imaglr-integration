@@ -99,6 +99,25 @@ export function parseSearch(text: string): { kind: "creator" | "tag" | "post"; v
   return tag ? { kind: "tag", value: tag } : null;
 }
 
+export const RECENT_SEARCHES = 12;
+
+/** A search as it is remembered and suggested: "#tag", "@creator", or the post link as typed. */
+export function searchLabel(found: { kind: "creator" | "tag" | "post"; value: string }, typed: string): string {
+  return found.kind === "creator" ? `@${found.value}` : found.kind === "tag" ? `#${found.value}` : typed.trim();
+}
+
+/** The recent-searches list with this one first: no repeats (ignoring case), at most RECENT_SEARCHES. */
+export function rememberSearch(recent: string[], label: string): string[] {
+  const key = label.toLowerCase();
+  return [label, ...recent.filter((r) => r.toLowerCase() !== key)].slice(0, RECENT_SEARCHES);
+}
+
+/** Explore's suggestions: recent searches first, then the creators you follow not already among them. */
+export function exploreSuggestions(recent: string[], following: string[]): string[] {
+  const seen = new Set(recent.map((r) => r.toLowerCase()));
+  return [...recent, ...following.map((n) => `@${n}`).filter((s) => !seen.has(s.toLowerCase()))];
+}
+
 /** The space a picture or video takes before it loads, so the feed doesn't jump: width / height, or 4:5. */
 export function mediaRatio(m: PostMedia): number {
   return m.width && m.height ? m.width / m.height : 4 / 5;

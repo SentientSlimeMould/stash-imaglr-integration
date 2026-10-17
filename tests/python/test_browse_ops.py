@@ -488,3 +488,23 @@ class TopTagsTest(Harness):
         with mock.patch.object(library, "top_tags", lambda s, exclude, limit: tops), \
              mock.patch.object(library, "search", lambda s, q: self.fail("searched")):
             self.assertEqual([t["name"] for t in self.run_op("stash_names_find", q="  ")["results"]], ["Beach"])  # "^AI_" by default
+
+
+class FollowingTest(Harness):
+    def test_followed_creators_are_kept_for_an_hour(self):
+        self.db.execute("UPDATE blogs SET name='me' WHERE id=?", (self.blog["id"],))
+        pages = {None: ([{"name": "a"}, {"name": "b"}], "https://imaglr.com/api/v2/profiles/me/following?cursor=2"),
+                 "https://imaglr.com/api/v2/profiles/me/following?cursor=2": ([{"name": "b"}, {"name": "c"}], None)}
+        calls = []
+
+        def following(name, nxt=None):
+            calls.append((name, nxt))
+            return pages[nxt]
+        self.client.following = following
+        self.assertEqual(self.run_op("following")["names"], ["a", "b", "c"])
+        self.assertEqual(self.run_op("following")["names"], ["a", "b", "c"])
+        self.assertEqual(len(calls), 2)  # two pages, once: the second call came from the cache
+        stale = json.dumps({"at": "2000-01-01T00:00:00+00:00", "names": ["old"]})
+        self.db.kv_set(f"following:{self.blog['id']}", stale)
+        self.client.following = lambda name, nxt=None: (_ for _ in ()).throw(ImaglrError("server_error"))
+        self.assertEqual(self.run_op("following")["names"], ["old"])  # imaglr down: the stale list beats nothing

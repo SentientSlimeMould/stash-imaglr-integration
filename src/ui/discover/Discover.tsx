@@ -7,7 +7,7 @@ import React from "react";
 import { runOperation } from "../api.ts";
 import { ConfirmDialog } from "../ConfirmDialog.tsx";
 import type { Blog } from "../model.ts";
-import { type ImaglrPost, parseSearch, SAVING, type SaveState } from "../lib/posts.ts";
+import { exploreSuggestions, type ImaglrPost, parseSearch, rememberSearch, SAVING, type SaveState, searchLabel } from "../lib/posts.ts";
 import { AutoplayContext, PostCard } from "./PostCard.tsx";
 import { folderReady, SaveFolderDialog, type SaveSetup } from "./SaveFolderDialog.tsx";
 import { ReviewDialog } from "./ReviewDialog.tsx";
@@ -23,6 +23,16 @@ export type DiscoverTab = (typeof DISCOVER_TABS)[number]["key"];
 
 const POLL_MS = 2000;
 const BLOG_KEY = "imaglr.browseBlog";
+const RECENT_KEY = "imaglr.recentSearches"; // this browser's own Explore history; nothing is sent anywhere
+
+function storedSearches(): string[] {
+  try {
+    const v = JSON.parse(window.localStorage.getItem(RECENT_KEY) ?? "[]");
+    return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
 
 function storedBlog(): number | null {
   try {
@@ -88,7 +98,8 @@ function ReblogDialog({ post, blogs, onClose }: { post: ImaglrPost; blogs: Blog[
   );
 }
 
-function Explore({ params, onSearch, children }: { params: URLSearchParams; onSearch: (s: string) => void; children: React.ReactNode }) {
+function Explore({ params, suggestions, onSearch, children }: { params: URLSearchParams; suggestions: string[];
+  onSearch: (s: string) => void; children: React.ReactNode }) {
   const { Form, Button, InputGroup } = PluginApi.libraries.Bootstrap;
   const initial = params.get("creator") ? `@${params.get("creator")}` : params.get("tag") ? `#${params.get("tag")}` : params.get("post") ?? "";
   const [text, setText] = React.useState(initial);
@@ -98,9 +109,14 @@ function Explore({ params, onSearch, children }: { params: URLSearchParams; onSe
       <Form onSubmit={(e: React.FormEvent) => { e.preventDefault(); onSearch(text); }} className="imaglr-explore-search">
         <InputGroup>
           <Form.Control className="text-input" value={text} placeholder="#tag, @creator or a post link" enterKeyHint="search"
+            list="imaglr-explore-suggestions" autoComplete="off"
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setText(e.target.value)} />
           <InputGroup.Append><Button type="submit" variant="primary">Go</Button></InputGroup.Append>
         </InputGroup>
+        {/* the browser's own suggestion list: your recent searches, then the creators you follow */}
+        <datalist id="imaglr-explore-suggestions">
+          {suggestions.map((s) => <option key={s} value={s} />)}
+        </datalist>
       </Form>
       {children}
     </div>
@@ -143,11 +159,18 @@ export function Discover({ tab, params, blogs, go }: Props) {
     return blogs.some((b) => b.id === stored) ? stored : (blogs.find((b) => b.ok) ?? blogs[0])?.id ?? null;
   });
   const { saves, put } = useSaves();
+  const [recent, setRecent] = React.useState<string[]>(storedSearches);
+  const [following, setFollowing] = React.useState<string[]>([]);
 
   React.useEffect(() => setVisited((v) => (v.has(tab) ? v : new Set(v).add(tab))), [tab]);
   React.useEffect(() => {
     runOperation<SaveSetup>("save_setup").then(setSetup, () => setSetup(null));
   }, []);
+  // The creators the browsing blog follows, for Explore's suggestions (only once Explore is opened).
+  React.useEffect(() => {
+    if (tab !== "explore" || !blogId) return;
+    runOperation<{ names: string[] }>("following", { blog_id: blogId }).then((r) => setFollowing(r.names), () => setFollowing([]));
+  }, [tab === "explore", blogId]);
 
   const explore = {
     onCreator: (name: string) => name && go({ tab: "explore", creator: name }, true),
@@ -178,6 +201,9 @@ export function Discover({ tab, params, blogs, go }: Props) {
   function search(text: string) {
     const found = parseSearch(text);
     if (!found) return;
+    const next = rememberSearch(recent, searchLabel(found, text));
+    setRecent(next);
+    try { window.localStorage.setItem(RECENT_KEY, JSON.stringify(next)); } catch { /* private window: not remembered */ }
     go(found.kind === "creator" ? { tab: "explore", creator: found.value } : found.kind === "tag" ? { tab: "explore", tag: found.value }
       : { tab: "explore", post: found.value }, true);
   }
@@ -213,7 +239,7 @@ export function Discover({ tab, params, blogs, go }: Props) {
         <div hidden={tab !== "likes"}><PostFeed source="likes" {...handlers} /></div>
       ) : null}
       {tab === "explore" ? (
-        <Explore params={params} onSearch={search}>
+        <Explore params={params} suggestions={exploreSuggestions(recent, following)} onSearch={search}>
           {creator ? <PostFeed source="creator" name={creator} {...handlers} />
             : tag ? (<><h4 className="imaglr-explore-title">#{tag}</h4><PostFeed source="tag" tag={tag} {...handlers} /></>)
             : postId ? <SinglePost id={postId} {...handlers} />

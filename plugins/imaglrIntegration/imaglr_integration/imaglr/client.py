@@ -51,6 +51,7 @@ ALLOWED_ENDPOINTS: frozenset[tuple[str, str]] = frozenset(
         ("GET", "/tagged"),
         ("GET", "/profiles/{name}"),
         ("GET", "/profiles/{name}/posts"),
+        ("GET", "/profiles/{name}/following"),
         ("GET", "/posts/{id}"),
         # reblogging a post to one of the user's blogs (instead of re-uploading a saved copy)
         ("POST", "/posts/{id}/repost"),
@@ -232,6 +233,20 @@ class ImaglrClient:
     def profile_posts(self, name: str, next_link: str | None = None, limit: int = PAGE_SIZE) -> Page:
         """A creator's posts, newest first."""
         return self._page("/profiles/{name}/posts", {"name": name}, {"limit": str(limit)}, next_link)
+
+    def following(self, name: str, next_link: str | None = None, limit: int = 50) -> tuple[list[dict[str, Any]], str | None]:
+        """Who a profile follows (the user's own blog, for Explore's suggestions): profiles, and the next page's link."""
+        route, args, query = "/profiles/{name}/following", {"name": name}, {"limit": str(limit)}
+        if next_link:
+            linked, linked_args, query = self._route_for(next_link)
+            if linked != route or linked_args != args:
+                raise DisallowedEndpoint("that next-page link belongs to another list")
+        response = self._request("GET", route, args, query=query)
+        people = [p for p in response.get("following") or [] if isinstance(p, dict) and p.get("name")]
+        links = response.get("_links") if isinstance(response.get("_links"), dict) else {}
+        nxt = links.get("next") if isinstance(links.get("next"), dict) else {}
+        href = nxt.get("href")
+        return people, href if isinstance(href, str) and href else None
 
     def post(self, post_id: str | int) -> dict[str, Any]:
         """One post."""

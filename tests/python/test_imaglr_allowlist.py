@@ -21,10 +21,10 @@ from tests.python.test_imaglr_client import FakeImaglr
 
 ALLOWED_ROUTES = {"/user/info", "/user/limits", "/drafts", "/drafts/{id}/publish", "/drafts/{id}/queue",
                   "/uploads", "/uploads/{id}/chunks/{index}", "/uploads/{id}/complete", "/uploads/{id}",
-                  "/user/feed", "/user/likes", "/tagged", "/profiles/{name}", "/profiles/{name}/posts", "/posts/{id}",
+                  "/user/feed", "/user/likes", "/tagged", "/profiles/{name}", "/profiles/{name}/posts", "/profiles/{name}/following", "/posts/{id}",
                   "/posts/{id}/repost"}
 FORBIDDEN = [
-    "/schedule", "/settings", "/reorder", "/pages", "/submissions", "/accept", "/delete", "/follow",
+    "/schedule", "/settings", "/reorder", "/pages", "/submissions", "/accept", "/delete", "/follow\"", "/followers",
     "/like\"", "/{id}/like", "/blocks", "/muted", "/filtered-tags", "/draft\"", "/queue/", "PATCH", "\"DELETE\", \"/posts",
 ]
 
@@ -49,6 +49,7 @@ class AllowlistTest(unittest.TestCase):
                     ("GET", "/tagged"),
                     ("GET", "/profiles/{name}"),
                     ("GET", "/profiles/{name}/posts"),
+                    ("GET", "/profiles/{name}/following"),
                     ("GET", "/posts/{id}"),
                     ("POST", "/posts/{id}/repost"),
                 }
@@ -84,7 +85,7 @@ class AllowlistTest(unittest.TestCase):
     def test_public_methods_are_the_permitted_operations(self):
         public = {n for n, v in vars(ImaglrClient).items() if callable(v) and not n.startswith("_")}
         self.assertEqual(public, {"user_info", "user_limits", "create_draft", "publish_draft", "queue_draft", "upload_in_pieces",
-                                  "feed", "likes", "tagged", "profile", "profile_posts", "post", "repost"})
+                                  "feed", "likes", "tagged", "profile", "profile_posts", "following", "post", "repost"})
 
     def test_only_client_module_knows_the_api_url(self):
         root = os.path.dirname(os.path.dirname(os.path.abspath(mod.__file__)))
@@ -132,6 +133,8 @@ class GatewayTest(unittest.TestCase):
             ("POST", "/user/blocks"),
             ("POST", "/posts/{id}"),
             ("GET", "/posts/{id}/repost"),
+            ("POST", "/profiles/{name}/following"),
+            ("GET", "/profiles/{name}/followers"),
         ]:
             with self.subTest(method=method, path=path):
                 with self.assertRaises(DisallowedEndpoint):
