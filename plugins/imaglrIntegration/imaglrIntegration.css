@@ -646,3 +646,43 @@
     padding-right: 0.6rem;
   }
 }
+.imaglr-review-row {
+  display: grid;
+  grid-template-columns: minmax(7rem, 1fr) 2fr minmax(10rem, 1.3fr);
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.imaglr-review-targets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.imaglr-review-edit {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.imaglr-review-edit .imaglr-target-picker {
+  flex: 1;
+  min-width: 7rem;
+}
+.imaglr-target {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.imaglr-target-remove {
+  border: 0;
+  background: none;
+  color: inherit;
+  padding: 0 0 0 0.2rem;
+  min-width: 1.5rem;
+  min-height: 1.5rem;
+}
+@media (max-width: 575.98px) {
+  .imaglr-review-row {
+    grid-template-columns: 1fr;
+  }
+}

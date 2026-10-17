@@ -48,6 +48,14 @@ query($r: String!) {
               filter: { per_page: 200 }) { studios { id name aliases } }
 }
 """
+FINDERS = {"tag": "findTag", "performer": "findPerformer", "studio": "findStudio"}  # null when gone, unlike the lists
+SEARCH = """
+query($q: String!) {
+  findTags(filter: { q: $q, per_page: 8, sort: "name" }) { tags { id name } }
+  findPerformers(filter: { q: $q, per_page: 8, sort: "name" }) { performers { id name } }
+  findStudios(filter: { q: $q, per_page: 8, sort: "name" }) { studios { id name } }
+}
+"""
 PLUGIN_CONFIG = "query($id: ID!) { configuration { plugins(include: [$id]) } }"
 CONFIGURE_PLUGIN = "mutation($id: ID!, $input: Map!) { configurePlugin(plugin_id: $id, input: $input) }"
 
@@ -107,19 +115,53 @@ def create_gallery(client: StashClient, fields: dict[str, Any], image_ids: list[
     return gallery_id
 
 
+def name_candidates(client: StashClient, imaglr_tags: list[str]) -> dict[str, list[dict[str, Any]]]:
+    """The Stash tags, performers and studios whose name or one of whose aliases could equal one of these imaglr
+    tags (one query; import_rules.plan decides exactly)."""
+    tags = [t for t in dict.fromkeys(imaglr_tags) if t.strip()]
+    if not tags:
+        return {"tag": [], "performer": [], "studio": []}
+    data = client.gql(NAMES, {"r": saving.regex_any(tags)})
+    return {
+        "tag": data["findTags"]["tags"],
+        "performer": [{"id": p["id"], "name": p["name"], "aliases": p.get("alias_list") or []} for p in data["findPerformers"]["performers"]],
+        "studio": data["findStudios"]["studios"],
+    }
+
+
 def match_names(client: StashClient, imaglr_tags: list[str], exclude: set[str]) -> dict[str, Any]:
     """Stash tags, performers and a studio whose name or alias equals one of the post's imaglr tags."""
     tags = [t for t in dict.fromkeys(imaglr_tags) if t.strip()]
-    if not tags:
-        return {"tag_ids": [], "performer_ids": [], "studio_id": None}
-    data = client.gql(NAMES, {"r": saving.regex_any(tags)})
-    performers = [{"id": p["id"], "name": p["name"], "aliases": p.get("alias_list") or []} for p in data["findPerformers"]["performers"]]
-    studios = saving.matches(tags, data["findStudios"]["studios"], exclude)
+    found = name_candidates(client, tags)
+    studios = saving.matches(tags, found["studio"], exclude)
     return {
-        "tag_ids": saving.matches(tags, data["findTags"]["tags"], exclude),
-        "performer_ids": saving.matches(tags, performers, exclude),
+        "tag_ids": saving.matches(tags, found["tag"], exclude),
+        "performer_ids": saving.matches(tags, found["performer"], exclude),
         "studio_id": studios[0] if len(studios) == 1 else None,  # two studios match: name neither
     }
+
+
+def existing(client: StashClient, targets: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The targets that still exist in Stash, with their current names (a remembered rule may point at a tag,
+    performer or studio deleted since)."""
+    wanted = [t for t in targets if t.get("kind") in FINDERS and str(t.get("id") or "").isdigit()]
+    if not wanted:
+        return []
+    # One query, one aliased single-item lookup per target: the list finders fail outright on a missing id.
+    parts = [f'x{n}: {FINDERS[t["kind"]]}(id: "{t["id"]}") {{ id name }}' for n, t in enumerate(wanted)]
+    data = client.gql("{ " + " ".join(parts) + " }")
+    return [{**t, "name": data[f"x{n}"]["name"]} for n, t in enumerate(wanted) if data.get(f"x{n}")]
+
+
+def search(client: StashClient, text: str) -> list[dict[str, str]]:
+    """Stash tags, performers and studios whose name or alias contains the text, for choosing in the review."""
+    if not text.strip():
+        return []
+    data = client.gql(SEARCH, {"q": text.strip()})
+    out = [{"kind": "tag", "id": str(x["id"]), "name": x["name"]} for x in data["findTags"]["tags"]]
+    out += [{"kind": "performer", "id": str(x["id"]), "name": x["name"]} for x in data["findPerformers"]["performers"]]
+    out += [{"kind": "studio", "id": str(x["id"]), "name": x["name"]} for x in data["findStudios"]["studios"]]
+    return out
 
 
 def plugin_config(client: StashClient, plugin_id: str) -> dict[str, Any]:

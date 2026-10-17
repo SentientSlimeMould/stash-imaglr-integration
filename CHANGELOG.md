@@ -12,6 +12,11 @@
   post with several files becomes a gallery; a reblog is saved as the original. The save folder must be one Stash
   can write to (checked when you choose it); change it any time in the plugin's Settings. **Reblog** shares a post to one of
   your blogs.
+- **Review before saving.** Save opens a short review: each of the post's imaglr tags with what it becomes in
+  Stash and why (your rule, the same name in Stash, or one of your tag rules). Change any, create a new Stash tag,
+  add more, or leave a tag out; tick Remember to make it an import rule for every post from then on (kept in the
+  plugin, listed under Settings → Import rules; never a Stash alias, which would feed Stash's Auto Tag). *Save
+  without reviewing tags* skips the review and applies your rules and exact matches.
 - Files saved from imaglr are never uploaded again: their cards say "From imaglr", Send and Send all refuse them,
   and the editor offers to reblog the original instead.
 - Fixed: on screens wider than a phone, a few of the clip editor's styles weren't applied (the section labels, the

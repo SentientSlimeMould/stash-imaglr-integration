@@ -178,6 +178,17 @@ MIGRATIONS = [
       updated_at TEXT NOT NULL
     );
     """,
+    # v14: import rules (what an imaglr tag becomes in Stash, remembered from the save review; [] = ignore it),
+    # and the reviewed mapping a save applies
+    """
+    CREATE TABLE import_rules (
+      imaglr_tag TEXT PRIMARY KEY COLLATE NOCASE,
+      targets TEXT NOT NULL DEFAULT '[]',   -- [{kind: tag|performer|studio, id, name}]
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    ALTER TABLE saves ADD COLUMN mapping TEXT;  -- {tag_ids, performer_ids, studio_id} as reviewed; NULL = automatic
+    """,
 ]
 
 

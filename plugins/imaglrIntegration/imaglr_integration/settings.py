@@ -30,12 +30,14 @@ class Settings:
     save_enabled: bool = False  # browsing imaglr and saving posts into Stash (in preview: off until switched on)
     save_folder: str = ""  # where saved posts go: a folder inside one of Stash's libraries
     browse_autoplay: bool = False  # videos play as they scroll into view; off: tap to play, as on imaglr's website
+    quick_save: bool = False  # Save skips the tag review and applies rules and exact matches straight away
 
 
 # Stash setting name -> (field, converter). Keep in step with `settings:` in imaglrIntegration.yml.
 _FIELDS = {
     "browseImaglr": ("save_enabled", bool),
     "browseImaglrAutoplay": ("browse_autoplay", bool),
+    "browseImaglrQuickSave": ("quick_save", bool),
     "browseImaglrSaveFolder": ("save_folder", str),
     "tagQueue": ("queue_tag", str),
     "tagSent": ("done_tag", str),

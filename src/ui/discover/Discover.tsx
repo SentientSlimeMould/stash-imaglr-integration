@@ -10,6 +10,7 @@ import type { Blog } from "../model.ts";
 import { type ImaglrPost, parseSearch, SAVING, type SaveState } from "../lib/posts.ts";
 import { AutoplayContext, PostCard } from "./PostCard.tsx";
 import { folderReady, SaveFolderDialog, type SaveSetup } from "./SaveFolderDialog.tsx";
+import { ReviewDialog } from "./ReviewDialog.tsx";
 import { PostFeed } from "./PostFeed.tsx";
 
 export const DISCOVER_TABS = [
@@ -135,6 +136,7 @@ export function Discover({ tab, params, blogs, go }: Props) {
   const [setup, setSetup] = React.useState<SaveSetup | null>(null);
   const [pendingSave, setPendingSave] = React.useState<ImaglrPost | null>(null);
   const [reblogging, setReblogging] = React.useState<ImaglrPost | null>(null);
+  const [reviewing, setReviewing] = React.useState<ImaglrPost | null>(null);
   const [visited, setVisited] = React.useState<Set<DiscoverTab>>(new Set([tab]));
   const [blogId, setBlogId] = React.useState<number | null>(() => {
     const stored = storedBlog();
@@ -153,8 +155,12 @@ export function Discover({ tab, params, blogs, go }: Props) {
   };
 
   async function startSave(post: ImaglrPost, ready = setup) {
-    if (!folderReady(ready)) {
+    if (!ready || !folderReady(ready)) {
       setPendingSave(post); // first save, or the folder can't take saves: choose one, then this post saves
+      return;
+    }
+    if (!ready.quick_save) {
+      setReviewing(post); // the review saves it (or not)
       return;
     }
     put({ post_id: post.credit_id, status: "queued", progress: 0, error: null, refs: [] });
@@ -223,6 +229,10 @@ export function Discover({ tab, params, blogs, go }: Props) {
         }} />
       ) : null}
       {reblogging ? <ReblogDialog post={reblogging} blogs={blogs} onClose={() => setReblogging(null)} /> : null}
+      {reviewing ? (
+        <ReviewDialog post={reviewing} blogId={blogId} onCancel={() => setReviewing(null)}
+          onDone={(s) => { put(s); setReviewing(null); }} />
+      ) : null}
     </div>
     </AutoplayContext.Provider>
   );

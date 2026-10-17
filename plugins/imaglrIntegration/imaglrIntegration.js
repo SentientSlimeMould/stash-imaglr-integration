@@ -2466,6 +2466,178 @@
     } }) : null);
   }
 
+  // src/ui/discover/ReviewDialog.tsx
+  var WHY = {
+    rule: "your import rule",
+    match: "same name in Stash",
+    suggested: "from your tag rule",
+    none: ""
+  };
+  var KIND_LABELS = { tag: "Tag", performer: "Performer", studio: "Studio" };
+  function TargetBadge({ target, onRemove }) {
+    const { Icon } = PluginApi.components;
+    const fa = PluginApi.libraries.FontAwesomeSolid;
+    const icon2 = target.kind === "performer" ? fa.faUser : target.kind === "studio" ? fa.faVideo : fa.faTag;
+    return /* @__PURE__ */ react_default.createElement("span", { className: "tag-item badge badge-secondary imaglr-target" }, /* @__PURE__ */ react_default.createElement(Icon, { icon: icon2 }), " ", target.name, target.create ? " (new)" : "", onRemove ? /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "imaglr-target-remove", "aria-label": `Remove ${target.name}`, onClick: onRemove }, "\xD7") : null);
+  }
+  function TargetPicker({ onPick, inputId }) {
+    const Select = PluginApi.libraries.ReactSelect.default;
+    const [input, setInput] = react_default.useState("");
+    const [found, setFound] = react_default.useState([]);
+    react_default.useEffect(() => {
+      if (!input.trim()) {
+        setFound([]);
+        return;
+      }
+      const timer = window.setTimeout(() => {
+        runOperation("stash_names_find", { q: input }).then((r) => setFound(r.results), () => setFound([]));
+      }, 200);
+      return () => window.clearTimeout(timer);
+    }, [input]);
+    const text = input.trim();
+    const exact = found.some((t) => t.kind === "tag" && t.name.toLowerCase() === text.toLowerCase());
+    const options = [
+      ...["tag", "performer", "studio"].map((kind) => ({
+        label: `${KIND_LABELS[kind]}s`,
+        options: found.filter((t) => t.kind === kind).map((t) => ({ value: `${t.kind}:${t.id}`, label: t.name, target: t }))
+      })).filter((g) => g.options.length),
+      ...text && !exact ? [{ label: "New", options: [{ value: `new:${text}`, label: `Create tag "${text}"`, target: { kind: "tag", name: text, create: true } }] }] : []
+    ];
+    return /* @__PURE__ */ react_default.createElement(
+      Select,
+      {
+        inputId,
+        className: "react-select imaglr-target-picker",
+        classNamePrefix: "react-select",
+        value: null,
+        options,
+        inputValue: input,
+        onInputChange: (v, meta) => meta.action === "input-change" && setInput(v),
+        onChange: (o) => {
+          if (o) onPick(o.target);
+          setInput("");
+        },
+        filterOption: () => true,
+        placeholder: "Add\u2026",
+        noOptionsMessage: () => text ? "Nothing in Stash by that name" : "Type a name",
+        styles: { option: (base) => ({ ...base, color: "#000" }) },
+        components: { IndicatorSeparator: () => null, DropdownIndicator: () => null },
+        menuPlacement: "auto"
+      }
+    );
+  }
+  function ReviewDialog({ post, blogId, onDone, onCancel }) {
+    const { Modal, Button, Form } = PluginApi.libraries.Bootstrap;
+    const { LoadingIndicator } = PluginApi.components;
+    const Toast = PluginApi.hooks.useToast();
+    const [rows, setRows] = react_default.useState(null);
+    const [extra, setExtra] = react_default.useState([]);
+    const [busy, setBusy] = react_default.useState(false);
+    const [error, setError] = react_default.useState(null);
+    react_default.useEffect(() => {
+      runOperation("save_review", { post_id: post.id, blog_id: blogId ?? void 0 }).then((r) => {
+        if (r.saved.length) {
+          Toast.success("That post is already in your library.");
+          onDone({ post_id: r.credit_id, status: "done", progress: 1, error: null, refs: r.saved });
+          return;
+        }
+        setRows(r.rows.map((row) => ({ ...row, remember: row.source === "rule" })));
+      }, (e) => setError(e.message));
+    }, [post.id, blogId]);
+    function withoutStudios(targets) {
+      return targets.filter((t) => t.kind !== "studio");
+    }
+    function add(index, target) {
+      const studio = target.kind === "studio";
+      setRows((rs) => rs.map((r, n) => {
+        const targets = studio ? withoutStudios(r.targets) : r.targets;
+        if (n !== index || targets.some((t) => t.kind === target.kind && t.id === target.id && t.name === target.name)) return { ...r, targets };
+        return { ...r, targets: [...targets, target] };
+      }));
+      setExtra((e) => {
+        const kept = studio ? withoutStudios(e) : e;
+        return index === null && !kept.some((t) => t.kind === target.kind && t.id === target.id && t.name === target.name) ? [...kept, target] : kept;
+      });
+    }
+    function removeAt(index, target) {
+      setRows((rs) => rs.map((r, n) => n === index ? { ...r, targets: r.targets.filter((_, k) => k !== target) } : r));
+    }
+    async function save2() {
+      if (!rows) return;
+      setBusy(true);
+      try {
+        const r = await runOperation("save_post", {
+          post_id: post.id,
+          blog_id: blogId ?? void 0,
+          mapping: rows.map((row) => ({ tag: row.tag, targets: row.targets, remember: row.remember })),
+          extra
+        });
+        onDone(r.save);
+      } catch (e) {
+        Toast.error(e);
+        setBusy(false);
+      }
+    }
+    const who = post.original?.creator.name || post.creator.name;
+    return /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: onCancel, size: "lg", className: "imaglr-review" }, /* @__PURE__ */ react_default.createElement(Modal.Header, { closeButton: true }, /* @__PURE__ */ react_default.createElement(Modal.Title, null, "Save to your library")), /* @__PURE__ */ react_default.createElement(Modal.Body, null, /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted" }, who ? `A post by @${who}. ` : "", "Choose what its imaglr tags become in Stash. Tags with nothing chosen are left out."), error ? /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-warning" }, error) : null, !rows && !error ? LoadingIndicator ? /* @__PURE__ */ react_default.createElement(LoadingIndicator, { small: true }) : /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Loading\u2026") : null, rows ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-review-rows" }, rows.length === 0 ? /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "This post has no tags.") : null, rows.map((row, n) => /* @__PURE__ */ react_default.createElement("div", { key: row.tag, className: "imaglr-review-row" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-review-tag" }, /* @__PURE__ */ react_default.createElement("strong", null, "#", row.tag), WHY[row.source] && row.targets.length ? /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted" }, " \xB7 ", WHY[row.source]) : null), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-review-targets" }, row.targets.length ? row.targets.map((t, k) => /* @__PURE__ */ react_default.createElement(TargetBadge, { key: `${t.kind}${t.id ?? t.name}`, target: t, onRemove: () => removeAt(n, k) })) : /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted" }, "Left out")), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-review-edit" }, /* @__PURE__ */ react_default.createElement(TargetPicker, { inputId: `imaglr-review-${n}`, onPick: (t) => add(n, t) }), /* @__PURE__ */ react_default.createElement(
+      Form.Check,
+      {
+        id: `imaglr-remember-${n}`,
+        type: "checkbox",
+        label: "Remember",
+        checked: row.remember,
+        onChange: (e) => {
+          const remember = e.target.checked;
+          setRows((rs) => rs.map((r, k) => k === n ? { ...r, remember } : r));
+        }
+      }
+    )))), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-review-row" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-review-tag" }, /* @__PURE__ */ react_default.createElement("strong", null, "Also add")), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-review-targets" }, extra.map((t, k) => /* @__PURE__ */ react_default.createElement(
+      TargetBadge,
+      {
+        key: `${t.kind}${t.id ?? t.name}`,
+        target: t,
+        onRemove: () => setExtra((e) => e.filter((_, i) => i !== k))
+      }
+    ))), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-review-edit" }, /* @__PURE__ */ react_default.createElement(TargetPicker, { inputId: "imaglr-review-extra", onPick: (t) => add(null, t) }))), /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted mb-0" }, "Remembered choices apply to every post you save from now on. Change them in the plugin's Settings, under Import rules.")) : null), /* @__PURE__ */ react_default.createElement(Modal.Footer, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: onCancel, disabled: busy }, "Cancel"), /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: save2, disabled: !rows || busy }, busy ? "Saving\u2026" : "Save")));
+  }
+
+  // src/ui/settings/ImportRules.tsx
+  function ImportRules() {
+    const { Button } = PluginApi.libraries.Bootstrap;
+    const Toast = PluginApi.hooks.useToast();
+    const [rules, setRules] = react_default.useState(null);
+    const [enabled, setEnabled] = react_default.useState(false);
+    const [removing, setRemoving] = react_default.useState(null);
+    react_default.useEffect(() => {
+      runOperation("import_rule_list").then((r) => {
+        setRules(r.rules);
+        setEnabled(r.enabled);
+      }, () => void 0);
+    }, []);
+    async function remove(tag) {
+      try {
+        setRules((await runOperation("import_rule_delete", { imaglr_tag: tag })).rules);
+      } catch (e) {
+        Toast.error(e);
+      }
+      setRemoving(null);
+    }
+    if (!enabled && !rules?.length) return null;
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-settings-section" }, /* @__PURE__ */ react_default.createElement("h5", null, "Import rules"), /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted" }, "When you save a post from imaglr, these imaglr tags become these Stash tags, performers or studio. Tick Remember in the save review to add one."), rules?.length ? /* @__PURE__ */ react_default.createElement("ul", { className: "imaglr-rules" }, rules.map((r) => /* @__PURE__ */ react_default.createElement("li", { key: r.imaglr_tag }, /* @__PURE__ */ react_default.createElement("div", null, /* @__PURE__ */ react_default.createElement("strong", null, "#", r.imaglr_tag), " \u2192", " ", r.targets.length ? r.targets.map((t) => /* @__PURE__ */ react_default.createElement(TargetBadge, { key: `${t.kind}${t.id}`, target: t })) : /* @__PURE__ */ react_default.createElement("em", null, "always left out")), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-rule-actions" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "text-danger p-0 imaglr-touch", onClick: () => setRemoving(r.imaglr_tag) }, "Remove"))))) : /* @__PURE__ */ react_default.createElement("p", { className: "small text-muted" }, "None yet."), removing ? /* @__PURE__ */ react_default.createElement(
+      ConfirmDialog,
+      {
+        title: `Remove the rule for "#${removing}"`,
+        accept: "Remove",
+        variant: "danger",
+        onAccept: () => remove(removing),
+        onCancel: () => setRemoving(null)
+      },
+      '"#',
+      removing,
+      '" goes back to matching Stash names and aliases when you save.'
+    ) : null);
+  }
+
   // src/ui/settings/Settings.tsx
   function Settings({ onClose }) {
     const { Modal, Button, Form, Alert, Badge } = PluginApi.libraries.Bootstrap;
@@ -2569,7 +2741,7 @@
         onChange: (e) => setDefaultAction(e.target.value)
       },
       Object.keys(ACTION_LABELS).map((a) => /* @__PURE__ */ react_default.createElement("option", { key: a, value: a }, ACTION_LABELS[a]))
-    ), /* @__PURE__ */ react_default.createElement(Form.Text, { muted: true }, "You can still choose differently each time you send.")), error ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "danger" }, error) : null, /* @__PURE__ */ react_default.createElement(Button, { type: "submit", variant: "primary", disabled: adding || !key.trim() }, adding ? "Checking the key\u2026" : "Add blog")), /* @__PURE__ */ react_default.createElement(TagRules, null), /* @__PURE__ */ react_default.createElement(SaveFolderSection, null), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-danger-zone" }, /* @__PURE__ */ react_default.createElement("h5", null, "Delete all plugin data"), /* @__PURE__ */ react_default.createElement("p", { className: "text-muted small mb-2" }, "Removes every blog and its key, the sent history, tag rules and working files. Do this before uninstalling if you don't want the keys left behind: Stash's plugin manager leaves the plugin's data folder in place. Nothing in Stash or on imaglr changes."), /* @__PURE__ */ react_default.createElement(Button, { variant: "danger", onClick: () => setResetting(true) }, "Delete all plugin data\u2026"))), /* @__PURE__ */ react_default.createElement(Modal.Footer, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => onClose(changed) }, "Close")), resetting ? /* @__PURE__ */ react_default.createElement(
+    ), /* @__PURE__ */ react_default.createElement(Form.Text, { muted: true }, "You can still choose differently each time you send.")), error ? /* @__PURE__ */ react_default.createElement(Alert, { variant: "danger" }, error) : null, /* @__PURE__ */ react_default.createElement(Button, { type: "submit", variant: "primary", disabled: adding || !key.trim() }, adding ? "Checking the key\u2026" : "Add blog")), /* @__PURE__ */ react_default.createElement(TagRules, null), /* @__PURE__ */ react_default.createElement(SaveFolderSection, null), /* @__PURE__ */ react_default.createElement(ImportRules, null), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-danger-zone" }, /* @__PURE__ */ react_default.createElement("h5", null, "Delete all plugin data"), /* @__PURE__ */ react_default.createElement("p", { className: "text-muted small mb-2" }, "Removes every blog and its key, the sent history, tag rules and working files. Do this before uninstalling if you don't want the keys left behind: Stash's plugin manager leaves the plugin's data folder in place. Nothing in Stash or on imaglr changes."), /* @__PURE__ */ react_default.createElement(Button, { variant: "danger", onClick: () => setResetting(true) }, "Delete all plugin data\u2026"))), /* @__PURE__ */ react_default.createElement(Modal.Footer, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", onClick: () => onClose(changed) }, "Close")), resetting ? /* @__PURE__ */ react_default.createElement(
       ConfirmDialog,
       {
         title: "Delete all plugin data",
@@ -2973,6 +3145,7 @@
     const [setup, setSetup] = react_default.useState(null);
     const [pendingSave, setPendingSave] = react_default.useState(null);
     const [reblogging, setReblogging] = react_default.useState(null);
+    const [reviewing, setReviewing] = react_default.useState(null);
     const [visited, setVisited] = react_default.useState(/* @__PURE__ */ new Set([tab]));
     const [blogId, setBlogId] = react_default.useState(() => {
       const stored = storedBlog();
@@ -2988,8 +3161,12 @@
       onTag: (tag2) => go({ tab: "explore", tag: tag2 }, true)
     };
     async function startSave(post, ready = setup) {
-      if (!folderReady(ready)) {
+      if (!ready || !folderReady(ready)) {
         setPendingSave(post);
+        return;
+      }
+      if (!ready.quick_save) {
+        setReviewing(post);
         return;
       }
       put({ post_id: post.credit_id, status: "queued", progress: 0, error: null, refs: [] });
@@ -3035,7 +3212,18 @@
       const post = pendingSave;
       setPendingSave(null);
       if (folderReady(s)) startSave(post, s);
-    } }) : null, reblogging ? /* @__PURE__ */ react_default.createElement(ReblogDialog, { post: reblogging, blogs, onClose: () => setReblogging(null) }) : null));
+    } }) : null, reblogging ? /* @__PURE__ */ react_default.createElement(ReblogDialog, { post: reblogging, blogs, onClose: () => setReblogging(null) }) : null, reviewing ? /* @__PURE__ */ react_default.createElement(
+      ReviewDialog,
+      {
+        post: reviewing,
+        blogId,
+        onCancel: () => setReviewing(null),
+        onDone: (s) => {
+          put(s);
+          setReviewing(null);
+        }
+      }
+    ) : null));
   }
 
   // src/ui/PostPage.tsx

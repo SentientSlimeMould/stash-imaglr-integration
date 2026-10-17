@@ -250,6 +250,36 @@ def browse_and_save(stash, plugin, blog):
     liked = {p["id"]: p for p in plugin.op("browse", source="likes")["posts"]}
     check(liked["7000"]["saved"] and liked["7002"]["saved"], "the feed shows both as in the library")
 
+    print("the save review")
+    for tag in ("night", "city"):  # rules left by an earlier run
+        plugin.op("import_rule_delete", imaglr_tag=tag)
+    review = plugin.op("save_review", post_id="7001")
+    rows = {r["tag"]: r for r in review["rows"]}
+    check(set(rows) == {"night", "city"} and all(r["source"] == "none" for r in rows.values()), "the review lists the post's tags")
+    performer = stash.gql('{ findPerformers(performer_filter: {name: {value: "Test Performer", modifier: EQUALS}}) { performers { id } } }')
+    performer_id = performer["findPerformers"]["performers"][0]["id"]
+    plugin.op("save_post", post_id="7001", mapping=[
+        {"tag": "night", "targets": [{"kind": "tag", "create": True, "name": "Night"}], "remember": True},
+        {"tag": "city", "targets": [], "remember": True},
+    ], extra=[{"kind": "performer", "id": performer_id, "name": "Test Performer"}])
+    deadline = time.time() + 240
+    while time.time() < deadline:
+        save = {s["post_id"]: s for s in plugin.op("save_status")["saves"]}.get("7001") or {}
+        if save.get("status") in ("done", "failed"):
+            break
+        time.sleep(2)
+    check(save.get("status") == "done", f"saved with the review's choices ({save.get('status')} {save.get('error') or ''})".rstrip())
+    scene = stash.gql("""{ findScenes(scene_filter: {custom_fields: [{field: "imaglr_post_id", modifier: EQUALS, value: ["7001"]}]}) {
+        scenes { tags { name } performers { name } } } }""")["findScenes"]["scenes"][0]
+    check([t["name"] for t in scene["tags"]] == ["Night"] and [p["name"] for p in scene["performers"]] == ["Test Performer"],
+          "a new tag made, a tag left out, a performer added")
+    rules = {r["imaglr_tag"]: r["targets"] for r in plugin.op("import_rule_list")["rules"]}
+    check([t["name"] for t in rules.get("night", [])] == ["Night"] and rules.get("city") == [], "both choices remembered")
+    again = {r["tag"]: r for r in plugin.op("save_review", post_id="7025")["rows"]}
+    check(again["city"]["source"] == "rule" and again["city"]["targets"] == [], "the next review uses the rule")
+    for tag in ("night", "city"):
+        plugin.op("import_rule_delete", imaglr_tag=tag)
+
     print("a saved post is reblogged, never uploaded again")
     image_id = stash.gql("""{ findImages(image_filter: {custom_fields: [{field: "imaglr_post_id", modifier: EQUALS, value: ["7000"]}]}) {
         images { id } } }""")["findImages"]["images"][0]["id"]

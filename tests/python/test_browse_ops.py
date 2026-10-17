@@ -215,13 +215,14 @@ class SaveTest(Harness):
 
         found = {paths[0]: {"kind": "image", "id": "21"}, paths[1]: {"kind": "scene", "id": "8"}}
         credited, galleries, names = [], [], []
+        candidates = {"tag": [{"id": "1", "name": "Sunset", "aliases": []}, {"id": "9", "name": "imaglr", "aliases": []}],
+                      "performer": [{"id": "2", "name": "x", "aliases": ["sunset"]}], "studio": [{"id": "3", "name": "SUNSET", "aliases": []}]}
         with mock.patch.object(library, "find_by_path", lambda s, p: found.get(p)), \
-             mock.patch.object(library, "match_names", lambda s, tags, exclude: names.append((tags, exclude)) or
-                               {"tag_ids": ["1"], "performer_ids": ["2"], "studio_id": "3"}), \
+             mock.patch.object(library, "name_candidates", lambda s, tags: names.append(tags) or candidates), \
              mock.patch.object(library, "apply_credit", lambda s, ref, fields: credited.append((ref, fields))), \
              mock.patch.object(library, "create_gallery", lambda s, fields, image_ids: galleries.append((fields, image_ids)) or "5"):
             self.run_op("task_save_apply", post_id="7002")
-        self.assertEqual(names, [(["sunset", "imaglr"], {"imaglr", "imaglr-sent"})])  # the workflow tags never match
+        self.assertEqual(names, [["sunset", "imaglr"]])  # the workflow tag "imaglr" is never applied (tag 9)
         image_fields = credited[0][1]
         self.assertEqual(image_fields["custom_fields"], {"partial": {"imaglr_post_id": "7002", "imaglr_creator": "sunny"}})
         self.assertEqual(image_fields["urls"], ["https://imaglr.com/post/7002", "https://imaglr.com/profile/sunny"])
@@ -404,3 +405,73 @@ class GuardTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReviewTest(Harness):
+    """The save review: what each imaglr tag would become, then saving with the choices made."""
+
+    def setUp(self):
+        super().setUp()
+        self.candidates = {"tag": [{"id": "1", "name": "Sunset", "aliases": []}], "performer": [], "studio": []}
+        self.alive = {("tag", "1"): "Sunset", ("tag", "5"): "Golden hour", ("performer", "7"): "Amber", ("tag", "40"): "Made"}
+        for p in (mock.patch.object(library, "name_candidates", lambda s, tags: self.candidates),
+                  mock.patch.object(library, "existing", lambda s, ts: [{**t, "name": self.alive[(t["kind"], t["id"])]}
+                                                                        for t in ts if (t["kind"], t["id"]) in self.alive])):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def test_rows_say_what_and_why(self):
+        from imaglr_integration import import_rules
+        import_rules.set_rule(self.db, "golden hour", [{"kind": "tag", "id": "5", "name": "x"}, {"kind": "tag", "id": "99", "name": "gone"}])
+        self.client.posts["7000"] = dict(POST, tags=["sunset", "imaglr", "Golden Hour", "beach", "mystery"])
+        self.db.execute("INSERT INTO tag_rules(stash_tag, imaglr_tags, created_at, updated_at) VALUES('Seaside', '[\"beach\"]', 'x', 'x')")
+        from imaglr_integration.stash import Tag
+        with mock.patch.object(browse_ops.api, "find_tag_exact", lambda s, name: Tag("12", "Seaside") if name == "Seaside" else None):
+            review = self.run_op("save_review", post_id="7000")
+        rows = {r["tag"]: r for r in review["rows"]}
+        self.assertNotIn("imaglr", rows)  # the queue tag is never offered
+        self.assertEqual((rows["sunset"]["source"], rows["sunset"]["targets"]), ("match", [{"kind": "tag", "id": "1", "name": "Sunset"}]))
+        self.assertEqual((rows["Golden Hour"]["source"], rows["Golden Hour"]["targets"]),
+                         ("rule", [{"kind": "tag", "id": "5", "name": "Golden hour"}]))  # the deleted target dropped, the name current
+        self.assertEqual((rows["beach"]["source"], rows["beach"]["targets"][0]["id"]), ("suggested", "12"))
+        self.assertEqual((rows["mystery"]["source"], rows["mystery"]["targets"]), ("none", []))
+        self.assertEqual(self.stash.tasks, [])  # nothing saved
+
+    def test_saving_with_choices_creates_remembers_and_applies(self):
+        made = []
+        from imaglr_integration.stash import Tag
+        mapping = [
+            {"tag": "sunset", "targets": [{"kind": "tag", "id": "1", "name": "Sunset"}, {"kind": "performer", "id": "7"}], "remember": False},
+            {"tag": "imaglr", "targets": [{"kind": "tag", "create": True, "name": "Made"}], "remember": True},
+            {"tag": "junk", "targets": [], "remember": True},
+            {"tag": "bad", "targets": [{"kind": "scene", "id": "1"}, {"kind": "tag", "id": "1; x"}], "remember": False},
+        ]
+        with mock.patch.object(browse_ops.api, "ensure_tag", lambda s, name: made.append(name) or Tag("40", name)):
+            self.run_op("save_post", post_id="7000", mapping=mapping, extra=[{"kind": "tag", "id": "5"}])
+        self.assertEqual(made, ["Made"])
+        stored = json.loads(self.save_row("7000")["mapping"])
+        self.assertEqual(stored, {"tag_ids": ["1", "40", "5"], "performer_ids": ["7"], "studio_id": None})
+        rules = {r["imaglr_tag"]: r["targets"] for r in self.run_op("import_rule_list")["rules"]}
+        self.assertEqual(rules, {"imaglr": [{"kind": "tag", "id": "40", "name": "Made"}], "junk": []})
+        # the credit step applies exactly what was reviewed
+        self.db.execute("UPDATE saves SET status='scanning', files=? WHERE post_id='7000'", (json.dumps(["/x/7000.jpg"]),))
+        credited = []
+        with mock.patch.object(library, "find_by_path", lambda s, p: {"kind": "image", "id": "3"}), \
+             mock.patch.object(library, "apply_credit", lambda s, ref, fields: credited.append(fields)):
+            self.run_op("task_save_apply", post_id="7000")
+        self.assertEqual((credited[0]["tag_ids"], credited[0]["performer_ids"]), (["1", "40", "5"], ["7"]))
+        self.assertNotIn("studio_id", credited[0])
+        self.run_op("import_rule_delete", imaglr_tag="JUNK")  # case doesn't matter
+        self.assertEqual([r["imaglr_tag"] for r in self.run_op("import_rule_list")["rules"]], ["imaglr"])
+
+    def test_a_save_without_review_uses_rules_and_matches_only(self):
+        rows = [{"tag": "a", "targets": [{"kind": "tag", "id": "1", "name": "A"}], "source": "match"},
+                {"tag": "b", "targets": [{"kind": "tag", "id": "2", "name": "B"}], "source": "suggested"},
+                {"tag": "c", "targets": [{"kind": "studio", "id": "3", "name": "C"}], "source": "match"},
+                {"tag": "d", "targets": [{"kind": "studio", "id": "4", "name": "D"}], "source": "rule"}]
+        self.assertEqual(browse_ops.automatic_mapping(rows), {"tag_ids": ["1"], "performer_ids": [], "studio_id": None})
+        self.assertEqual(browse_ops.automatic_mapping(rows[:3])["studio_id"], "3")
+
+    def test_find_names(self):
+        with mock.patch.object(library, "search", lambda s, q: [{"kind": "tag", "id": "1", "name": q}]):
+            self.assertEqual(self.run_op("stash_names_find", q="sun")["results"][0]["name"], "sun")

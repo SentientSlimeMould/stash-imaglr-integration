@@ -26,6 +26,10 @@ settings:
     displayName: Autoplay videos while browsing
     description: Videos in Discover start playing, muted, as you scroll to them, like the option in imaglr's app. Off (the default), you tap a video to play it, as on imaglr's website.
     type: BOOLEAN
+  browseImaglrQuickSave:
+    displayName: Save without reviewing tags
+    description: Save straight away, applying your import rules and exact name or alias matches, instead of reviewing each post's tags first.
+    type: BOOLEAN
   browseImaglrSaveFolder:
     displayName: Save folder
     description: Where posts saved from imaglr go. It must be inside one of your Stash libraries; the plugin offers a choice the first time you save.
