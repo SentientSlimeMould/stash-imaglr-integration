@@ -7,7 +7,6 @@ import { runOperation } from "../api.ts";
 import { ConfirmDialog } from "../ConfirmDialog.tsx";
 
 export interface SaveSetup {
-  autoplay: boolean;
   quick_save?: boolean;
   folder: string | null;
   folder_ok: boolean; // inside a Stash library

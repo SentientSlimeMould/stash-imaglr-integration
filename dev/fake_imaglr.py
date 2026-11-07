@@ -156,6 +156,7 @@ def profile_for(name):
         "name": blog, "url": f"https://imaglr.example/profile/{blog}", "avatar": None, "description": "",
         "nsfw": False, "supporter": name != "premium", "is_private": False, "accepts_asks": False,
         "accepts_submissions": False, "counts": {"followers": 0, "following": 0, "posts": 0},
+        "video_autoplay": False,
     }
 
 

@@ -25,7 +25,7 @@ def mask_key(key: str) -> str:
 def public(blog: dict[str, Any]) -> dict[str, Any]:
     out = {k: v for k, v in blog.items() if k != "api_key"}
     out["key_hint"] = mask_key(blog["api_key"])
-    for key in ("supporter", "nsfw"):
+    for key in ("supporter", "nsfw", "video_autoplay"):
         out[key] = None if blog[key] is None else bool(blog[key])
     out["ok"] = bool(blog["ok"])
     out["label"] = blog["name"] or f"Blog {blog['id']} (not checked yet)"
@@ -70,10 +70,10 @@ def record_check(db: Database, blog_id: int, profile: dict[str, Any] | None, err
     """Store the result of GET /user/info for a blog: its profile, or (error code, detail)."""
     if profile is not None:
         db.execute(
-            "UPDATE blogs SET name=?, url=?, supporter=?, nsfw=?, ok=1, error_code=NULL, error_detail=NULL, "
-            "checked_at=? WHERE id=?",
+            "UPDATE blogs SET name=?, url=?, supporter=?, nsfw=?, video_autoplay=?, ok=1, error_code=NULL, "
+            "error_detail=NULL, checked_at=? WHERE id=?",
             (profile.get("name"), profile.get("url"), _flag(profile.get("supporter")), _flag(profile.get("nsfw")),
-             now_iso(), blog_id),
+             _flag(profile.get("video_autoplay")), now_iso(), blog_id),
         )
     else:
         code, detail = error or ("unknown", "")

@@ -82,8 +82,8 @@ a day; saving a draft doesn't use one, publishing does (including when imaglr pu
 A few more options live in Stash under **Settings → Plugins → Imaglr Integration**: the queue tag (default
 `imaglr`), the tag applied after sending (default `imaglr-sent`), tags never suggested (default `^AI_`), keeping
 tag capitals, the default clip length, whether new clips start as GIFs, the GIF size target, the default codec and
-picture size for clips, and how long prepared files are kept; and for Discover: autoplaying videos, saving without
-reviewing tags, and the save folder.
+picture size for clips, and how long prepared files are kept; and for Discover: saving without reviewing tags, and
+the save folder.
 
 ## Use
 
@@ -101,7 +101,8 @@ reviewing tags, and the save folder.
   straight away: items set to Publish now are saved as drafts instead.
 - **Sent** lists where each post went, which tags imaglr dropped, and lets you retry queueing or publishing if
   that step failed after the draft was saved.
-- **Discover:** scroll your Feed and Likes, or Explore a #tag, an @creator or a post link. **Save** shows what each
+- **Discover:** scroll your Feed and Likes, or Explore a #tag, an @creator or a post link. Videos play on their own
+  as you scroll if Video autoplay is on in your blog's imaglr settings; otherwise tap one to play it. **Save** shows what each
   of the post's tags becomes in Stash; tick Remember to make it a rule for next time. **Sync likes to your library**
   saves every liked post you haven't saved yet. Saved items show "From imaglr" in Stash, with links back to the post
   and its creator.

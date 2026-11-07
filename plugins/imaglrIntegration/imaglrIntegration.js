@@ -3398,10 +3398,20 @@
     const { saves, put } = useSaves();
     const [recent, setRecent] = react_default.useState(storedSearches);
     const [following, setFollowing] = react_default.useState([]);
+    const [autoplay, setAutoplay] = react_default.useState(false);
     react_default.useEffect(() => setVisited((v) => v.has(tab) ? v : new Set(v).add(tab)), [tab]);
     react_default.useEffect(() => {
       runOperation("save_setup").then(setSetup, () => setSetup(null));
     }, []);
+    react_default.useEffect(() => {
+      if (!blogId) return;
+      setAutoplay(!!blogs.find((b) => b.id === blogId)?.video_autoplay);
+      let current = true;
+      runOperation("autoplay", { blog_id: blogId }).then((r) => current && setAutoplay(r.autoplay), () => void 0);
+      return () => {
+        current = false;
+      };
+    }, [blogId]);
     react_default.useEffect(() => {
       if (tab !== "explore" || !blogId) return;
       runOperation("following", { blog_id: blogId }).then((r) => setFollowing(r.people), () => setFollowing([]));
@@ -3454,7 +3464,7 @@
     const creator = params.get("creator");
     const tag = params.get("tag");
     const postId = params.get("post");
-    return /* @__PURE__ */ react_default.createElement(AutoplayContext.Provider, { value: !!setup?.autoplay }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-discover" }, blogs.length > 1 ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-discover-as" }, /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted" }, "Browsing as"), /* @__PURE__ */ react_default.createElement(
+    return /* @__PURE__ */ react_default.createElement(AutoplayContext.Provider, { value: autoplay }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-discover" }, blogs.length > 1 ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-discover-as" }, /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted" }, "Browsing as"), /* @__PURE__ */ react_default.createElement(
       Form.Control,
       {
         as: "select",
