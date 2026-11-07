@@ -8,8 +8,8 @@ import React from "react";
 import { baseUrl, runOperation } from "../api.ts";
 import { avatarFallback, type ImaglrPost, mediaRatio, type PostMedia, relativeTime, SAVING, type SaveState, savedPath, shortCount } from "../lib/posts.ts";
 
-/** Whether videos start on their own as they scroll into view (the plugin's "Autoplay videos while browsing"),
- *  or wait for a tap, as on imaglr's website. */
+/** Whether videos start on their own as they scroll into view, or wait for a tap: the browsing blog's own
+ *  Video autoplay setting on imaglr. */
 export const AutoplayContext = React.createContext(false);
 
 // ---- videos: fetched a couple at a time, once each, and only one plays -----------------------------------

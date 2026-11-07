@@ -6,7 +6,7 @@ import type { Blog } from "../../src/ui/model.ts";
 
 const blog = (id: number, over: Partial<Blog> = {}): Blog => ({
   id, label: `blog-${id}`, name: `blog-${id}`, url: null, key_hint: "pbk_…abcd", ok: true, supporter: true,
-  nsfw: false, default_action: "draft", error_code: null, error_detail: null, paused_reason: null, checked_at: null,
+  nsfw: false, video_autoplay: null, default_action: "draft", error_code: null, error_detail: null, paused_reason: null, checked_at: null,
   ...over,
 });
 

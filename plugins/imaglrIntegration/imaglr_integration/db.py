@@ -189,6 +189,10 @@ MIGRATIONS = [
     );
     ALTER TABLE saves ADD COLUMN mapping TEXT;  -- {tag_ids, performer_ids, studio_id} as reviewed; NULL = automatic
     """,
+    # v15: the blog's own imaglr setting for whether videos play on their own (Discover follows it); NULL = not known
+    """
+    ALTER TABLE blogs ADD COLUMN video_autoplay INTEGER;
+    """,
 ]
 
 

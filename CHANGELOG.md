@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Autoplay follows your imaglr setting.** Videos in Discover play on their own as you scroll when Video autoplay
+  is on in the browsing blog's imaglr settings, and wait for a tap when it's off, read afresh each time you open
+  Discover or switch blog. The plugin's own *Autoplay videos while browsing* setting is gone.
+
 ## 1.0.0 — 2026-10-17
 
 - **Discover.** The imaglr page has two sections: Share (Clips, Images, Sent, as before) and Discover: your imaglr feed, your

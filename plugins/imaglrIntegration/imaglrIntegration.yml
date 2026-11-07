@@ -18,10 +18,6 @@ ui:
 settings:
   # Stash lists settings sorted by these keys, so they are named to keep the order sensible.
   # Numbers are STRING settings so an unsaved value shows empty rather than 0.
-  browseImaglrAutoplay:
-    displayName: Autoplay videos while browsing
-    description: Videos in Discover start playing, muted, as you scroll to them, like the option in imaglr's app. Off (the default), you tap a video to play it, as on imaglr's website.
-    type: BOOLEAN
   browseImaglrQuickSave:
     displayName: Save without reviewing tags
     description: Save straight away, applying your import rules and exact name or alias matches, instead of reviewing each post's tags first.

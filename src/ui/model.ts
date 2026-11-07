@@ -82,6 +82,7 @@ export interface Blog {
   ok: boolean;
   supporter: boolean | null;
   nsfw: boolean | null;
+  video_autoplay: boolean | null; // the blog's own imaglr setting; Discover follows it
   default_action: SendAction;
   error_code: string | null;
   error_detail: string | null;

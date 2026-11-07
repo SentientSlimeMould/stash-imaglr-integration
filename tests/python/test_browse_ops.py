@@ -523,6 +523,26 @@ class FollowingTest(Harness):
         self.assertEqual([p["name"] for p in self.run_op("following")["people"]], ["old"])  # imaglr down: stale beats nothing
 
 
+class AutoplayTest(Harness):
+    def test_discover_follows_the_blogs_imaglr_setting(self):
+        self.client.user_info = lambda: {"profile": {"name": "me", "video_autoplay": True}}
+        self.assertEqual(self.run_op("autoplay"), {"autoplay": True})
+        self.assertEqual(blogs.get_blog(self.db, self.blog["id"])["video_autoplay"], 1)  # remembered with the blog
+        self.client.user_info = lambda: {"profile": {"name": "me", "video_autoplay": False}}
+        self.assertEqual(self.run_op("autoplay", blog_id=self.blog["id"]), {"autoplay": False})
+
+    def test_imaglr_unreachable_keeps_the_last_answer(self):
+        self.client.user_info = lambda: (_ for _ in ()).throw(ImaglrError("server_error"))
+        self.assertEqual(self.run_op("autoplay"), {"autoplay": False})  # never known: tap to play
+        self.db.execute("UPDATE blogs SET video_autoplay=1 WHERE id=?", (self.blog["id"],))
+        self.assertEqual(self.run_op("autoplay"), {"autoplay": True})
+        self.assertIsNone(blogs.get_blog(self.db, self.blog["id"])["error_code"])  # not a failed check
+
+    def test_no_autoplay_without_the_field(self):
+        self.client.user_info = lambda: {"profile": {"name": "me"}}
+        self.assertEqual(self.run_op("autoplay"), {"autoplay": False})
+
+
 class LikeOpTest(Harness):
     def test_like_as_the_browsing_blog(self):
         self.client.like = lambda post_id: {"liked": True, "likes": 4} if post_id == "7000" else self.fail(post_id)

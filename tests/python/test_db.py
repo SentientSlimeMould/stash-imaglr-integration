@@ -115,9 +115,11 @@ class BlogsTest(unittest.TestCase):
     def test_check_results_label_the_blog(self):
         blog = blogs.add_blog(self.db, self.KEY)
         self.assertIn("not checked", blogs.public(blog)["label"])
-        blogs.record_check(self.db, blog["id"], {"name": "myblog", "supporter": True, "nsfw": False}, None)
+        self.assertIsNone(blogs.public(blog)["video_autoplay"])
+        blogs.record_check(self.db, blog["id"], {"name": "myblog", "supporter": True, "nsfw": False, "video_autoplay": True}, None)
         view = blogs.public(blogs.get_blog(self.db, blog["id"]))
-        self.assertEqual((view["label"], view["ok"], view["supporter"], view["nsfw"]), ("myblog", True, True, False))
+        self.assertEqual((view["label"], view["ok"], view["supporter"], view["nsfw"], view["video_autoplay"]),
+                         ("myblog", True, True, False, True))
         blogs.record_check(self.db, blog["id"], None, ("invalid_key", "The key is unknown"))
         view = blogs.public(blogs.get_blog(self.db, blog["id"]))
         self.assertEqual((view["ok"], view["error_code"], view["label"]), (False, "invalid_key", "myblog"))

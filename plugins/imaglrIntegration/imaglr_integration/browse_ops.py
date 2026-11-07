@@ -216,7 +216,7 @@ def op_save_setup(ctx: Context) -> dict[str, Any]:
     config = _settings(ctx)
     libs, _ = library.libraries(ctx.stash)
     lib = saving.library_for(config.save_folder, libs) if config.save_folder else None
-    return {"autoplay": config.browse_autoplay, "quick_save": config.quick_save,
+    return {"quick_save": config.quick_save,
             "folder": config.save_folder or None,
             "folder_ok": lib is not None, "folder_writable": bool(config.save_folder) and saving.writable(config.save_folder),
             "libraries": [{"path": l["path"], "videos": not l.get("excludeVideo"), "images": not l.get("excludeImage"),
@@ -497,6 +497,21 @@ def task_save_apply(ctx: Context) -> None:
     return None
 
 
+def op_autoplay(ctx: Context) -> dict[str, Any]:
+    """Whether Discover's videos play on their own: the browsing blog's own imaglr setting (Video autoplay), read
+    afresh each time Discover opens or switches blog. If imaglr can't be asked, the last answer stands; never
+    known, videos wait for a tap."""
+    blog = _blog(ctx)
+    try:
+        info = ctx.imaglr(blog).user_info()
+        profile = info.get("profile") if isinstance(info.get("profile"), dict) else info
+        blogs.record_check(ctx.db, blog["id"], profile, None)
+        blog = blogs.get_blog(ctx.db, blog["id"]) or blog
+    except ImaglrError:
+        pass  # not recorded as a failed check: opening Discover isn't Refresh status
+    return {"autoplay": bool(blog.get("video_autoplay"))}
+
+
 FOLLOWING_PAGES = 5  # up to 250 creators, for suggestions
 FOLLOWING_FRESH = timedelta(hours=1)
 
@@ -604,6 +619,7 @@ OPERATIONS = {
     "save_review": op_save_review,
     "save_post": op_save_post,
     "following": op_following,
+    "autoplay": op_autoplay,
     "import_rule_list": op_import_rule_list,
     "import_rule_delete": op_import_rule_delete,
     "stash_names_find": op_stash_names_find,

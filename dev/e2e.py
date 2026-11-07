@@ -188,6 +188,8 @@ def browse_and_save(stash, plugin, blog):
     setup = plugin.op("save_setup")
     check(any(lib["path"] == "/saved" for lib in setup["libraries"]), "/saved is a library (dev/seed.py <port> saving)")
     check(plugin.op("save_folder_set", folder="/saved/imaglr")["folder_ok"], "save folder chosen inside /saved")
+    check(plugin.op("autoplay", blog_id=blog["id"]) == {"autoplay": False},
+          "Discover's autoplay follows the blog's imaglr setting (off on the fake)")
     # A clean start: whatever an earlier run saved goes, files and all, so the downloads happen again.
     found = stash.gql("""query($f: [CustomFieldCriterionInput!]) {
         findScenes(scene_filter: {custom_fields: $f}) { scenes { id } }

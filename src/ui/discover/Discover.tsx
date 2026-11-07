@@ -165,11 +165,21 @@ export function Discover({ tab, params, blogs, go }: Props) {
   const { saves, put } = useSaves();
   const [recent, setRecent] = React.useState<string[]>(storedSearches);
   const [following, setFollowing] = React.useState<{ name: string; avatar: string | null }[]>([]);
+  const [autoplay, setAutoplay] = React.useState(false);
 
   React.useEffect(() => setVisited((v) => (v.has(tab) ? v : new Set(v).add(tab))), [tab]);
   React.useEffect(() => {
     runOperation<SaveSetup>("save_setup").then(setSetup, () => setSetup(null));
   }, []);
+  // Autoplay follows the browsing blog's imaglr setting: the last known answer at once, then imaglr's own.
+  React.useEffect(() => {
+    if (!blogId) return;
+    setAutoplay(!!blogs.find((b) => b.id === blogId)?.video_autoplay);
+    let current = true;
+    runOperation<{ autoplay: boolean }>("autoplay", { blog_id: blogId })
+      .then((r) => current && setAutoplay(r.autoplay), () => undefined);
+    return () => { current = false; };
+  }, [blogId]);
   // The creators the browsing blog follows, for Explore's suggestions (only once Explore is opened).
   React.useEffect(() => {
     if (tab !== "explore" || !blogId) return;
@@ -230,7 +240,7 @@ export function Discover({ tab, params, blogs, go }: Props) {
   const tag = params.get("tag");
   const postId = params.get("post");
   return (
-    <AutoplayContext.Provider value={!!setup?.autoplay}>
+    <AutoplayContext.Provider value={autoplay}>
     <div className="imaglr-discover">
       {blogs.length > 1 ? (
         <div className="imaglr-discover-as">
