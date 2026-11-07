@@ -57,9 +57,9 @@ REPOSTS = []  # (blog, post id)
 CREATORS = ("sunny-days", "city-lights", "ocean-views", "mountain-trails")
 LIKED = {7000, 7002, 7003, 7010}  # POST /posts/{id}/like toggles membership
 # The test blog's imaglr bookmarks, newest first: 9999 has since been deleted (imaglr keeps its place, post null),
-# 7004 is in two collections, 7006 in none.
+# 7004 (a reblog of 7000) is in both collections, 7005 has nothing to save, 7006 is a video no e2e step saves.
 SAVED = [7006, 7004, 9999, 7001, 7003, 7005]
-COLLECTIONS = {300: ("Beach days", [7004, 7001]), 301: ("After dark", [7005, 7004, 7003])}  # id: (name, newest first)
+COLLECTIONS = {300: ("Beach days", [7004, 7001]), 301: ("After dark", [7006, 7005, 7004, 7003])}  # id: (name, newest first)
 SPECIAL = {
     # id: (creator, media kinds, tags, caption); everything else follows a pattern below
     7000: ("sunny-days", ["image"], ["sunset", "beach", "imaglr", "Test Performer"], "Golden hour on the shore"),
@@ -378,7 +378,7 @@ class Handler(BaseHTTPRequestHandler):
             by_id = {p["id"]: p for p in posts}
             return self.reply(200, {"collections": [
                 {"id": cid, "name": name, "count": len(ids),
-                 "cover": next((by_id[i]["media"][0]["url"] for i in ids if by_id[i]["media"]), None)}
+                 "cover": next((m.get("thumb") or m["url"] for i in ids for m in by_id[i]["media"][:1]), None)}
                 for cid, (name, ids) in COLLECTIONS.items()]})
         elif path == "/api/v2/saved":
             ids = SAVED

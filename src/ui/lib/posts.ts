@@ -189,11 +189,15 @@ export function imaglrCredit(urls: string[] | null | undefined): { postUrl: stri
 export interface SyncState {
   running?: boolean;
   phase?: "reading" | "crediting" | "done";
+  source?: "likes" | "collection"; // one run at a time: syncing likes or importing a collection
+  collection_id?: string | null; // "all" or an id
+  collection_name?: string | null;
   everything?: boolean;
   seen?: number; // likes read
   new?: number; // downloaded this run
   known?: number; // already in the library
   skipped?: number; // nothing to save (text posts)
+  gone?: number; // bookmarks whose post was deleted
   failed?: number;
   saved?: number; // credited in Stash
   error?: string | null;
@@ -201,17 +205,27 @@ export interface SyncState {
   finished_at?: string | null;
 }
 
-/** What the sync is doing, or did, in a sentence. */
+/** What the sync (or a collection import) is doing, or did, in a sentence. */
 export function syncSummary(s: SyncState): string {
   const n = (v?: number) => v ?? 0;
+  const importing = s.source === "collection";
   if (s.running && s.phase === "crediting") return `Adding ${n(s.new)} posts to Stash…`;
   if (s.running) {
-    return `Syncing your likes: ${n(s.seen)} read, ${n(s.new)} new${n(s.failed) ? `, ${n(s.failed)} failed` : ""}${s.note ? `. ${s.note}` : ""}`;
+    const what = importing ? `Importing ${s.collection_name ?? "the collection"}` : "Syncing your likes";
+    return `${what}: ${n(s.seen)} read, ${n(s.new)} new${n(s.failed) ? `, ${n(s.failed)} failed` : ""}${s.note ? `. ${s.note}` : ""}`;
   }
   if (!s.finished_at) return "";
   const parts = [`${n(s.saved)} saved`, `${n(s.known)} already in your library`];
+  if (n(s.gone)) parts.push(`${n(s.gone)} no longer on imaglr`);
   if (n(s.failed)) parts.push(`${n(s.failed)} failed`);
   const when = relativeTime(s.finished_at);
   const phrase = when === "now" ? "just now" : /^\d+ (min|h|d)$/.test(when) ? `${when} ago` : `on ${when}`;
-  return `Last sync ${phrase}: ${parts.join(", ")}.${s.error ? ` ${s.error}` : ""}`;
+  return `Last ${importing ? "import" : "sync"} ${phrase}: ${parts.join(", ")}.${s.error ? ` ${s.error}` : ""}`;
+}
+
+/** "31 of 42 in your library" (posts with something to save), "All in your library", or nothing when the collection
+ *  was too big to count. */
+export function libraryCount(savable: number | null, inLibrary: number | null): string {
+  if (savable == null || inLibrary == null || savable === 0) return "";
+  return inLibrary >= savable ? "All in your library" : `${inLibrary} of ${savable} in your library`;
 }

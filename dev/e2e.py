@@ -196,7 +196,7 @@ def browse_and_save(stash, plugin, blog):
     everything = plugin.op("browse", source="saved", collection="all", blog_id=blog["id"])["posts"]
     check([p["id"] for p in everything] == ["7006", "7004", "7001", "7003", "7005"], "All saved scrolls every bookmark, minus a deleted post")
     after_dark = plugin.op("browse", source="saved", collection="301", blog_id=blog["id"])["posts"]
-    check([p["id"] for p in after_dark] == ["7005", "7004", "7003"], "a collection scrolls its own posts")
+    check([p["id"] for p in after_dark] == ["7006", "7005", "7004", "7003"], "a collection scrolls its own posts")
     check("isn't on imaglr any more" in op_error(plugin, "browse", source="saved", collection="999", blog_id=blog["id"]),
           "a collection that's gone says so")
     # A clean start: whatever an earlier run saved goes, files and all, so the downloads happen again.
@@ -310,6 +310,27 @@ def browse_and_save(stash, plugin, blog):
     synced = stash.gql("""{ findImages(image_filter: {custom_fields: [{field: "imaglr_post_id", modifier: MATCHES_REGEX, value: ["^(7003|7010)$"]}]}) {
         count } }""")["findImages"]["count"]
     check(synced == 2, "both are in Stash, credited")
+
+    print("import a collection")
+    # the fake's "After dark" (301): 7006 (a video, not saved yet), 7005 (nothing to save), 7004 (a reblog of 7000,
+    # saved above as its original) and 7003 (saved by the likes sync)
+    check(plugin.op("collection_status", collection="301") == {"savable": 3, "in_library": 2}, "2 of 3 in the library before")
+    plugin.op("import_collection", collection="301")
+    deadline = time.time() + 300
+    while time.time() < deadline:
+        sync = plugin.op("sync_status")["sync"]
+        if not sync.get("running"):
+            break
+        time.sleep(2)
+    check(sync.get("saved") == 1 and sync.get("known") == 2 and sync.get("skipped") == 1 and not sync.get("error"),
+          f"the missing post saved, the others already there ({sync.get('saved')} saved, {sync.get('known')} known, {sync.get('error')})")
+    check(plugin.op("collection_status", collection="301") == {"savable": 3, "in_library": 3}, "3 of 3 in the library after")
+    tag = stash.gql("""{ findTags(tag_filter: {name: {value: "After dark", modifier: EQUALS}}) { tags { id parents { name } } } }""")["findTags"]["tags"]
+    check(len(tag) == 1 and [p["name"] for p in tag[0]["parents"]] == ["Imaglr Collections"], "the collection's tag sits under Imaglr Collections")
+    tagged = stash.gql("""query($t: [ID!]) { findImages(image_filter: {tags: {value: $t, modifier: INCLUDES}}) { images { custom_fields } }
+        findScenes(scene_filter: {tags: {value: $t, modifier: INCLUDES}}) { scenes { custom_fields } } }""", t=[tag[0]["id"]])
+    posts = sorted(str(x["custom_fields"].get("imaglr_post_id")) for x in tagged["findImages"]["images"] + tagged["findScenes"]["scenes"])
+    check(posts == ["7000", "7003", "7006"], f"new and earlier saves, pictures and the video, all carry it ({posts})")
 
     print("a saved post is reblogged, never uploaded again")
     image_id = stash.gql("""{ findImages(image_filter: {custom_fields: [{field: "imaglr_post_id", modifier: EQUALS, value: ["7000"]}]}) {

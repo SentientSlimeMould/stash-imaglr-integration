@@ -268,7 +268,8 @@ export function Discover({ tab, params, blogs, go }: Props) {
           <PostFeed key={likesKey} source="likes" {...handlers} />
         </div>
       ) : null}
-      {tab === "collections" ? <Collections open={params.get("collection")} feed={handlers} /> : null}
+      {tab === "collections" ? <Collections open={params.get("collection")} feed={handlers} ready={folderReady(setup)}
+        onNeedFolder={(then) => setAfterFolder(() => then)} /> : null}
       {tab === "explore" ? (
         <Explore params={params} recent={recent} following={following} onSearch={search}>
           {creator ? <PostFeed source="creator" name={creator} {...handlers} />
