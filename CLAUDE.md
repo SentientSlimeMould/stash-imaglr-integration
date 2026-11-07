@@ -18,6 +18,10 @@ Instructions for AI coding agents (and a reminder for humans). The owner is the 
   it). No long-lived `dev` branch. Delete the branch after merging.
 - A release is a version bump in `plugins/imaglrIntegration/imaglrIntegration.yml` plus a CHANGELOG entry and a
   `vX.Y.Z` tag on `main`; publishing happens automatically once the tests pass.
+- Every request to imaglr (API calls and media downloads) sends the User-Agent `stash-imaglr-integration/<version>`,
+  the name imaglr support was given: never rename it without the owner. `<version>` is read at runtime from that
+  same `version:` line, so the bump updates the agent too. Never write a version number into the agent or anywhere
+  else in the code; `tests/python/test_app.py` fails if the agent stops following the yml.
 
 ## Always
 
