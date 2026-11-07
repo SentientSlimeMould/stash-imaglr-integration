@@ -11,6 +11,7 @@ import { type ExploreOption, exploreOptions, type ImaglrPost, parseSearch, remem
 import { AutoplayContext, Avatar, PostCard } from "./PostCard.tsx";
 import { folderReady, SaveFolderDialog, type SaveSetup } from "./SaveFolderDialog.tsx";
 import { ReblogDialog } from "./ReblogDialog.tsx";
+import { Collections } from "./Collections.tsx";
 import { LikesSync } from "./LikesSync.tsx";
 import { ReviewDialog } from "./ReviewDialog.tsx";
 import { PostFeed } from "./PostFeed.tsx";
@@ -18,6 +19,7 @@ import { PostFeed } from "./PostFeed.tsx";
 export const DISCOVER_TABS = [
   { key: "feed", title: "Feed" },
   { key: "likes", title: "Likes" },
+  { key: "collections", title: "Collections" },
   { key: "explore", title: "Explore" },
 ] as const;
 export type DiscoverTab = (typeof DISCOVER_TABS)[number]["key"];
@@ -266,6 +268,7 @@ export function Discover({ tab, params, blogs, go }: Props) {
           <PostFeed key={likesKey} source="likes" {...handlers} />
         </div>
       ) : null}
+      {tab === "collections" ? <Collections open={params.get("collection")} feed={handlers} /> : null}
       {tab === "explore" ? (
         <Explore params={params} recent={recent} following={following} onSearch={search}>
           {creator ? <PostFeed source="creator" name={creator} {...handlers} />

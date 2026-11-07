@@ -26,7 +26,7 @@ The API key chooses the scenario (keys look like pbk_<scenario>|anything):
 Tags named "banned" or starting with "banned-" are silently dropped, like imaglr does.
 
 Browsing (for saving posts into Stash): GET /user/feed, /user/likes, /tagged?tag=, /profiles/{name},
-/profiles/{name}/posts, /profiles/{name}/following and /posts/{id} serve a fixed catalogue of made-up posts by made-up creators, paged with
+/profiles/{name}/posts, /profiles/{name}/following, /posts/{id}, /saved, /saved/ids and /saved/collections serve a fixed catalogue of made-up posts by made-up creators, paged with
 a cursor and absolute next links like imaglr's; POST /posts/{id}/repost records a reblog (listed on the index
 page) and POST /posts/{id}/like toggles a like. The posts' pictures, GIFs and videos are served without a key from /media/, like imaglr's CDN; they are
 generated on first request (PNG in pure Python, GIF and MP4 with ffmpeg when it is on PATH).
@@ -56,6 +56,10 @@ REPOSTS = []  # (blog, post id)
 # ---- the browse catalogue -------------------------------------------------------------------------------
 CREATORS = ("sunny-days", "city-lights", "ocean-views", "mountain-trails")
 LIKED = {7000, 7002, 7003, 7010}  # POST /posts/{id}/like toggles membership
+# The test blog's imaglr bookmarks, newest first: 9999 has since been deleted (imaglr keeps its place, post null),
+# 7004 is in two collections, 7006 in none.
+SAVED = [7006, 7004, 9999, 7001, 7003, 7005]
+COLLECTIONS = {300: ("Beach days", [7004, 7001]), 301: ("After dark", [7005, 7004, 7003])}  # id: (name, newest first)
 SPECIAL = {
     # id: (creator, media kinds, tags, caption); everything else follows a pattern below
     7000: ("sunny-days", ["image"], ["sunset", "beach", "imaglr", "Test Performer"], "Golden hour on the shore"),
@@ -368,12 +372,30 @@ class Handler(BaseHTTPRequestHandler):
             if not tag:
                 return self.reply(400, errors=[("tag_required", "Which tag?")])
             posts = [p for p in posts if tag in (t.casefold() for t in p["tags"])]
+        elif path == "/api/v2/saved/ids":
+            return self.reply(200, {"ids": SAVED, "total": len(SAVED), "max": 10000})
+        elif path == "/api/v2/saved/collections":
+            by_id = {p["id"]: p for p in posts}
+            return self.reply(200, {"collections": [
+                {"id": cid, "name": name, "count": len(ids),
+                 "cover": next((by_id[i]["media"][0]["url"] for i in ids if by_id[i]["media"]), None)}
+                for cid, (name, ids) in COLLECTIONS.items()]})
+        elif path == "/api/v2/saved":
+            ids = SAVED
+            if query.get("collection"):
+                if int(query["collection"]) not in COLLECTIONS:
+                    return self.reply(404, errors=[("collection_not_found", "No such collection.")])
+                ids = COLLECTIONS[int(query["collection"])][1]
+            by_id = {p["id"]: p for p in posts}
+            posts = [{"post_id": i, "saved_at": "2026-11-07T12:00:00+00:00", "post": by_id.get(i),
+                      "collection_ids": [c for c, (_, members) in COLLECTIONS.items() if i in members],
+                      **({} if i in by_id else {"unavailable": "deleted"})} for i in ids]
         else:
             return self.not_allowed()
         limit = max(1, min(50, int(query.get("limit") or 20)))
         start = int(query.get("cursor") or 0)
         page = posts[start:start + limit]
-        payload = {"posts": page}
+        payload = {"saved" if path == "/api/v2/saved" else "posts": page}
         if start + limit < len(posts):
             nxt = urllib.parse.urlencode({**{k: v for k, v in query.items() if k != "cursor"}, "cursor": str(start + limit)})
             payload["_links"] = {"next": {"href": f"http://{host}{path}?{nxt}"}}

@@ -53,6 +53,10 @@ ALLOWED_ENDPOINTS: frozenset[tuple[str, str]] = frozenset(
         ("GET", "/profiles/{name}/posts"),
         ("GET", "/profiles/{name}/following"),
         ("GET", "/posts/{id}"),
+        # the user's own imaglr bookmarks and collections, for the Collections tab
+        ("GET", "/saved"),
+        ("GET", "/saved/ids"),
+        ("GET", "/saved/collections"),
         # reblogging a post to one of the user's blogs (instead of re-uploading a saved copy), and liking one
         ("POST", "/posts/{id}/repost"),
         ("POST", "/posts/{id}/like"),
@@ -199,19 +203,25 @@ class ImaglrClient:
                 return route, args, dict(urllib.parse.parse_qsl(link.query, keep_blank_values=True))
         raise DisallowedEndpoint(f"GET {rest} is not permitted")
 
-    def _page(self, route: str, route_args: dict[str, str] | None, query: dict[str, str], next_link: str | None) -> Page:
-        """A page of posts from a list route, or the page `next_link` points at (which must be the same route)."""
+    def _list(self, route: str, route_args: dict[str, str] | None, query: dict[str, str],
+              next_link: str | None) -> tuple[dict[str, Any], str | None]:
+        """One page of a list route, or the page `next_link` points at (which must be the same list): the response,
+        and the next page's link."""
         if next_link:
             linked, args, linked_query = self._route_for(next_link)
             if linked != route or args != (route_args or {}):
                 raise DisallowedEndpoint("that next-page link belongs to another list")
             query = linked_query
         response = self._request("GET", route, route_args, query=query)
-        posts = [p for p in response.get("posts") or [] if isinstance(p, dict) and p.get("id") is not None]
         links = response.get("_links") if isinstance(response.get("_links"), dict) else {}
         nxt = links.get("next") if isinstance(links.get("next"), dict) else {}
         href = nxt.get("href")
-        return Page(posts, href if isinstance(href, str) and href else None)
+        return response, href if isinstance(href, str) and href else None
+
+    def _page(self, route: str, route_args: dict[str, str] | None, query: dict[str, str], next_link: str | None) -> Page:
+        """A page of posts from a list route, or the page `next_link` points at."""
+        response, nxt = self._list(route, route_args, query, next_link)
+        return Page([p for p in response.get("posts") or [] if isinstance(p, dict) and p.get("id") is not None], nxt)
 
     # ---- the permitted operations ----------------------------------------------------------
     def feed(self, next_link: str | None = None, limit: int = PAGE_SIZE) -> Page:
@@ -237,17 +247,25 @@ class ImaglrClient:
 
     def following(self, name: str, next_link: str | None = None, limit: int = 50) -> tuple[list[dict[str, Any]], str | None]:
         """Who a profile follows (the user's own blog, for Explore's suggestions): profiles, and the next page's link."""
-        route, args, query = "/profiles/{name}/following", {"name": name}, {"limit": str(limit)}
-        if next_link:
-            linked, linked_args, query = self._route_for(next_link)
-            if linked != route or linked_args != args:
-                raise DisallowedEndpoint("that next-page link belongs to another list")
-        response = self._request("GET", route, args, query=query)
-        people = [p for p in response.get("following") or [] if isinstance(p, dict) and p.get("name")]
-        links = response.get("_links") if isinstance(response.get("_links"), dict) else {}
-        nxt = links.get("next") if isinstance(links.get("next"), dict) else {}
-        href = nxt.get("href")
-        return people, href if isinstance(href, str) and href else None
+        response, nxt = self._list("/profiles/{name}/following", {"name": name}, {"limit": str(limit)}, next_link)
+        return [p for p in response.get("following") or [] if isinstance(p, dict) and p.get("name")], nxt
+
+    def saved(self, collection: str | None = None, next_link: str | None = None,
+              limit: int = PAGE_SIZE) -> tuple[list[dict[str, Any]], str | None]:
+        """The user's imaglr bookmarks, newest first, or one collection's: entries of {post_id, saved_at,
+        collection_ids, post} (post is None once it's deleted or unavailable), and the next page's link."""
+        query = {"limit": str(limit), **({"collection": collection} if collection else {})}
+        response, nxt = self._list("/saved", None, query, next_link)
+        return [e for e in response.get("saved") or [] if isinstance(e, dict) and e.get("post_id") is not None], nxt
+
+    def saved_ids(self) -> dict[str, Any]:
+        """Every bookmarked post id, newest first, with total and max."""
+        return self._request("GET", "/saved/ids")
+
+    def collections(self) -> list[dict[str, Any]]:
+        """The user's imaglr collections in their own order: {id, name, count, cover}."""
+        response = self._request("GET", "/saved/collections")
+        return [c for c in response.get("collections") or [] if isinstance(c, dict) and c.get("id") is not None]
 
     def post(self, post_id: str | int) -> dict[str, Any]:
         """One post."""

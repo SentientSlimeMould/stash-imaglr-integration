@@ -190,6 +190,15 @@ def browse_and_save(stash, plugin, blog):
     check(plugin.op("save_folder_set", folder="/saved/imaglr")["folder_ok"], "save folder chosen inside /saved")
     check(plugin.op("autoplay", blog_id=blog["id"]) == {"autoplay": False},
           "Discover's autoplay follows the blog's imaglr setting (off on the fake)")
+    found = plugin.op("collections", blog_id=blog["id"])
+    check([c["name"] for c in found["collections"]] == ["Beach days", "After dark"] and found["total"] == 6 and found["cover"],
+          f"Collections lists the blog's imaglr collections ({len(found['collections'])}) and All saved ({found['total']})")
+    everything = plugin.op("browse", source="saved", collection="all", blog_id=blog["id"])["posts"]
+    check([p["id"] for p in everything] == ["7006", "7004", "7001", "7003", "7005"], "All saved scrolls every bookmark, minus a deleted post")
+    after_dark = plugin.op("browse", source="saved", collection="301", blog_id=blog["id"])["posts"]
+    check([p["id"] for p in after_dark] == ["7005", "7004", "7003"], "a collection scrolls its own posts")
+    check("isn't on imaglr any more" in op_error(plugin, "browse", source="saved", collection="999", blog_id=blog["id"]),
+          "a collection that's gone says so")
     # A clean start: whatever an earlier run saved goes, files and all, so the downloads happen again.
     found = stash.gql("""query($f: [CustomFieldCriterionInput!]) {
         findScenes(scene_filter: {custom_fields: $f}) { scenes { id } }

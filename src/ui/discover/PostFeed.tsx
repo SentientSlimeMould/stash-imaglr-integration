@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// A list of imaglr posts that keeps going as you scroll: the feed, your likes, a tag or a creator. The next page
+// A list of imaglr posts that keeps going as you scroll: the feed, your likes, a tag, a creator or a collection. The next page
 // is asked for well before the end, so scrolling doesn't stop. A creator's list opens with their profile.
 import React from "react";
 import { runOperation } from "../api.ts";
@@ -11,6 +11,7 @@ interface Props {
   source: BrowseSource;
   tag?: string;
   name?: string;
+  collection?: string; // "all" or a collection id, for source "saved"
   blogId: number | null;
   saves: Map<string, SaveState>;
   onCreator: (name: string) => void;
@@ -46,7 +47,7 @@ function CreatorHeader({ profile }: { profile: CreatorProfile }) {
   );
 }
 
-export function PostFeed({ source, tag, name, blogId, saves, onCreator, onTag, onSave, onReblog, onLike }: Props) {
+export function PostFeed({ source, tag, name, collection, blogId, saves, onCreator, onTag, onSave, onReblog, onLike }: Props) {
   const { Button } = PluginApi.libraries.Bootstrap;
   const { LoadingIndicator } = PluginApi.components;
   const [posts, setPosts] = React.useState<ImaglrPost[]>([]);
@@ -57,7 +58,7 @@ export function PostFeed({ source, tag, name, blogId, saves, onCreator, onTag, o
   const [ended, setEnded] = React.useState(false);
   const sentinel = React.useRef<HTMLDivElement>(null);
   const busy = React.useRef(false);
-  const key = `${source}|${tag ?? ""}|${name ?? ""}|${blogId ?? ""}`;
+  const key = `${source}|${tag ?? ""}|${name ?? ""}|${collection ?? ""}|${blogId ?? ""}`;
   const current = React.useRef(key);
 
   const load = React.useCallback(async (link: string | null) => {
@@ -66,7 +67,7 @@ export function PostFeed({ source, tag, name, blogId, saves, onCreator, onTag, o
     setLoading(true);
     const asked = key;
     try {
-      const page = await runOperation<BrowsePage>("browse", { source, tag, name, next: link, blog_id: blogId ?? undefined });
+      const page = await runOperation<BrowsePage>("browse", { source, tag, name, collection, next: link, blog_id: blogId ?? undefined });
       if (current.current !== asked) return; // the list changed while this page was on its way
       setPosts((old) => {
         const seen = new Set(old.map((p) => p.id));

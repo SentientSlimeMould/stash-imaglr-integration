@@ -60,7 +60,21 @@ export interface BrowsePage {
   blog: { id: number; name: string | null };
 }
 
-export type BrowseSource = "feed" | "likes" | "tag" | "creator";
+export type BrowseSource = "feed" | "likes" | "tag" | "creator" | "saved";
+
+/** One of the user's imaglr collections (their own bookmarks, grouped on imaglr). */
+export interface ImaglrCollection {
+  id: string;
+  name: string;
+  count: number;
+  cover: string | null; // a picture on imaglr's CDN
+}
+
+export interface CollectionsList {
+  collections: ImaglrCollection[];
+  total: number; // every bookmark, in a collection or not ("All saved")
+  cover: string | null; // the newest bookmark's picture
+}
 
 export const SAVING = ["queued", "downloading", "scanning"];
 

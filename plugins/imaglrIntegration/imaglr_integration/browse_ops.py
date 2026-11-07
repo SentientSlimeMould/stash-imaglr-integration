@@ -20,14 +20,14 @@ from typing import Any
 from . import blogs, import_rules, log, saving
 from .context import Context, UserError, imaglr_base_override
 from .db import now_iso
-from .imaglr import DisallowedEndpoint, ErrorClass, ImaglrError, MediaRefused, classify, fetch_media, media_url_ok
+from .imaglr import DisallowedEndpoint, ErrorClass, ImaglrError, MediaRefused, Page, classify, fetch_media, media_url_ok
 from .settings import PLUGIN_ID, Settings
 from .settings import load as load_settings
 from .stash import StashError, api, library
 from .tags.caption import caption_to_html
 from .tags.pipeline import parse_patterns
 
-SOURCES = ("feed", "likes", "tag", "creator")
+SOURCES = ("feed", "likes", "tag", "creator", "saved")
 PREVIEW_DIR = "_browse"  # under data/prepared, so Stash serves it from the plugin's assets
 PREVIEW_MAX_BYTES = 200 * 1024 * 1024  # bigger videos are opened on imaglr instead
 PREVIEW_CACHE_BYTES = 1024 * 1024 * 1024  # the previews kept, newest first
@@ -72,6 +72,8 @@ def _imaglr_message(e: ImaglrError, blog: dict[str, Any] | None = None, doing: s
         return "That isn't available on imaglr: it may be private or deleted."
     if e.code == "likes_are_private":
         return "That profile doesn't share its likes."
+    if e.code == "collection_not_found":
+        return "That collection isn't on imaglr any more."
     if kind is ErrorClass.AUTH:
         return f"imaglr didn't accept {name}'s key. Check it in the plugin's settings."
     if kind is ErrorClass.SCOPE:
@@ -117,8 +119,9 @@ def _annotate(ctx: Context, posts: list[dict[str, Any]]) -> None:
 
 # ---- browsing ------------------------------------------------------------------------------------------
 def op_browse(ctx: Context) -> dict[str, Any]:
-    """One page of posts: the feed, the user's likes, a tag or a creator. `next` is the link a previous page
-    returned. A creator's first page also carries their profile."""
+    """One page of posts: the feed, the user's likes, a tag, a creator, or the user's imaglr bookmarks (`collection`:
+    one collection's, else all of them). `next` is the link a previous page returned. A creator's first page also
+    carries their profile."""
     blog = _blog(ctx)
     source = ctx.arg("source")
     if source not in SOURCES:
@@ -131,6 +134,9 @@ def op_browse(ctx: Context) -> dict[str, Any]:
             page = client.feed(nxt)
         elif source == "likes":
             page = client.likes(nxt)
+        elif source == "saved":
+            entries, nxt_link = client.saved(_collection_id(ctx), nxt)
+            page = Page([e["post"] for e in entries if isinstance(e.get("post"), dict)], nxt_link)  # gone posts: skipped
         elif source == "tag":
             tag = (ctx.arg("tag") or "").strip().lstrip("#")
             if not tag:
@@ -512,6 +518,52 @@ def op_autoplay(ctx: Context) -> dict[str, Any]:
     return {"autoplay": bool(blog.get("video_autoplay"))}
 
 
+def _collection_id(ctx: Context) -> str | None:
+    value = str(ctx.args.get("collection") or "").strip()
+    if value in ("", "all"):
+        return None
+    if not value.isdigit():
+        raise UserError("That isn't an imaglr collection.")
+    return value
+
+
+COVER_LOOKAHEAD = 5  # newest bookmarks looked through for All saved's cover
+
+
+def _cover(url: Any) -> str | None:
+    return url if isinstance(url, str) and media_url_ok(url, _extra_host()) else None
+
+
+def _post_cover(post: Any) -> str | None:
+    """A picture for a post's card: its first picture, or a video's thumbnail."""
+    media = post.get("media") if isinstance(post, dict) else None
+    for m in media if isinstance(media, list) else []:
+        if not isinstance(m, dict):
+            continue
+        picture = _cover(m.get("thumb")) or (_cover(m.get("url")) if m.get("kind") == "image" else None)
+        if picture:
+            return picture
+    return None
+
+
+def op_collections(ctx: Context) -> dict[str, Any]:
+    """The browsing blog's imaglr collections, in its own order ({id, name, count, cover}), and "All saved": how
+    many posts it has bookmarked in all, with the newest bookmarked picture as its cover (a video often has none)."""
+    blog = _blog(ctx)
+    client = ctx.imaglr(blog)
+    try:
+        found = client.collections()
+        total = client.saved_ids().get("total")
+        newest, _ = client.saved(limit=COVER_LOOKAHEAD) if total else ([], None)
+    except ImaglrError as e:
+        raise UserError(_imaglr_message(e, blog)) from None
+    collections = [{"id": str(c["id"]), "name": str(c.get("name") or "Untitled"),
+                    "count": c.get("count") if isinstance(c.get("count"), int) else 0, "cover": _cover(c.get("cover"))}
+                   for c in found]
+    return {"collections": collections, "total": total if isinstance(total, int) else 0,
+            "cover": next(filter(None, (_post_cover(e.get("post")) for e in newest)), None)}
+
+
 FOLLOWING_PAGES = 5  # up to 250 creators, for suggestions
 FOLLOWING_FRESH = timedelta(hours=1)
 
@@ -619,6 +671,7 @@ OPERATIONS = {
     "save_review": op_save_review,
     "save_post": op_save_post,
     "following": op_following,
+    "collections": op_collections,
     "autoplay": op_autoplay,
     "import_rule_list": op_import_rule_list,
     "import_rule_delete": op_import_rule_delete,
