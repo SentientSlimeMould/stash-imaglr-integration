@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 — 2026-11-08
 
 - **Collections.** Discover has a Collections tab: your imaglr collections as cards, with All saved (every bookmark)
   first. Tap one to scroll its posts, with Save, Reblog and Like as everywhere else. **Import to library** brings a
