@@ -136,6 +136,12 @@ function VideoMedia({ media, postUrl }: { media: PostMedia; postUrl: string | nu
   );
 }
 
+/** A picture's address for the page: imaglr's own (https, straight from its CDN), or the development fake's
+ *  through the plugin, since the browser can't reach its Docker address. */
+export function pictureSrc(url: string): Promise<string> {
+  return url.startsWith("https://") ? Promise.resolve(url) : previewSrc(url);
+}
+
 function PictureMedia({ media, postUrl }: { media: PostMedia; postUrl: string | null }) {
   // imaglr's pictures load straight from its CDN. Only the development fake serves plain http on a Docker
   // address the browser can't reach, so its pictures come through the plugin like videos do.

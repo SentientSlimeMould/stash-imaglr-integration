@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- **Collections.** Discover has a Collections tab: your imaglr collections as cards, with All saved (every bookmark)
+  first. Tap one to scroll its posts, with Save, Reblog and Like as everywhere else. **Import to library** brings a
+  collection into Stash: it saves every post that isn't in your library yet, credited, using your import rules and
+  exact matches, and tags every post of the collection in your library, new or saved before, with the
+  collection's name under a parent tag *Imaglr Collections* (an existing Stash tag with that name or alias is used
+  as it is). Import again any time to bring it up to date; the collection shows how much of it is in your library.
+  It runs as a Stash task with progress and Stop, one import or likes sync at a time. The plugin only reads your
+  bookmarks: it never saves, unsaves or changes collections on imaglr.
+
 ## 1.1.0 — 2026-11-07
 
 - **Autoplay follows your imaglr setting.** Videos in Discover play on their own as you scroll when Video autoplay

@@ -1,13 +1,15 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """What saving from imaglr asks of Stash: its library folders and scan defaults, scanning saved files in, finding
 them again by path or by the imaglr post they came from, writing the credit onto them, grouping a post's files
-as a gallery, and matching imaglr tags to Stash tags, performers and studios by name or alias."""
+as a gallery, matching imaglr tags to Stash tags, performers and studios by name or alias, and filing an imported
+collection under its own tag."""
 
 from __future__ import annotations
 
 from typing import Any
 
 from .. import saving
+from . import api
 from .client import StashClient
 
 LIBRARY = """
@@ -60,6 +62,13 @@ TOP_TAGS = """
 { scenes: findTags(filter: { sort: "scenes_count", direction: DESC, per_page: 15 }) { tags { id name } }
   images: findTags(filter: { sort: "images_count", direction: DESC, per_page: 15 }) { tags { id name } } }
 """
+COLLECTIONS_PARENT = "Imaglr Collections"  # the tag every imported collection's own tag sits under (owner's choice)
+TAG_UNDER = "mutation($name: String!, $parent: ID!) { tagCreate(input: { name: $name, parent_ids: [$parent] }) { id } }"
+ADD_TAG = {  # adds the tag and leaves every other tag where it is
+    "scene": "mutation($ids: [ID!], $t: [ID!]) { bulkSceneUpdate(input: { ids: $ids, tag_ids: { ids: $t, mode: ADD } }) { id } }",
+    "image": "mutation($ids: [ID!], $t: [ID!]) { bulkImageUpdate(input: { ids: $ids, tag_ids: { ids: $t, mode: ADD } }) { id } }",
+    "gallery": "mutation($ids: [ID!], $t: [ID!]) { bulkGalleryUpdate(input: { ids: $ids, tag_ids: { ids: $t, mode: ADD } }) { id } }",
+}
 PLUGIN_CONFIG = "query($id: ID!) { configuration { plugins(include: [$id]) } }"
 CONFIGURE_PLUGIN = "mutation($id: ID!, $input: Map!) { configurePlugin(plugin_id: $id, input: $input) }"
 
@@ -178,6 +187,25 @@ def search(client: StashClient, text: str) -> list[dict[str, str]]:
     out += [{"kind": "performer", "id": str(x["id"]), "name": x["name"]} for x in data["findPerformers"]["performers"]]
     out += [{"kind": "studio", "id": str(x["id"]), "name": x["name"]} for x in data["findStudios"]["studios"]]
     return out
+
+
+def collection_tag(client: StashClient, name: str) -> str:
+    """The Stash tag an imported collection is filed under: an existing tag with that name or alias, exactly as it
+    is (so naming a tag's alias after a collection files the collection there), else a new tag under
+    "Imaglr Collections"."""
+    found = api.find_tag_exact(client, name)
+    if found:
+        return found.id
+    parent = api.ensure_tag(client, COLLECTIONS_PARENT)
+    return str(client.gql(TAG_UNDER, {"name": name, "parent": parent.id})["tagCreate"]["id"])
+
+
+def add_tag(client: StashClient, refs: list[dict[str, str]], tag_id: str) -> None:
+    """Add one tag to saved scenes, images and galleries, a kind at a time."""
+    for kind, query in ADD_TAG.items():
+        ids = sorted({r["id"] for r in refs if r.get("kind") == kind})
+        if ids:
+            client.gql(query, {"ids": ids, "t": [tag_id]})
 
 
 def plugin_config(client: StashClient, plugin_id: str) -> dict[str, Any]:

@@ -9,7 +9,7 @@ export interface GridItem {
   id: string;
   title: string;
   url: string; // where the card links (its editor / details)
-  thumb: string | null; // relative to Stash's base URL
+  thumb: string | null; // relative to Stash's base URL; one starting "/" or "http" is used as it is (an imaglr collection's cover)
   thumbFallback?: string | null; // shown if the thumbnail can't load (e.g. a sent clip whose marker is gone)
   preview?: string | null; // plays on hover (desktop) if set
   portrait?: boolean;
@@ -49,7 +49,7 @@ export function ThumbImg({ src, fallback, className }: { src: string | null; fal
   React.useEffect(() => setCurrent(src), [src, fallback]);
   if (!current) return null;
   return (
-    <img className={className} src={baseUrl() + current} alt="" loading="lazy"
+    <img className={className} src={/^(https?:\/)?\//.test(current) ? current : baseUrl() + current} alt="" loading="lazy"
       onError={() => setCurrent(fallback && current !== fallback ? fallback : null)} />
   );
 }

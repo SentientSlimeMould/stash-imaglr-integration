@@ -649,6 +649,14 @@
 .imaglr-explore-title {
   margin-bottom: 1rem;
 }
+.imaglr-collection-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  max-width: 640px;
+  margin: 0 auto 1rem;
+}
 @media (max-width: 575.98px) {
   .imaglr-tab-content .imaglr-post,
   .imaglr-tab-content .imaglr-creator {

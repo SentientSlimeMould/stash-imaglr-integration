@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Sync likes: reading likes page by page, saving what isn't in the library, stopping where an earlier sync got to,
-honouring Stop and imaglr's rate limits; Stash and imaglr stubbed (the real round trip runs in dev/e2e.py)."""
+"""Sync likes and import collections: reading page by page, saving what isn't in the library, stopping where an
+earlier likes sync got to, tagging a collection, honouring Stop and imaglr's rate limits; Stash and imaglr stubbed
+(the real round trip runs in dev/e2e.py)."""
 
 import json
 import os
@@ -33,7 +34,7 @@ class SyncStash(FakeStash):
         return super().gql(query, variables)
 
 
-class SyncTest(Harness):
+class SyncHarness(Harness):
     def setUp(self):
         super().setUp()
         self.stash = SyncStash(self.stash.settings)
@@ -61,6 +62,8 @@ class SyncTest(Harness):
     def state(self):
         return json.loads(self.db.kv_get(likes_sync.STATE_KEY) or "{}")
 
+
+class SyncTest(SyncHarness):
     def test_needs_a_folder_and_starts_a_task(self):
         self.stash.settings = {}
         with self.assertRaises(UserError):
@@ -135,6 +138,124 @@ class SyncTest(Harness):
         st = self.run_op("sync_status")["sync"]
         self.assertFalse(st["running"])
         self.assertIn("Stopped", st["error"])
+
+
+
+def saved(*posts, gone=0):
+    """A page of bookmarks: entries for these posts, then `gone` entries whose post was deleted."""
+    return [{"post_id": p["id"], "collection_ids": [3], "post": p} for p in posts] + \
+        [{"post_id": 90 + n, "collection_ids": [3], "post": None, "unavailable": "deleted"} for n in range(gone)]
+
+
+class CollectionImportTest(SyncHarness):
+    def setUp(self):
+        super().setUp()
+        self.client.collections = lambda: [{"id": 3, "name": "Beach days", "count": 5}]
+        self.collection_pages = {}
+        self.client.saved = lambda collection=None, nxt=None, limit=20: (self.collection_pages[(collection, nxt)])
+        self.tagged = []
+        for p in (mock.patch.object(library, "collection_tag", lambda s, name: f"tag:{name}"),
+                  mock.patch.object(library, "add_tag", lambda s, refs, tag: self.tagged.append((tag, sorted(r["id"] for r in refs))))):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def test_brings_a_collection_up_to_date_and_tags_all_of_it(self):
+        self.collection_pages = {("3", None): (saved(post(1), post(2, media=False), post(3), gone=1), "p2"),
+                                 ("3", "p2"): (saved(post(4)), None)}
+        self.refs = {"3": [{"kind": "image", "id": "30"}]}  # saved before, by hand or a likes sync
+        out = self.run_op("import_collection", collection="3")["sync"]
+        self.assertEqual((out["source"], out["collection_name"]), ("collection", "Beach days"))
+        self.assertEqual(self.stash.tasks[-1], {"mode": "task_sync_likes"})
+        with mock.patch.object(likes_sync, "SYNC_KNOWN_RUN", 1):  # no early stop for a collection: every page is read
+            self.run_op("task_sync_likes")
+        st = self.state()
+        self.assertEqual((st["seen"], st["new"], st["known"], st["skipped"], st["gone"]), (4, 2, 1, 1, 1))
+        apply = self.stash.tasks[-1]
+        self.assertEqual(sorted(apply["post_ids"].split(",")), ["1", "4"])
+
+        def credited(ctx, pid):
+            browse_ops._save_update(ctx, pid, status="done", refs=json.dumps([{"kind": "image", "id": f"{pid}0"}]))
+            return "done"
+        with mock.patch.object(browse_ops, "apply_one", credited):
+            self.run_op("task_sync_apply", post_ids=apply["post_ids"])
+        self.assertEqual(self.tagged, [("tag:Beach days", ["10", "30", "40"])])  # new and old alike
+        self.assertEqual((self.state()["running"], self.state()["saved"]), (False, 2))
+
+    def test_nothing_new_still_tags_what_is_there(self):
+        self.collection_pages = {("3", None): (saved(post(3)), None)}
+        self.refs = {"3": [{"kind": "scene", "id": "7"}, {"kind": "gallery", "id": "8"}]}
+        self.run_op("import_collection", collection="3")
+        self.run_op("task_sync_likes")
+        self.assertEqual(self.tagged, [("tag:Beach days", ["7", "8"])])
+        self.assertEqual((self.state()["running"], self.state()["phase"]), (False, "done"))
+        self.assertEqual(len(self.scans), 0)
+
+    def test_all_saved_has_no_tag(self):
+        self.collection_pages = {(None, None): (saved(post(3)), None)}
+        self.refs = {"3": [{"kind": "image", "id": "30"}]}
+        out = self.run_op("import_collection", collection="all")["sync"]
+        self.assertEqual(out["collection_name"], "All saved")
+        self.run_op("task_sync_likes")
+        self.assertEqual(self.tagged, [])
+
+    def test_one_run_at_a_time_and_a_gone_collection(self):
+        with self.assertRaises(UserError) as caught:
+            self.run_op("import_collection", collection="9")
+        self.assertIn("isn't on imaglr any more", str(caught.exception))
+        out = self.run_op("import_collection", collection="3")["sync"]
+        self.stash.jobs = [out["job_id"]]
+        with self.assertRaises(UserError) as caught:
+            self.run_op("sync_likes")
+        self.assertIn("Beach days", str(caught.exception))
+
+    def test_status_counts_what_can_be_saved(self):
+        self.collection_pages = {("3", None): (saved(post(1), post(2, media=False), post(3), post(4, reblog_of=500), gone=1), None)}
+        self.refs = {"3": [{"kind": "image", "id": "30"}], "500": [{"kind": "image", "id": "50"}]}  # a reblog is saved as its original
+        self.assertEqual(self.run_op("collection_status", collection="3"), {"savable": 3, "in_library": 2})
+        with mock.patch.object(likes_sync, "STATUS_PAGES", 1):
+            self.collection_pages = {("3", None): (saved(post(1)), "p2")}
+            self.assertEqual(self.run_op("collection_status", collection="3"), {"savable": None, "in_library": None})
+
+
+class CollectionTagTest(unittest.TestCase):
+    """library.collection_tag and add_tag against a recording Stash client."""
+
+    class Client:
+        def __init__(self, tags):
+            self.tags, self.calls = tags, []
+
+        def gql(self, query, variables=None):
+            self.calls.append((query, variables))
+            if "findTags" in query:
+                return {"findTags": {"tags": self.tags}}
+            if "tagCreate" in query:
+                tag = {"id": str(100 + len(self.tags)), "name": variables["name"], "aliases": []}
+                self.tags.append(tag)
+                return {"tagCreate": tag}
+            return {}
+
+    def test_an_existing_tag_or_alias_is_used_as_it_is(self):
+        client = self.Client([{"id": "5", "name": "Seaside", "aliases": ["Beach days"]}])
+        self.assertEqual(library.collection_tag(client, "beach days"), "5")
+        self.assertFalse(any("tagCreate" in q for q, _ in client.calls))
+
+    def test_a_new_tag_goes_under_imaglr_collections(self):
+        client = self.Client([])
+        tag = library.collection_tag(client, "Beach days")
+        created = [v for q, v in client.calls if "tagCreate" in q]
+        self.assertEqual(created[0], {"name": "Imaglr Collections"})
+        parent = client.tags[0]["id"]
+        self.assertEqual(created[1], {"name": "Beach days", "parent": parent})
+        self.assertEqual(tag, client.tags[1]["id"])
+
+    def test_add_tag_adds_a_kind_at_a_time(self):
+        client = self.Client([])
+        library.add_tag(client, [{"kind": "image", "id": "2"}, {"kind": "scene", "id": "1"}, {"kind": "image", "id": "2"},
+                                 {"kind": "gallery", "id": "3"}], "9")
+        sent = [(q.split("(input")[0].split()[-1], v) for q, v in client.calls]
+        self.assertEqual(sent, [("bulkSceneUpdate", {"ids": ["1"], "t": ["9"]}), ("bulkImageUpdate", {"ids": ["2"], "t": ["9"]}),
+                                ("bulkGalleryUpdate", {"ids": ["3"], "t": ["9"]})])
+        self.assertTrue(all("mode: ADD" in q for q, _ in client.calls))
 
 
 if __name__ == "__main__":

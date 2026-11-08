@@ -53,6 +53,25 @@ class ReadingTest(unittest.TestCase):
             self.client.likes(f"{self.server.base_url}/user/feed?cursor=x")  # another list
         self.assertEqual(self.server.requests, [])
 
+    def test_bookmarks_and_collections(self):
+        nxt = f"{self.server.base_url}/saved?limit=20&collection=7&cursor=abc"
+        self.server.reply(body=envelope({"saved": [{"post_id": 5, "collection_ids": [7], "post": {"id": 5}},
+                                                   {"post_id": 6, "post": None, "unavailable": "deleted"}, {"no": "id"}],
+                                         "_links": {"next": {"href": nxt}}}))
+        entries, link = self.client.saved("7")
+        self.assertEqual([e["post_id"] for e in entries], [5, 6])  # an entry without a post id is dropped
+        self.assertEqual(link, nxt)
+        self.client.saved("7", link)
+        with self.assertRaises(DisallowedEndpoint):
+            self.client.saved(None, f"{self.server.base_url}/user/likes?cursor=x")  # another list
+        self.server.reply(body=envelope({"collections": [{"id": 7, "name": "Beach"}, {"name": "no id"}]}))
+        self.assertEqual(self.client.collections(), [{"id": 7, "name": "Beach"}])
+        self.server.reply(body=envelope({"ids": [5], "total": 1, "max": 10000}))
+        self.assertEqual(self.client.saved_ids()["total"], 1)
+        paths = [r["path"] for r in self.server.requests]
+        self.assertEqual(paths[0], "/api/v2/saved?limit=20&collection=7")
+        self.assertEqual(paths[2:], ["/api/v2/saved/collections", "/api/v2/saved/ids"])
+
     def test_reblog(self):
         self.server.reply(201, envelope({"post": {"id": 9}}))
         self.client.repost("123")

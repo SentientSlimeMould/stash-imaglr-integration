@@ -99,3 +99,15 @@ test("the likes sync says what it's doing and what it did", async () => {
   assert.match(syncSummary({ finished_at: new Date(Date.now() - 2 * 3600e3).toISOString(), saved: 1 }), /^Last sync 2 h ago: /);
   assert.match(syncSummary({ finished_at: "2020-10-03T12:00:00Z", saved: 1 }), /^Last sync on 3 Oct 2020: /);
 });
+
+test("a collection import says what it's doing and what it did", async () => {
+  const { libraryCount, syncSummary } = await import("../../src/ui/lib/posts.ts");
+  assert.equal(syncSummary({ running: true, phase: "reading", source: "collection", collection_name: "Beach days", seen: 50, new: 3 }),
+    "Importing Beach days: 50 read, 3 new");
+  assert.match(syncSummary({ source: "collection", finished_at: new Date().toISOString(), saved: 11, known: 31, gone: 1 }),
+    /^Last import just now: 11 saved, 31 already in your library, 1 no longer on imaglr\.$/);
+  assert.equal(libraryCount(42, 31), "31 of 42 in your library");
+  assert.equal(libraryCount(42, 42), "All in your library"); // no number: a text post would make "All 41" of 42 look wrong
+  assert.equal(libraryCount(null, null), ""); // too big to count
+  assert.equal(libraryCount(0, 0), ""); // only text posts
+});

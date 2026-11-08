@@ -23,10 +23,12 @@ from tests.python.test_imaglr_client import FakeImaglr
 ALLOWED_ROUTES = {"/user/info", "/user/limits", "/drafts", "/drafts/{id}/publish", "/drafts/{id}/queue",
                   "/uploads", "/uploads/{id}/chunks/{index}", "/uploads/{id}/complete", "/uploads/{id}",
                   "/user/feed", "/user/likes", "/tagged", "/profiles/{name}", "/profiles/{name}/posts", "/profiles/{name}/following", "/posts/{id}",
-                  "/posts/{id}/repost", "/posts/{id}/like"}
+                  "/posts/{id}/repost", "/posts/{id}/like", "/saved", "/saved/ids", "/saved/collections"}
 FORBIDDEN = [
     "/schedule", "/settings", "/reorder", "/pages", "/submissions", "/accept", "/delete", "/follow\"", "/followers",
     "/blocks", "/muted", "/filtered-tags", "/draft\"", "/queue/", "PATCH", "\"DELETE\", \"/posts",
+    # imaglr's bookmarks are only read: the plugin never saves, unsaves or edits collections there
+    "\"POST\", \"/saved", "\"PUT\", \"/saved", "\"DELETE\", \"/saved",
 ]
 
 
@@ -54,6 +56,9 @@ class AllowlistTest(unittest.TestCase):
                     ("GET", "/posts/{id}"),
                     ("POST", "/posts/{id}/repost"),
                     ("POST", "/posts/{id}/like"),
+                    ("GET", "/saved"),
+                    ("GET", "/saved/ids"),
+                    ("GET", "/saved/collections"),
                 }
             ),
         )
@@ -87,7 +92,8 @@ class AllowlistTest(unittest.TestCase):
     def test_public_methods_are_the_permitted_operations(self):
         public = {n for n, v in vars(ImaglrClient).items() if callable(v) and not n.startswith("_")}
         self.assertEqual(public, {"user_info", "user_limits", "create_draft", "publish_draft", "queue_draft", "upload_in_pieces",
-                                  "feed", "likes", "tagged", "profile", "profile_posts", "following", "post", "repost", "like"})
+                                  "feed", "likes", "tagged", "profile", "profile_posts", "following", "post", "repost", "like",
+                                  "saved", "saved_ids", "collections"})
 
     def test_only_client_module_knows_the_api_url(self):
         root = os.path.dirname(os.path.dirname(os.path.abspath(mod.__file__)))

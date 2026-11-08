@@ -67,6 +67,20 @@ class FakeClient:
         self._call("profile_posts", name, nxt)
         return Page([], None)
 
+    def saved(self, collection=None, nxt=None, limit=20):
+        self._call("saved", collection, nxt)
+        entries = [{"post_id": int(i), "collection_ids": [3], "post": p} for i, p in self.posts.items()]
+        return entries + [{"post_id": 1, "collection_ids": [], "post": None, "unavailable": "deleted"}], None
+
+    def collections(self):
+        self._call("collections")
+        return [{"id": 3, "name": "Beach", "count": 2, "cover": "https://cdn03.imaglr.com/c.jpg"},
+                {"id": 4, "name": None, "count": None, "cover": "https://elsewhere.example/c.jpg"}]
+
+    def saved_ids(self):
+        self._call("saved_ids")
+        return {"ids": [7000, 7001, 1], "total": 3, "max": 10000}
+
     def post(self, post_id):
         self._call("post", post_id)
         return self.posts[str(post_id)]
@@ -131,6 +145,30 @@ class BrowseTest(Harness):
         self.assertEqual([c[0] for c in self.client.calls].count("profile"), 1)
         self.run_op("browse", source="tag", tag="#sunset")
         self.assertIn(("tagged", "sunset", None), self.client.calls)
+
+    def test_imaglr_bookmarks_all_or_one_collection(self):
+        page = self.run_op("browse", source="saved", collection="all")
+        self.assertEqual([p["id"] for p in page["posts"]], ["7000", "7002"])  # a deleted post is left out
+        self.run_op("browse", source="saved", collection="3")
+        self.assertEqual([c for c in self.client.calls if c[0] == "saved"], [("saved", None, None), ("saved", "3", None)])
+        with self.assertRaises(UserError):
+            self.run_op("browse", source="saved", collection="../likes")
+
+    def test_collections_list(self):
+        found = self.run_op("collections")
+        self.assertEqual(found["total"], 3)
+        self.assertEqual(found["cover"], self.client.posts["7000"]["media"][0]["url"])  # the newest bookmarked picture
+        video = dict(POST, id=6999, media=[{"url": "https://cdn03.imaglr.com/v.mp4", "kind": "video", "thumb": None}])
+        self.client.posts = {"6999": video, **self.client.posts}
+        self.assertEqual(self.run_op("collections")["cover"], "https://cdn03.imaglr.com/a.jpg")  # a video without a thumbnail is passed over
+        self.assertEqual(found["collections"], [
+            {"id": "3", "name": "Beach", "count": 2, "cover": "https://cdn03.imaglr.com/c.jpg"},
+            {"id": "4", "name": "Untitled", "count": 0, "cover": None},  # a cover from anywhere but imaglr isn't shown
+        ])
+        self.client.error = ImaglrError("collection_not_found")
+        with self.assertRaises(UserError) as caught:
+            self.run_op("browse", source="saved", collection="9")
+        self.assertIn("isn't on imaglr any more", str(caught.exception))
 
     def test_problems_read_well(self):
         with self.assertRaises(UserError):
