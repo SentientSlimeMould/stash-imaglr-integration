@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.1 — 2026-11-08
 
 - **Stash 0.32 (React 18).** Tested on Stash 0.32, whose interface moved to React 18, and still on 0.31: nothing in
   the plugin changes (the plugin file is identical to 1.2.0's). Every page and its dialogs, the editor, likes,
