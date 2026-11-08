@@ -117,6 +117,22 @@ async function click(selector, text = "") {
     return (dialog ? dialog + ' > ' : '') + (el.textContent.trim().slice(0, 40) || el.tagName.toLowerCase()); // never empty: "" would retry
   })()`);
 }
+/** Clicks a footer button of the open dialog whose title starts with `title`, never another dialog's (a fresh
+ *  Stash shows dialogs of its own). */
+const isDialog = (which) => which.startsWith(".")
+  ? `((m) => !!m.querySelector(${JSON.stringify(which)}) || m.matches(${JSON.stringify(which)}))`
+  : `((m) => (m.querySelector('.modal-title')?.textContent || '').startsWith(${JSON.stringify(which)}))`;
+async function clickIn(title, button) {
+  return waitFor(`"${button}" in "${title}"`, `(() => {
+    const dialog = [...document.querySelectorAll('.modal.show')].find(${isDialog(title)});
+    const el = dialog && [...dialog.querySelectorAll('.modal-footer button')]
+      .find((e) => e.textContent.includes(${JSON.stringify(button)}) && !e.disabled);
+    if (el) { el.click(); return true; }
+  })()`);
+}
+/** Waits until no dialog with that title (prefix) is open. */
+const closed = (title) => waitFor(`"${title}" to close`, `![...document.querySelectorAll('.modal.show')].some(${isDialog(title)})`, 5000);
+const opened = (title, timeout) => waitFor(`"${title}"`, `[...document.querySelectorAll('.modal.show')].some(${isDialog(title)})`, timeout);
 const count = (selector) => js(`document.querySelectorAll(${JSON.stringify(selector)}).length`);
 /** Stash's own GraphQL, for test data. */
 async function gql(query, variables = {}) {
@@ -144,12 +160,6 @@ async function queueSome() {
   return async () => { for (const u of undo) await u(); };
 }
 const modalTitle = () => js("[...document.querySelectorAll('.modal.show .modal-title')].map((e) => e.textContent).join(' | ')");
-const noModal = () => waitFor("the dialog to close", "!document.querySelector('.modal.show')", 5000).catch(async (e) => {
-  const open = await js(`JSON.stringify([...document.querySelectorAll('.modal')].map((m) => ({ cls: m.className,
-    title: m.querySelector('.modal-title')?.textContent, buttons: [...m.querySelectorAll('button')].map((b) => b.textContent.trim() + (b.disabled ? ' (disabled)' : '')),
-    text: m.textContent.slice(0, 300) })))`);
-  throw new Error(`${e.message}; still open: ${open}`);
-});
 
 // --- the checks --------------------------------------------------------------------------------------------------
 
@@ -202,12 +212,16 @@ try {
   await pages(1280);
 
   console.log("interactions");
+  await open(`${ROUTE}?tab=clips`);
+  await sleep(1500);
+  const foreign = await js("[...document.querySelectorAll('.modal.show')].map((m) => m.textContent.slice(0, 120)).join(' | ')");
+  if (foreign) console.log(`  (a dialog that isn't the plugin's is open: ${foreign})`);
   await check("Settings opens and closes", async () => {
     await open(`${ROUTE}?tab=clips`);
     await click(".imaglr-page-header button", "Settings");
-    await waitFor("the settings dialog", "document.querySelector('.modal.show .modal-title')?.textContent === 'imaglr settings'");
-    const hit = await click(".modal.show .modal-footer button", "Close");
-    await noModal().catch((e) => { throw new Error(`clicked "${hit}"; ${e.message}`); });
+    await opened("imaglr settings");
+    await clickIn("imaglr settings", "Close");
+    await closed("imaglr settings");
   });
   for (const tab of ["clips", "images"]) {
     await check(`the ${tab} editor opens from a card and cancels`, async () => {
@@ -215,10 +229,10 @@ try {
       await click(".imaglr-grid-card a[href*='open=']").catch(async (e) => {
         throw new Error(`${e.message}; on ${await js("location.href")}, cards: ${await js("JSON.stringify([...document.querySelectorAll('.imaglr-grid-card a')].map((a) => [a.getAttribute('href'), a.offsetParent !== null]))")}`);
       });
-      await waitFor("the editor", "!!document.querySelector('.modal.show.imaglr-editor, .modal.show .imaglr-editor, .imaglr-editor .modal-body')");
+      await opened(".imaglr-editor-footer"); // the editor (Settings shares its dialog class, not its footer)
       if (tab === "clips") await waitFor("the clip's video", "!!document.querySelector('.imaglr-editor video')");
-      await click(".modal.show .modal-footer button", "Cancel");
-      await noModal();
+      await clickIn(".imaglr-editor-footer", "Cancel");
+      await closed(".imaglr-editor-footer");
     });
   }
   await check("the feed loads more as you scroll", async () => {
@@ -242,30 +256,28 @@ try {
   await check("Save opens the review and cancels", async () => {
     await open(`${ROUTE}?tab=feed`);
     await click(".imaglr-post-actions button", "Save");
-    await waitFor("the review", "document.querySelector('.modal.show .modal-title')?.textContent === 'Save to your library'");
-    await waitFor("its tag rows", "!document.querySelector('.modal.show .modal-footer .btn-primary').disabled");
-    await click(".modal.show .modal-footer button", "Cancel");
-    await noModal();
+    await opened("Save to your library");
+    await waitFor("its tag rows", "!document.querySelector('.modal.show.imaglr-review .modal-footer .btn-primary')?.disabled");
+    await clickIn("Save to your library", "Cancel");
+    await closed("Save to your library");
   });
   await check("Sync likes asks first and cancels", async () => {
     await open(`${ROUTE}?tab=likes`);
     // After the posts, as a person would: tapped before the page has its save folder, it asks for one.
     await waitFor("the likes", "!!document.querySelector('.imaglr-post')");
     await click(".imaglr-sync button", "Sync likes");
-    await waitFor("a dialog", "!!document.querySelector('.modal.show .modal-title')");
-    if ((await modalTitle()) !== "Sync your likes") throw new Error(`the dialog was "${await modalTitle()}"`);
-    await click(".modal.show .modal-footer button", "Cancel");
-    await noModal();
+    await opened("Sync your likes").catch(async (e) => { throw new Error(`${e.message}; open: "${await modalTitle()}"`); });
+    await clickIn("Sync your likes", "Cancel");
+    await closed("Sync your likes");
   });
   await check("a collection imports, with progress and a toast", async () => {
     await open(`${ROUTE}?tab=collections`);
     await click(".imaglr-grid-card a", "After dark");
     await waitFor("its posts", "!!document.querySelector('.imaglr-post')");
     await click(".imaglr-sync button", "Import to library");
-    await waitFor("the question", "(document.querySelector('.modal.show .modal-title')?.textContent || '').startsWith('Import ')");
-    if (!(await modalTitle()).includes("After dark")) throw new Error(`asked about ${await modalTitle()}`);
-    await click(".modal.show .modal-footer button", "Import");
-    await noModal();
+    await opened("Import After dark");
+    await clickIn("Import After dark", "Import");
+    await closed("Import After dark");
     await waitFor("the toast when it ends", "/Last import|import/i.test(document.querySelector('.toast')?.textContent || '')", 60000);
     await waitFor("the count afterwards", "/All in your library|in your library/.test(document.querySelector('.imaglr-sync')?.textContent || '')");
     await waitFor("the button back", "!!document.querySelector('.imaglr-sync button.btn-primary')");
