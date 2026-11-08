@@ -1,15 +1,16 @@
 # Local test environment
 
-Two out-of-the-box Stash containers for developing and testing the plugin, plus synthetic test media.
+Three out-of-the-box Stash containers for developing and testing the plugin, plus synthetic test media.
 Needs Docker (Docker Desktop on macOS/Windows). All commands run from this `dev/` folder.
 
 | Instance | Image | URL |
 |---|---|---|
 | `stash-v0311` | `stashapp/stash:v0.31.1` (oldest supported) | http://127.0.0.1:9931 |
+| `stash-v0320` | `stashapp/stash:v0.32.0` (first with React 18) | http://127.0.0.1:9934 |
 | `stash-dev` | `stashapp/stash:development` | http://127.0.0.1:9932 |
 
 Stash's databases, generated files and the test media live in Docker volumes, never in the repo folder
-(SQLite must not sit on a network share). The plugin is mounted read-only into both instances from a copy on
+(SQLite must not sit on a network share). The plugin is mounted read-only into every instance from a copy on
 this computer's own disk (`~/.imaglr-dev/plugin`, or `$IMAGLR_DEV_PLUGIN`), with its `data/` subfolder overlaid
 by a per-instance volume. After a code change run **`npm run dev`** (build + copy), then
 **Settings → Plugins → Reload plugins** in Stash. (Mounting the repo folder directly is unreliable when the repo
@@ -24,14 +25,16 @@ docker compose run --rm make-media             # synthetic test media (≈25 MB)
 docker compose up -d
 python3 seed.py 9931 setup                     # first-run setup, scan, generate, sample metadata
 python3 seed.py 9932 setup
+python3 seed.py 9934 setup
 python3 seed.py 9931 saving                    # a writable /saved library for posts saved from imaglr
 python3 seed.py 9932 saving
+python3 seed.py 9934 saving
 ```
 
 ## Everyday use
 
 ```sh
-docker compose up -d / docker compose stop     # start / stop both instances
+docker compose up -d / docker compose stop     # start / stop the instances
 python3 seed.py 9931 auth on                   # require login: dev / dev-password
 python3 seed.py 9931 auth off                  # back to no login
 python3 seed.py 9931 status                    # version, setup state, login on or off
@@ -101,9 +104,13 @@ npm test                    # UI unit tests (node:test, tests/js)
 npm run test:py             # Python unit tests (tests/python)
 npm run test:py:stash       # the same inside stashapp/stash:v0.31.1 (needs Docker; real ffmpeg)
 python3 dev/e2e.py 9931     # end to end against the running test Stash + fake imaglr (after `seed.py 9931 setup` and `saving`)
+node dev/ui_check.mjs 9931  # then every page and the interactive parts in headless Chrome, desktop and phone width
+                            # (no script errors; dialogs, editor, likes, scrolling, a collection import)
 ```
 
-CI runs all of these on every push (the Python tests on Ubuntu and Windows), plus a privacy scan
+Run e2e.py and ui_check.mjs on 9934 too (v0.32.0, React 18): the UI must work on React 17 and 18.
+
+CI runs all of these on every push (the Python tests on Ubuntu and Windows; e2e and ui_check on v0.31.1 and v0.32.0), plus a privacy scan
 (`scripts/check-generic.sh --all`). macOS isn't in CI; run `npm run test:py` there by hand before a release.
 
 ## Privacy gate (contributors)

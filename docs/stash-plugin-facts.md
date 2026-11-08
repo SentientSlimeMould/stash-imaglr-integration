@@ -176,11 +176,18 @@ Official image `stashapp/stash:v0.31.1` (checked from its layers):
 `S` = `https://github.com/stashapp/stash/blob/v0.31.1/ui/v2.5/src/`.
 
 **Stack**
-- React 17, react-bootstrap 1.6 / Bootstrap 4.6, react-router-dom 5, Apollo 3.8, react-intl 6, FontAwesome, react-select 5.
-- No React 18 APIs (`createRoot`, `useId`, etc.).
+- React 17 up to v0.31.x; **React 18 from v0.32.0** (stash#7276). react-bootstrap 1.6 / Bootstrap 4.6,
+  react-router-dom 5, Apollo 3.8, react-intl 6, FontAwesome, react-select 5.
+- While v0.31.x is supported the plugin must run on both: use no API that React 18 adds (`useId`, `useTransition`,
+  `useSyncExternalStore`, `useDeferredValue`, `createRoot`, …). The types are React 18's (`@types/react` 18), so the
+  compiler won't catch this: review it. React 18 batches every state update (in promises and timers too), which
+  only matters to code relying on a render between two updates.
+- From v0.32.0, `ReactDOM.render` is deprecated (a tree mounted with it runs in React 17 mode) and
+  `PluginApi.ReactDOMClient.createRoot` replaces it. The plugin mounts nothing itself (routes and patches only).
+- Stash doesn't render in `StrictMode`, so effects run once.
 
 **What `window.PluginApi` exposes** (`S pluginApi.tsx#L69-L189`)
-- `React`, `ReactDOM`.
+- `React`, `ReactDOM`; `ReactDOMClient` from v0.32.0.
 - `GQL`: every generated Apollo hook, e.g. `useFindSceneMarkersQuery`, `useJobsSubscribeSubscription`,
   `useRunPluginTaskMutation` (pass `args_map`), `useConfigurePluginMutation`, `useBulkImageUpdateMutation`.
   There is no `runPluginOperation` document: write our own `gql`.
@@ -296,7 +303,7 @@ Official image `stashapp/stash:v0.31.1` (checked from its layers):
 7. **Cancellation:** ffmpeg runs in its own process group; a DB cancel flag is checked between steps; `recover` (on
    page open) marks jobs failed only if Stash's `jobQueue` has no running task for them.
 8. **Stash auth:** as in §4 — cookie jar plus API key when one exists. Works with no auth, password auth and API keys.
-9. **UI build:** TypeScript + React 17 types, esbuild → one IIFE `imaglrIntegration.js` + `.css`, React and all
+9. **UI build:** TypeScript + React 18 types (the code runs on React 17 and 18), esbuild → one IIFE `imaglrIntegration.js` + `.css`, React and all
    Stash libraries taken from `PluginApi`, nothing framework-sized bundled. Styling via Stash's Bootstrap classes
    first, a small plugin stylesheet second.
 10. **Stash-page entry points:** nav item; bulk "Add to imaglr" in every image list (incl. a gallery's Images tab).

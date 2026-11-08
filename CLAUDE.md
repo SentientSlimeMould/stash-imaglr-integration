@@ -34,7 +34,8 @@ Instructions for AI coding agents (and a reminder for humans). The owner is the 
 - Python backend: standard library only, Python 3.9–3.14, Windows and macOS included. imaglr calls stay within the
   allowlisted routes in the client (drafts, their follow-ups, and imaglr's chunked uploads for large files).
 - Tests before a release: `npm run typecheck`, `npm test`, `npm run test:py`, `npm run test:py:stash`, and
-  `python3 dev/e2e.py 9931` against the local test Stash. CI gates publishing on the same.
+  `python3 dev/e2e.py` then `node dev/ui_check.mjs`, each against 9931 (v0.31.1, React 17) and 9934 (v0.32.0, React
+  18). CI gates publishing on the same. The UI must run on both Reacts: nothing React 18 adds (`tests/js/react17.test.ts`).
 - Never mount the repository folder into Docker (it may live on a network share); the test instances use the local
   copy made by `npm run dev`.
 
