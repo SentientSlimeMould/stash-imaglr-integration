@@ -11,7 +11,7 @@ your favourite images and clips to your imaglr blogs, and save the imaglr posts 
 - **Tags:** Tags for your imaglr posts are suggested from your Stash tags (including performers, studio and galleries). These can be edited before sending.
 - **Tag Mapping:** Set up rules on your Stash tags to automatically translate them to one or many corresponding Imaglr tags. 
 - **Draft, Queue or Publish immediately:** You can set a default upload action for each blog you want to send to and alter that if needed any time you send.
-- **Discover:** browse your imaglr feed, your likes, tags and creators inside Stash. Save the posts you love into your library, sync all your likes in one go, and like or reblog posts to your own blogs.
+- **Discover:** browse your imaglr feed, your likes, tags and creators inside Stash. Save posts into your library, sync all your likes or import a whole collection in one go, and like or reblog posts to your own blogs.
 - **Privacy:** location, camera and other metadata are removed from every file before upload.
 
 ## Demos
@@ -104,8 +104,10 @@ the save folder.
 - **Discover:** scroll your Feed and Likes, or Explore a #tag, an @creator or a post link. Videos play on their own
   as you scroll if Video autoplay is on in your blog's imaglr settings; otherwise tap one to play it. **Save** shows what each
   of the post's tags becomes in Stash; tick Remember to make it a rule for next time. **Sync likes to your library**
-  saves every liked post you haven't saved yet. Saved items show "From imaglr" in Stash, with links back to the post
-  and its creator.
+  saves every liked post you haven't saved yet. **Collections** shows your imaglr collections: open one and **Import
+  to library** saves the posts you haven't saved yet and tags the whole collection in Stash, under *Imaglr
+  Collections*. Import again any time to bring it up to date. Saved items show "From imaglr" in Stash, with links
+  back to the post and its creator.
 
 Sending is queued as a Stash task, so it shows on Stash's **Settings → Tasks** page.
 
@@ -122,7 +124,10 @@ Sending is queued as a Stash task, so it shows on Stash's **Settings → Tasks**
 - when you save a post from imaglr: downloads its files into your save folder, asks Stash to scan just those
   files, then writes the credit onto them (the post's and creator's links, a credit line, the post date and the
   custom fields imaglr_post_id and imaglr_creator), links Stash tags, performers and a studio whose name or alias
-  matches one of the post's tags exactly, and makes a gallery of a post with several files.
+  matches one of the post's tags exactly, and makes a gallery of a post with several files;
+- when you import a collection: saves its posts as above, creates a tag named after the collection under an
+  *Imaglr Collections* tag (or uses an existing tag with that name or alias), and adds it to the collection's
+  posts in your library.
 
 It never modifies, moves or deletes your existing media files.
 
@@ -133,7 +138,7 @@ folder inside Stash's plugins directory, in a SQLite database.
 
 - read your profile and API limits;
 - create a draft, send a large file for it in pieces, and publish or queue a draft it has just created;
-- read your feed, your likes, a tag, a creator, who your blog follows and a single post while you browse;
+- read your feed, your likes, your saved posts and collections, a tag, a creator, who your blog follows and a single post while you browse;
 - like, unlike or reblog a post when you ask;
 - download pictures and videos, only from imaglr's own servers.
 
@@ -142,6 +147,7 @@ It never:
 - edits or deletes posts;
 - follows anyone;
 - changes your queue settings;
+- saves, unsaves or changes your collections;
 - saves anything you didn't choose.
 
 **What is sent to imaglr** for each post: the prepared files (metadata stripped), each with a file name made from
