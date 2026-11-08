@@ -38,6 +38,22 @@ services:
       - ${IMAGLR_DEV_PLUGIN:-${HOME}/.imaglr-dev/plugin}:/root/.stash/plugins/imaglrIntegration:ro
       - v0311-plugin-data:/root/.stash/plugins/imaglrIntegration/data
 
+  # First release with React 18 (stash#7276): the plugin must run on it and on v0.31.1 (React 17).
+  stash-v0320:
+    <<: *stash
+    image: stashapp/stash:v0.32.0
+    ports: ["127.0.0.1:9934:9999"]
+    volumes:
+      - v0320-config:/root/.stash
+      - v0320-generated:/generated
+      - v0320-metadata:/metadata
+      - v0320-cache:/cache
+      - v0320-blobs:/blobs
+      - media:/data:ro
+      - v0320-saved:/saved  # a writable library for posts saved from imaglr (seed.py <port> saving)
+      - ${IMAGLR_DEV_PLUGIN:-${HOME}/.imaglr-dev/plugin}:/root/.stash/plugins/imaglrIntegration:ro
+      - v0320-plugin-data:/root/.stash/plugins/imaglrIntegration/data
+
   # Stash's development build: early warning of upcoming changes.
   stash-dev:
     <<: *stash
@@ -106,6 +122,13 @@ volumes:
   v0311-blobs:
   v0311-plugin-data:
   v0311-saved:
+  v0320-config:
+  v0320-generated:
+  v0320-metadata:
+  v0320-cache:
+  v0320-blobs:
+  v0320-plugin-data:
+  v0320-saved:
   dev-config:
   dev-generated:
   dev-metadata:

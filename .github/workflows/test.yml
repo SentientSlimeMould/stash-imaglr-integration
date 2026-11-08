@@ -42,7 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        tag: [v0.31.1, development]
+        tag: [v0.31.1, v0.32.0, development]
     steps:
       - uses: actions/checkout@v6
       - run: >
@@ -68,10 +68,17 @@ jobs:
             || { echo "::error::Run 'npm run build' and commit the result."; exit 1; }
 
   e2e:
-    # The real thing: the built plugin inside stashapp/stash:v0.31.1 sending an image and a clip to the
-    # fake imaglr (dev/e2e.py), including ffmpeg inside the container and the Stash tag swaps.
-    name: End to end in stashapp/stash:v0.31.1
+    # The real thing: the built plugin inside Stash sending an image and a clip to the fake imaglr (dev/e2e.py),
+    # including ffmpeg inside the container and the Stash tag swaps, then every page loaded in Chrome
+    # (dev/ui_check.mjs). v0.31.1 is the oldest supported release (React 17); v0.32.0 the first with React 18.
+    name: End to end in stashapp/stash:${{ matrix.tag }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { tag: v0.31.1, service: stash-v0311, port: 9931 }
+          - { tag: v0.32.0, service: stash-v0320, port: 9934 }
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -90,17 +97,19 @@ jobs:
         working-directory: dev
         run: |
           docker compose run --rm make-media
-          docker compose up -d stash-v0311 fake-imaglr
+          docker compose up -d ${{ matrix.service }} fake-imaglr
       - name: Seed and run
         working-directory: dev
         run: |
-          python3 seed.py 9931 setup
-          python3 seed.py 9931 saving
-          python3 e2e.py 9931
+          python3 seed.py ${{ matrix.port }} setup
+          python3 seed.py ${{ matrix.port }} saving
+          python3 e2e.py ${{ matrix.port }}
+      - name: Every page in Chrome
+        run: node dev/ui_check.mjs ${{ matrix.port }}
       - name: Stash log
         if: failure()
         working-directory: dev
-        run: docker compose logs --no-color stash-v0311 fake-imaglr | tail -200
+        run: docker compose logs --no-color ${{ matrix.service }} fake-imaglr | tail -200
       - name: Stop
         if: always()
         working-directory: dev

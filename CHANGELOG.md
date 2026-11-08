@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Stash 0.32 (React 18).** Tested on Stash 0.32, whose interface moved to React 18, and still on 0.31: nothing in
+  the plugin changes (the plugin file is identical to 1.2.0's). Every page and its dialogs, the editor, likes,
+  scrolling and collection imports are now checked in a real browser on both versions before each release.
+
 ## 1.2.0 — 2026-11-08
 
 - **Collections.** Discover has a Collections tab: your imaglr collections as cards, with All saved (every bookmark)
