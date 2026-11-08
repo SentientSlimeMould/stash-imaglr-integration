@@ -140,7 +140,12 @@ async function queueSome() {
   return async () => { for (const u of undo) await u(); };
 }
 const modalTitle = () => js("[...document.querySelectorAll('.modal.show .modal-title')].map((e) => e.textContent).join(' | ')");
-const noModal = () => waitFor("the dialog to close", "!document.querySelector('.modal.show')", 5000);
+const noModal = () => waitFor("the dialog to close", "!document.querySelector('.modal.show')", 5000).catch(async (e) => {
+  const open = await js(`JSON.stringify([...document.querySelectorAll('.modal')].map((m) => ({ cls: m.className,
+    title: m.querySelector('.modal-title')?.textContent, buttons: [...m.querySelectorAll('button')].map((b) => b.textContent.trim() + (b.disabled ? ' (disabled)' : '')),
+    text: m.textContent.slice(0, 300) })))`);
+  throw new Error(`${e.message}; still open: ${open}`);
+});
 
 // --- the checks --------------------------------------------------------------------------------------------------
 
@@ -264,8 +269,10 @@ try {
 } finally {
   await unqueue().catch((e) => console.log(`  (couldn't take the test items off the queue: ${e.message})`));
   ws.close();
+  const exited = new Promise((r) => chrome.once("exit", r));
   chrome.kill();
-  rmSync(profile, { recursive: true, force: true });
+  await exited;
+  rmSync(profile, { recursive: true, force: true, maxRetries: 5 });
 }
 
 if (notes.length) console.log(`requests that failed (not counted):\n  ${[...new Set(notes)].slice(0, 15).join("\n  ")}`);
