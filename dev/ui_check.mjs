@@ -101,17 +101,21 @@ async function waitFor(what, expression, timeout = 15000) {
 }
 async function open(path) {
   where = path;
+  await js("window.__leaving = true").catch(() => undefined); // so the old page isn't mistaken for the new one
   await page("Page.navigate", { url: BASE + path });
-  await waitFor("the page", "document.readyState === 'complete' && !!document.querySelector('.main, #root > *')");
+  await waitFor("the page", "!window.__leaving && document.readyState === 'complete' && !!document.querySelector('.main, #root > *')");
 }
-/** Clicks the first visible element matching the selector (and containing the text, if given). */
+/** Clicks the first visible element matching the selector (and containing the text, if given); says what it hit. */
 async function click(selector, text = "") {
-  const ok = await waitFor(`${selector} ${text}`, `(() => {
+  return waitFor(`${selector} ${text}`, `(() => {
     const el = [...document.querySelectorAll(${JSON.stringify(selector)})]
       .find((e) => e.offsetParent !== null && e.textContent.includes(${JSON.stringify(text)}) && !e.disabled);
-    if (el) { el.scrollIntoView({ block: "center" }); el.click(); return true; }
+    if (!el) return;
+    el.scrollIntoView({ block: "center" });
+    el.click();
+    const dialog = el.closest('.modal')?.querySelector('.modal-title')?.textContent;
+    return (dialog ? dialog + ' > ' : '') + (el.textContent.trim().slice(0, 40) || el.tagName.toLowerCase()); // never empty: "" would retry
   })()`);
-  return ok;
 }
 const count = (selector) => js(`document.querySelectorAll(${JSON.stringify(selector)}).length`);
 /** Stash's own GraphQL, for test data. */
@@ -202,13 +206,15 @@ try {
     await open(`${ROUTE}?tab=clips`);
     await click(".imaglr-page-header button", "Settings");
     await waitFor("the settings dialog", "document.querySelector('.modal.show .modal-title')?.textContent === 'imaglr settings'");
-    await click(".modal.show .modal-footer button", "Close");
-    await noModal();
+    const hit = await click(".modal.show .modal-footer button", "Close");
+    await noModal().catch((e) => { throw new Error(`clicked "${hit}"; ${e.message}`); });
   });
   for (const tab of ["clips", "images"]) {
     await check(`the ${tab} editor opens from a card and cancels`, async () => {
       await open(`${ROUTE}?tab=${tab}`);
-      await click(".imaglr-grid-card a[href*='open=']");
+      await click(".imaglr-grid-card a[href*='open=']").catch(async (e) => {
+        throw new Error(`${e.message}; on ${await js("location.href")}, cards: ${await js("JSON.stringify([...document.querySelectorAll('.imaglr-grid-card a')].map((a) => [a.getAttribute('href'), a.offsetParent !== null]))")}`);
+      });
       await waitFor("the editor", "!!document.querySelector('.modal.show.imaglr-editor, .modal.show .imaglr-editor, .imaglr-editor .modal-body')");
       if (tab === "clips") await waitFor("the clip's video", "!!document.querySelector('.imaglr-editor video')");
       await click(".modal.show .modal-footer button", "Cancel");
@@ -272,7 +278,7 @@ try {
   const exited = new Promise((r) => chrome.once("exit", r));
   chrome.kill();
   await exited;
-  rmSync(profile, { recursive: true, force: true, maxRetries: 5 });
+  try { rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }); } catch { /* Chrome's helpers may still be closing; it's a temp folder */ }
 }
 
 if (notes.length) console.log(`requests that failed (not counted):\n  ${[...new Set(notes)].slice(0, 15).join("\n  ")}`);
