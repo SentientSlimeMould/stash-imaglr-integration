@@ -96,6 +96,29 @@
   }
 }
 
+/* Confirmations: in front of the dialog they ask about, which their backdrop dims (Bootstrap stacks a second
+   modal level with the first, so the editor behind stayed bright and looked as if nothing was waiting). */
+.modal-backdrop.imaglr-confirm-backdrop {
+  z-index: 1055;
+}
+
+.modal.imaglr-confirm {
+  z-index: 1060;
+}
+
+/* On phones, mid-screen rather than at the top, clear of Stash's menu bar. */
+@media (max-width: 575.98px) {
+  .imaglr-confirm .modal-dialog {
+    display: flex;
+    align-items: center;
+    min-height: calc(100% - 1rem - 48.75px);
+  }
+
+  .imaglr-confirm .modal-content {
+    width: 100%;
+  }
+}
+
 .imaglr-editor-footer {
   flex-wrap: wrap;
   gap: 0.5rem;
@@ -158,6 +181,24 @@
   background: #000;
 }
 
+.imaglr-strip-view {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+
+/* Stash's lightbox sits under dialogs; opened from the editor, it must be in front of it. */
+body:has(.imaglr-editor) .Lightbox {
+  z-index: 1065;
+}
+
+/* Its link to the image's page would leave the editor (and the pictures it's given have no Stash id anyway). */
+body:has(.imaglr-editor) .Lightbox .image-link {
+  display: none;
+}
+
 .imaglr-strip-number {
   position: absolute;
   left: 0.3rem;
@@ -194,6 +235,7 @@
 .imaglr-tags-header {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
   margin-bottom: 0.4rem;
 }
 

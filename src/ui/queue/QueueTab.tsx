@@ -11,7 +11,7 @@ import { MAX_POST_FILES } from "../lib/imageActions.ts";
 import { STATUS_LABELS, STATUS_VARIANTS, type Card, type QueueResponse } from "../model.ts";
 import { ROUTE } from "../routes.ts";
 import { CardGrid, type GridItem } from "./CardGrid.tsx";
-import { Pager } from "./Paging.tsx";
+import { Paged } from "./Paging.tsx";
 import { SendAllDialog } from "./SendAllDialog.tsx";
 import { Toolbar, type SelectionAction } from "./Toolbar.tsx";
 import { ConfirmDialog } from "../ConfirmDialog.tsx";
@@ -197,11 +197,10 @@ export function QueueTab({ tab, openId, data, error, load }: { tab: "clips" | "i
         onRefresh={load}
         onSendAll={matching.length ? () => setSendAll(selected.size ? [...selected] : matching.map((c) => c.id)) : undefined}
       />
-      {body}
-      {matching.length ? (
-        <Pager page={paged.page} perPage={controls.perPage} total={matching.length}
-          onChange={(p) => { setPage(p); window.scrollTo({ top: 0 }); }} />
-      ) : null}
+      <Paged page={paged.page} perPage={controls.perPage} total={matching.length}
+        onChange={(p) => { setPage(p); window.scrollTo({ top: 0 }); }}>
+        {body}
+      </Paged>
       {sendAll ? (
         <SendAllDialog itemIds={sendAll} selected={selected.size > 0} onClose={(sent) => {
           setSendAll(null);

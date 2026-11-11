@@ -40,12 +40,13 @@ interface InputProps {
   disabled?: boolean;
   inputId?: string;
   placeholder?: string;
+  clearable?: boolean; // the clear-all × at the end of the box (default on, as in Stash)
   onChange: (tags: string[]) => void;
   onMessage?: (message: string | null) => void;
 }
 
 /** A multi-tag input identical to Stash's tag fields; "Add" creates imaglr tags, never Stash tags. */
-export function TagInput({ tags, extra = [], lowercase, disabled, inputId, placeholder, onChange, onMessage }: InputProps) {
+export function TagInput({ tags, extra = [], lowercase, disabled, inputId, placeholder, clearable = true, onChange, onMessage }: InputProps) {
   const Select = PluginApi.libraries.ReactSelect.default;
   const [input, setInput] = React.useState("");
   const [found, setFound] = React.useState<string[]>([]);
@@ -96,7 +97,7 @@ export function TagInput({ tags, extra = [], lowercase, disabled, inputId, place
         className="react-select tag-select imaglr-tag-select"
         classNamePrefix="react-select"
         isMulti
-        isClearable
+        isClearable={clearable}
         isDisabled={disabled}
         closeMenuOnSelect={false}
         value={tags.map(toOption)}
@@ -126,7 +127,14 @@ export function TagField({ tags, suggestions, lowercase, disabled, auto, onChang
     <div className="imaglr-tags">
       <div className="imaglr-tags-header">
         <label htmlFor="imaglr-tag-field"><strong>imaglr tags</strong></label>
-        <span className={tags.length >= MAX_TAGS ? "text-warning" : "text-muted"}>{tags.length} / {MAX_TAGS}</span>
+        <span>
+          {/* Clear all lives here, not as the × at the end of the box: that sits where you tap to add another tag. */}
+          {tags.length ? (
+            <Button variant="link" size="sm" className="p-0 mr-2 align-baseline imaglr-touch" disabled={disabled}
+              onClick={() => onChange([])}>Clear all</Button>
+          ) : null}
+          <span className={tags.length >= MAX_TAGS ? "text-warning" : "text-muted"}>{tags.length} / {MAX_TAGS}</span>
+        </span>
       </div>
       {auto === undefined ? null : auto ? (
         <div className="small text-muted mb-1">From the Stash tags and your tag rules; they keep up with changes until you edit them.</div>
@@ -137,7 +145,7 @@ export function TagField({ tags, suggestions, lowercase, disabled, auto, onChang
         </div>
       )}
       <TagInput inputId="imaglr-tag-field" tags={tags} extra={spare.addable} lowercase={lowercase} disabled={disabled}
-        onChange={onChange} onMessage={setMessage} />
+        clearable={false} onChange={onChange} onMessage={setMessage} />
       {message ? <div className="small text-warning mt-1">{message}</div> : null}
       {spare.tooLong.length ? (
         <div className="small text-muted mt-1">

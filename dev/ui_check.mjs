@@ -235,6 +235,107 @@ try {
       await closed(".imaglr-editor-footer");
     });
   }
+  await check("page buttons above and below the list, Stash's own", async () => {
+    await open(`${ROUTE}?tab=sent`);
+    await js(`localStorage.setItem("imaglr.controls.sent", JSON.stringify({ perPage: 1 }))`);
+    try {
+      await open(`${ROUTE}?tab=sent`);
+      // Stash's Pagination has First and Last buttons (the plugin's fallback doesn't); v0.32 loads it on demand
+      await waitFor("Stash's pager above", "!!document.querySelector('.pagination-index-container .pagination button[title=First]')");
+      await waitFor("the index line", "/of \\d/.test(document.querySelector('.pagination-index-container .paginationIndex')?.textContent || '')");
+      await waitFor("Stash's pager below", "!!document.querySelector('.pagination-footer .pagination button[title=First]')");
+    } finally {
+      await js(`localStorage.removeItem("imaglr.controls.sent")`);
+    }
+  });
+  await check("editor: Clear all is away from the tag box, and leaving with changes asks first", async () => {
+    await open(`${ROUTE}?tab=images`);
+    await click(".imaglr-grid-card a[href*='open=']");
+    await opened(".imaglr-editor-footer");
+    await waitFor("the tags", "!!document.querySelector('.imaglr-tag-select .react-select__multi-value')");
+    if (await count(".imaglr-tag-select .react-select__clear-indicator")) throw new Error("the clear-all × is still in the tag box");
+    await click(".imaglr-tags-header button", "Clear all");
+    await waitFor("no tags", "!document.querySelector('.imaglr-tag-select .react-select__multi-value')");
+    await click(".imaglr-editor a[title='Open in Stash']");
+    await opened("Leave without saving?");
+    await clickIn("Leave without saving?", "Cancel");
+    await closed("Leave without saving?");
+    if (!(await js("location.pathname")).includes(ROUTE)) throw new Error("left the editor");
+    await clickIn(".imaglr-editor-footer", "Cancel");
+    await closed(".imaglr-editor-footer");
+  });
+  await check("editor: Publish now's confirmation is in front, the editor behind it can't be tapped", async () => {
+    await open(`${ROUTE}?tab=images`);
+    await click(".imaglr-grid-card a[href*='open=']");
+    await opened(".imaglr-editor-footer");
+    await click(".imaglr-segmented button", "Published");
+    await click(".imaglr-editor-footer button", "Publish now");
+    await opened("Publish now");
+    const hit = await js(`(() => { const c = [...document.querySelectorAll('.imaglr-editor-footer button')].find((b) => b.textContent.includes('Cancel'));
+      const r = c.getBoundingClientRect(); return c.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); })()`);
+    if (hit) throw new Error("the editor's Cancel can be tapped while the confirmation is open");
+    await clickIn("Publish now", "Cancel");
+    await closed("Publish now");
+    await clickIn(".imaglr-editor-footer", "Cancel"); // the action change is dropped
+    await closed(".imaglr-editor-footer");
+  });
+  await check("editor: a picture in a post of several opens in Stash's lightbox, in front", async () => {
+    await open(`${ROUTE}?tab=images`);
+    await waitFor("cards", "!!document.querySelector('.imaglr-grid-card')");
+    const ids = await js("[...new Set([...document.querySelectorAll('.imaglr-grid-card a[href*=\"open=\"]')].map((a) => new URL(a.href).searchParams.get('open')))]");
+    let undo = null;
+    try {
+      if (ids.length < 2) { // queue a second image, as queueSome does
+        const tag = (await gql('{findTags(tag_filter:{name:{value:"imaglr",modifier:EQUALS}}){tags{id}}}')).findTags.tags[0];
+        // one of the test media's own images (not a post saved from imaglr), not queued yet
+        const img = (await gql(`{findImages(image_filter:{path:{value:"/saved/",modifier:EXCLUDES},
+          tags:{value:["${tag.id}"],modifier:EXCLUDES}},filter:{per_page:1,sort:"path"}){images{id}}}`)).findImages.images[0];
+        await gql("mutation($ids:[ID!],$t:[ID!]){bulkImageUpdate(input:{ids:$ids,tag_ids:{ids:$t,mode:ADD}}){id}}", { ids: [img.id], t: [tag.id] });
+        undo = () => gql("mutation($ids:[ID!],$t:[ID!]){bulkImageUpdate(input:{ids:$ids,tag_ids:{ids:$t,mode:REMOVE}}){id}}", { ids: [img.id], t: [tag.id] });
+        await open(`${ROUTE}?tab=images`);
+        await waitFor("two cards", "document.querySelectorAll('.imaglr-grid-card').length >= 2");
+        ids.splice(0, ids.length, ...await js("[...new Set([...document.querySelectorAll('.imaglr-grid-card a[href*=\"open=\"]')].map((a) => new URL(a.href).searchParams.get('open')))]"));
+      }
+      const made = await js(`fetch('/graphql', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
+        query: 'mutation($id: ID!, $args: Map) { runPluginOperation(plugin_id: $id, args: $args) }',
+        variables: { id: 'imaglrIntegration', args: { mode: 'post_create', item_ids: ${JSON.stringify(ids.slice(0, 2))} } } }) }).then((r) => r.json())`);
+      const post = made.data?.runPluginOperation?.post_id;
+      if (!post) throw new Error(`couldn't make a post of two: ${JSON.stringify(made.errors)}`);
+      try {
+        await open(`${ROUTE}?tab=images&open=${post}`);
+        await opened(".imaglr-editor-footer");
+        await click(".imaglr-strip-view");
+        await waitFor("the lightbox", "!!document.querySelector('.Lightbox img')");
+        await waitFor("the lightbox in front", "(() => { const r = document.querySelector('.Lightbox img').getBoundingClientRect(); return !!document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)?.closest('.Lightbox'); })()");
+        await page("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+        await page("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+        await waitFor("the lightbox to close", "!document.querySelector('.Lightbox')");
+        if (!(await count(".imaglr-editor-footer"))) throw new Error("the editor closed too");
+        await clickIn(".imaglr-editor-footer", "Cancel");
+        await closed(".imaglr-editor-footer");
+      } finally {
+        await js(`fetch('/graphql', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
+          query: 'mutation($id: ID!, $args: Map) { runPluginOperation(plugin_id: $id, args: $args) }',
+          variables: { id: 'imaglrIntegration', args: { mode: 'post_split', post_id: ${JSON.stringify(post)} } } }) }).then((r) => r.json())`);
+      }
+    } finally {
+      if (undo) await undo();
+    }
+  });
+  await check("clip editor: In and Out step by one frame", async () => {
+    await open(`${ROUTE}?tab=clips`);
+    await click(".imaglr-grid-card a[href*='open=']");
+    await opened(".imaglr-editor-footer");
+    await waitFor("the clip's video", "!!document.querySelector('.imaglr-editor video')?.duration");
+    const inBox = "document.querySelector('.imaglr-time-input').value";
+    const before = await js(inBox);
+    await click(".imaglr-time-buttons button", "+1 frame");
+    await waitFor("In one frame on", `${inBox} !== ${JSON.stringify(before)}`);
+    await click(".imaglr-time-buttons button", "−1 frame");
+    await waitFor("In back where it was", `${inBox} === ${JSON.stringify(before)}`);
+    await clickIn(".imaglr-editor-footer", "Cancel");
+    await closed(".imaglr-editor-footer");
+  });
   await check("the feed loads more as you scroll", async () => {
     await open(`${ROUTE}?tab=feed`);
     await waitFor("posts", "document.querySelectorAll('.imaglr-post').length > 0");
@@ -263,8 +364,7 @@ try {
   });
   await check("Sync likes asks first and cancels", async () => {
     await open(`${ROUTE}?tab=likes`);
-    // After the posts, as a person would: tapped before the page has its save folder, it asks for one.
-    await waitFor("the likes", "!!document.querySelector('.imaglr-post')");
+    // Straight away: tapped before the page has its save settings, it waits for them rather than asking for a folder.
     await click(".imaglr-sync button", "Sync likes");
     await opened("Sync your likes").catch(async (e) => { throw new Error(`${e.message}; open: "${await modalTitle()}"`); });
     await clickIn("Sync your likes", "Cancel");

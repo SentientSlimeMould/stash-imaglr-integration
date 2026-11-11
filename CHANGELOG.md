@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+- **Page buttons above and below.** The Clips, Images and Sent tabs have the page buttons above the list as well as
+  below, with the "1-40 of 120" line, as Stash's own lists do, and always Stash's own buttons (on Stash 0.32 the
+  plugin showed simpler ones until you had opened one of Stash's lists).
+- **Trim by frame.** In and Out step one frame back or forward instead of a tenth of a second, and the times show
+  hundredths. The frame rate is Stash's; for the rare video Stash has none for, it's measured as the video plays.
+- **Clear all, out of the way.** The tags' Clear all is now a link next to the tag count, not the × at the end of the
+  tag box, where a tap meant to add another tag could clear them all.
+- **Pictures open in the lightbox.** In a post of several files, tapping a picture shows it in Stash's lightbox
+  instead of leaving the editor. The name at the top still opens it in Stash, but asks first if you have unsaved
+  changes.
+- **Confirmations you can't miss.** Publish now's confirmation (and every other confirmation over a dialog) dims
+  the dialog behind it, and on phones it opens mid-screen rather than at the top.
+- **No sound from a hidden video.** While the GIF or WebP preview shows, the clip's video is paused: playing it no
+  longer carries on unseen, and Play clip switches back to the video.
+- **Save, Sync likes and Import right after opening Discover** no longer ask for a save folder you have already
+  chosen; they wait the moment it takes to load.
+
 ## 1.2.1 — 2026-11-08
 
 - **Stash 0.32 (React 18).** Tested on Stash 0.32, whose interface moved to React 18, and still on 0.31: nothing in

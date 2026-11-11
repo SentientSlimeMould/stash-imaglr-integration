@@ -2,7 +2,7 @@
 // Clip editor: plays the source from Stash, loops between in and out, crop overlay, mute, save still.
 import React from "react";
 import { baseUrl, gql, runOperation } from "../api.ts";
-import { clampTrim, pickStream, sameOrigin, type SceneStream, type VideoInfo } from "../lib/clip.ts";
+import { clampTrim, frameRateFromTimes, pickStream, sameOrigin, type SceneStream, stepFrame, type VideoInfo } from "../lib/clip.ts";
 import { overlayRect } from "../lib/crop.ts";
 import { CropControls } from "./CropControls.tsx";
 import { Fold } from "./Fold.tsx";
@@ -111,17 +111,21 @@ interface Props {
   onPreviewGif: () => void;
 }
 
-function TimeRow({ label, value, disabled, onSet, onNudge, onType }: {
+function TimeRow({ label, value, disabled, fps, onSet, onNudge, onFrame, onType }: {
   label: string;
   value: number;
   disabled: boolean;
+  fps: number | null; // null = not known yet (measured once the video plays)
   onSet: () => void;
   onNudge: (delta: number) => void;
+  onFrame: (step: 1 | -1) => void;
   onType: (seconds: number) => void;
 }) {
   const { Button, Form } = PluginApi.libraries.Bootstrap;
-  const [text, setText] = React.useState(fmtTime(value));
-  React.useEffect(() => setText(fmtTime(value)), [value]);
+  // Hundredths, so a step of one frame shows.
+  const [text, setText] = React.useState(fmtTime(value, 2));
+  React.useEffect(() => setText(fmtTime(value, 2)), [value]);
+  const frameTitle = fps ? undefined : "Play the video for a moment first, to find its frame rate";
   return (
     <div className="imaglr-time-row">
       <Form.Label className="imaglr-time-label">{label}</Form.Label>
@@ -129,14 +133,14 @@ function TimeRow({ label, value, disabled, onSet, onNudge, onType }: {
         onChange={(e: React.ChangeEvent<HTMLInputElement>) => setText(e.target.value)}
         onBlur={() => {
           const t = parseTime(text);
-          if (t === null) setText(fmtTime(value));
+          if (t === null) setText(fmtTime(value, 2));
           else onType(t);
         }} />
       <div className="imaglr-time-buttons">
         <Button variant="secondary" disabled={disabled} onClick={() => onNudge(-1)} aria-label={`${label} back 1 second`}>−1s</Button>
-        <Button variant="secondary" disabled={disabled} onClick={() => onNudge(-0.1)} aria-label={`${label} back a tenth`}>−0.1</Button>
+        <Button variant="secondary" disabled={disabled || !fps} title={frameTitle} onClick={() => onFrame(-1)} aria-label={`${label} back 1 frame`}>−1 frame</Button>
         <Button variant="primary" disabled={disabled} onClick={onSet}>Set here</Button>
-        <Button variant="secondary" disabled={disabled} onClick={() => onNudge(0.1)} aria-label={`${label} forward a tenth`}>+0.1</Button>
+        <Button variant="secondary" disabled={disabled || !fps} title={frameTitle} onClick={() => onFrame(1)} aria-label={`${label} forward 1 frame`}>+1 frame</Button>
         <Button variant="secondary" disabled={disabled} onClick={() => onNudge(1)} aria-label={`${label} forward 1 second`}>+1s</Button>
       </div>
     </div>
@@ -204,6 +208,27 @@ export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTarget
     loadPlayback(sceneId, imageId).then(setPlayback, (e: Error) => setError(e.message));
   }, [sceneId, imageId]);
 
+  // Frame steps need the frame rate: Stash's, or, if Stash doesn't have it, measured from the frames the browser
+  // shows while the video plays.
+  const [measuredFps, setMeasuredFps] = React.useState<number | null>(null);
+  const fps = sourceFps && sourceFps > 0 ? sourceFps : measuredFps;
+  React.useEffect(() => {
+    const v = video.current as (HTMLVideoElement & {
+      requestVideoFrameCallback?: (cb: (now: number, meta: { mediaTime: number }) => void) => number;
+      cancelVideoFrameCallback?: (handle: number) => void }) | null;
+    if (fps || !v || !v.requestVideoFrameCallback || !v.cancelVideoFrameCallback) return;
+    const times: number[] = [];
+    let handle = 0;
+    const seen = (_now: number, meta: { mediaTime: number }) => {
+      times.push(meta.mediaTime);
+      const found = frameRateFromTimes(times.slice(-30));
+      if (found) setMeasuredFps(found);
+      else handle = v.requestVideoFrameCallback!(seen);
+    };
+    handle = v.requestVideoFrameCallback(seen);
+    return () => v.cancelVideoFrameCallback!(handle);
+  }, [fps, playback]);
+
   React.useEffect(() => {
     const onResize = () => measure();
     window.addEventListener("resize", onResize);
@@ -225,9 +250,31 @@ export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTarget
     if (video.current) video.current.currentTime = moved === "in" ? t.inS : Math.max(t.inS, t.outS - 1);
   }
 
+  /** One frame earlier or later, showing the frame that is now the clip's first (In) or last (Out). */
+  function trimFrame(moved: "in" | "out", step: 1 | -1) {
+    if (!fps) return;
+    const t = clampTrim(moved === "in" ? stepFrame(value.inS, fps, step) : value.inS,
+      moved === "out" ? stepFrame(value.outS, fps, step) : value.outS, duration, moved);
+    onChange({ ...value, inS: t.inS, outS: t.outS });
+    const v = video.current;
+    if (v) {
+      v.pause();
+      // mid-frame, so the browser shows that frame and not its neighbour
+      v.currentTime = moved === "in" ? t.inS + 0.5 / fps : Math.max(t.inS, t.outS - 0.5 / fps);
+    }
+  }
+
+  // The video is hidden while the GIF or WebP preview shows; a hidden video must not go on playing (its sound
+  // would carry on with no controls to stop it).
+  const previewShown = !!gifPreview && showGif;
+  React.useEffect(() => {
+    if (previewShown) video.current?.pause();
+  }, [previewShown]);
+
   function playClip() {
     const v = video.current;
     if (!v) return;
+    setShowGif(false);
     v.currentTime = value.inS;
     setLooping(true);
     v.play().catch(() => undefined); // autoplay refusals and interrupted loads are not errors
@@ -273,12 +320,12 @@ export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTarget
     <div className="imaglr-clip">
       {error ? <div className="alert alert-danger">Can't play this video: {error}</div> : null}
       <div ref={box} className="imaglr-preview imaglr-video">
-        {gifPreview && showGif ? (
+        {previewShown ? (
           <img className="imaglr-gif-preview" src={baseUrl() + gifPreview.url} alt="The GIF as it will be sent" />
         ) : null}
         {playback ? (
           <video ref={video} src={playback.url} poster={playback.poster ?? undefined} playsInline controls
-            preload="metadata" muted={value.mute} style={gifPreview && showGif ? { display: "none" } : undefined}
+            preload="metadata" muted={value.mute} style={previewShown ? { display: "none" } : undefined}
             onLoadedMetadata={() => {
               if (video.current) video.current.currentTime = value.inS;
               measure();
@@ -289,7 +336,7 @@ export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTarget
             }}
             onPause={() => setLooping(false)} />
         ) : null}
-        {rect.cropped && !(gifPreview && showGif) ? (
+        {rect.cropped && !previewShown ? (
           <div className="imaglr-crop" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />
         ) : null}
       </div>
@@ -313,7 +360,7 @@ export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTarget
 
       <div className="imaglr-clip-summary">
         <span>
-          {fmtTime(value.inS)} → {fmtTime(value.outS)} · <strong>{(value.outS - value.inS).toFixed(1)} s</strong>
+          {fmtTime(value.inS, 2)} → {fmtTime(value.outS, 2)} · <strong>{(value.outS - value.inS).toFixed(2)} s</strong>
         </span>
         <span className="imaglr-clip-actions">
           <Button variant="secondary" onClick={playClip}>Play clip</Button>
@@ -322,13 +369,15 @@ export function ClipPanel({ itemId, sceneId, imageId, value, disabled, gifTarget
         </span>
       </div>
 
-      <TimeRow label="In" value={value.inS} disabled={disabled}
+      <TimeRow label="In" value={value.inS} disabled={disabled} fps={fps}
         onSet={() => trim(now(), value.outS, "in")}
         onNudge={(d) => trim(value.inS + d, value.outS, "in")}
+        onFrame={(step) => trimFrame("in", step)}
         onType={(t) => trim(t, value.outS, "in")} />
-      <TimeRow label="Out" value={value.outS} disabled={disabled}
+      <TimeRow label="Out" value={value.outS} disabled={disabled} fps={fps}
         onSet={() => trim(value.inS, now(), "out")}
         onNudge={(d) => trim(value.inS, value.outS + d, "out")}
+        onFrame={(step) => trimFrame("out", step)}
         onType={(t) => trim(value.inS, t, "out")} />
 
       <CropControls crop={value.crop} disabled={disabled} itemId={itemId} onChange={(crop) => onChange({ ...value, crop })}
