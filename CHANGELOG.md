@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.0 — 2026-11-11
 
 - **Page buttons above and below.** The Clips, Images and Sent tabs have the page buttons above the list as well as
   below, with the "1-40 of 120" line, as Stash's own lists do, and always Stash's own buttons (on Stash 0.32 the
