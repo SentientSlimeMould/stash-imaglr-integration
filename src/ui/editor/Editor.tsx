@@ -54,12 +54,12 @@ function CropPreview({ file, crop }: { file: FileCard; crop: Crop }) {
   );
 }
 
-function FileStrip({ files, disabled, onArrange }: {
+function FileStrip({ files, disabled, onArrange, onView }: {
   files: FileCard[];
   disabled: boolean;
   onArrange: (ids: string[]) => void;
+  onView: (index: number) => void; // a picture, larger, without leaving the editor
 }) {
-  const { Link } = PluginApi.libraries.ReactRouterDOM;
   const ids = files.map((f) => f.id);
   const move = (from: number, to: number) => {
     const next = [...ids];
@@ -70,8 +70,11 @@ function FileStrip({ files, disabled, onArrange }: {
     <ol className="imaglr-strip">
       {files.map((f, n) => (
         <li key={f.id} className="imaglr-strip-item" title={f.title}>
-          {stashLink(f) ? <Link to={stashLink(f)!} title={`${f.title} in Stash`}>{f.thumb ? <img src={baseUrl() + f.thumb} alt="" /> : null}</Link>
-            : f.thumb ? <img src={baseUrl() + f.thumb} alt="" /> : null}
+          {f.thumb ?? f.image ? (
+            <button type="button" className="imaglr-strip-view" aria-label={`View ${f.title}`} onClick={() => onView(n)}>
+              <img src={baseUrl() + (f.thumb ?? f.image)} alt="" />
+            </button>
+          ) : null}
           <span className="imaglr-strip-number">{n + 1}</span>
           {disabled ? null : (
             <div className="imaglr-strip-actions">
@@ -90,6 +93,8 @@ export function Editor({ itemId, onClose }: Props) {
   const { Modal, Button, Form, ButtonGroup, Alert, ProgressBar } = PluginApi.libraries.Bootstrap;
   const { Link } = PluginApi.libraries.ReactRouterDOM;
   const Toast = PluginApi.hooks.useToast();
+  const history = PluginApi.libraries.ReactRouterDOM.useHistory();
+  const showLightbox = PluginApi.hooks.useLightbox({});
   const [detail, setDetail] = React.useState<ItemDetail | null>(null);
   const [tags, setTags] = React.useState<string[]>([]);
   const [caption, setCaption] = React.useState("");
@@ -100,6 +105,7 @@ export function Editor({ itemId, onClose }: Props) {
   const [action, setAction] = React.useState<SendAction | null>(null);
   const [confirmPublish, setConfirmPublish] = React.useState(false);
   const [confirmRemove, setConfirmRemove] = React.useState(false);
+  const [confirmLeave, setConfirmLeave] = React.useState<string | null>(null); // the Stash page to open, unsaved changes and all
   const [confirmReblog, setConfirmReblog] = React.useState(false); // a file saved from imaglr: reblog, don't upload
   const [tagsAuto, setTagsAuto] = React.useState(true);
   const [resetTags, setResetTags] = React.useState(false); // "use the suggested tags again" pressed
@@ -289,7 +295,14 @@ export function Editor({ itemId, onClose }: Props) {
   // The name links to where the file lives in Stash: the image, or the scene's Markers tab for a clip.
   const sourceLink = item.kind === "set" ? null : stashLink(files[0] ?? {});
   const itemName = item.kind === "set" ? `${files.length} files in one post`
-    : sourceLink ? <Link to={sourceLink} title={item.kind === "clip" ? "Open the scene in Stash at this clip (its marker is on the Markers tab)" : "Open in Stash"}>{item.source_title}</Link>
+    : sourceLink ? (
+      <Link to={sourceLink} title={item.kind === "clip" ? "Open the scene in Stash at this clip (its marker is on the Markers tab)" : "Open in Stash"}
+        onClick={(e: React.MouseEvent) => {
+          if (!dirty) return;
+          e.preventDefault(); // leaving would lose the changes: ask first
+          setConfirmLeave(sourceLink);
+        }}>{item.source_title}</Link>
+    )
     : item.source_title;
 
 
@@ -359,7 +372,11 @@ export function Editor({ itemId, onClose }: Props) {
         ) : (
           <>
             <p className="text-muted mb-1">Files in this post, in order:</p>
-            <FileStrip files={files} disabled={locked} onArrange={arrange} />
+            <FileStrip files={files} disabled={locked} onArrange={arrange} onView={(n) => showLightbox({
+              // Stash's own lightbox. Only the pictures, no Stash ids: its rating, O-counter and image link would
+              // act on Stash or leave the editor.
+              images: files.map((f) => ({ paths: { image: baseUrl() + (f.image ?? f.thumb ?? ""), thumbnail: baseUrl() + (f.thumb ?? f.image ?? "") } })),
+              initialIndex: n, showNavigation: false })} />
             {locked ? null : (
               <Button variant="link" className="p-0 mb-2 imaglr-touch" onClick={() => arrange([])}>
                 Split into separate posts
@@ -445,6 +462,13 @@ export function Editor({ itemId, onClose }: Props) {
         <ConfirmDialog title={`Reblog to ${blog.label}`} accept="Reblog" busy={busy} onAccept={reblog}
           onCancel={() => setConfirmReblog(false)}>
           The original post appears on {blog.label} straight away, with your caption and tags, and this comes off the page.
+        </ConfirmDialog>
+      ) : null}
+      {confirmLeave ? (
+        <ConfirmDialog title="Leave without saving?" accept="Leave" variant="danger" onAccept={() => history.push(confirmLeave)}
+          onCancel={() => setConfirmLeave(null)}>
+          This opens {item.kind === "clip" ? "the scene" : "the picture"} in Stash, and the changes you've made here are lost.
+          Save first to keep them.
         </ConfirmDialog>
       ) : null}
       {confirmRemove ? (

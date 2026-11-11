@@ -9,7 +9,7 @@ import { SENT_AS_LABELS } from "../lib/send.ts";
 import { changesWhatIsListed, loadControls, saveControls, type QueueControlsState } from "../lib/sort.ts";
 import type { SentItem } from "../model.ts";
 import { CardGrid, type GridItem } from "../queue/CardGrid.tsx";
-import { Pager } from "../queue/Paging.tsx";
+import { Paged } from "../queue/Paging.tsx";
 import { ROUTE } from "../routes.ts";
 import { Toolbar } from "../queue/Toolbar.tsx";
 import { SentDialog } from "./SentDialog.tsx";
@@ -97,11 +97,10 @@ export function SentTab({ openId }: { openId: string | null }) {
         onChange={updateControls}
         onRefresh={() => void load()}
       />
-      {body}
-      {data && data.total > 0 ? (
-        <Pager page={data.page} perPage={controls.perPage} total={data.total}
-          onChange={(p) => { setPage(p); window.scrollTo({ top: 0 }); }} />
-      ) : null}
+      <Paged page={data?.page ?? 1} perPage={controls.perPage} total={data?.total ?? 0}
+        onChange={(p) => { setPage(p); window.scrollTo({ top: 0 }); }}>
+        {body}
+      </Paged>
       {openId ? (
         <SentDialog
           itemId={openId}

@@ -169,9 +169,14 @@ export function Discover({ tab, params, blogs, go }: Props) {
   const [following, setFollowing] = React.useState<{ name: string; avatar: string | null }[]>([]);
   const [autoplay, setAutoplay] = React.useState(false);
 
+  // Where saved posts go, asked once. A Save, Sync or Import tapped before it arrives waits for it: until then
+  // "no folder yet" and "not loaded yet" look the same, and the first would ask for a folder that's already set.
+  const setupLoad = React.useRef<Promise<SaveSetup | null> | null>(null);
+  if (!setupLoad.current) setupLoad.current = runOperation<SaveSetup>("save_setup").catch(() => null);
+
   React.useEffect(() => setVisited((v) => (v.has(tab) ? v : new Set(v).add(tab))), [tab]);
   React.useEffect(() => {
-    runOperation<SaveSetup>("save_setup").then(setSetup, () => setSetup(null));
+    void setupLoad.current!.then(setSetup);
   }, []);
   // Autoplay follows the browsing blog's imaglr setting: the last known answer at once, then imaglr's own.
   React.useEffect(() => {
@@ -194,7 +199,15 @@ export function Discover({ tab, params, blogs, go }: Props) {
     onTag: (tag: string) => go({ tab: "explore", tag }, true),
   };
 
-  async function startSave(post: ImaglrPost, ready = setup) {
+  /** Runs `then` once there's a folder to save into: at once if there is, otherwise after one is chosen. */
+  async function withFolder(then: () => void) {
+    const s = setup ?? await setupLoad.current;
+    if (folderReady(s)) then();
+    else setAfterFolder(() => then);
+  }
+
+  async function startSave(post: ImaglrPost, chosen?: SaveSetup) {
+    const ready = chosen ?? setup ?? await setupLoad.current;
     if (!ready || !folderReady(ready)) {
       setPendingSave(post); // first save, or the folder can't take saves: choose one, then this post saves
       return;
@@ -263,13 +276,13 @@ export function Discover({ tab, params, blogs, go }: Props) {
       ) : null}
       {visited.has("likes") ? (
         <div hidden={tab !== "likes"}>
-          <LikesSync blogId={blogId} ready={folderReady(setup)} onNeedFolder={(then) => setAfterFolder(() => then)}
+          <LikesSync blogId={blogId} ready={folderReady(setup)} onNeedFolder={withFolder}
             onFinished={() => setLikesKey((k) => k + 1)} />
           <PostFeed key={likesKey} source="likes" {...handlers} />
         </div>
       ) : null}
       {tab === "collections" ? <Collections open={params.get("collection")} feed={handlers} ready={folderReady(setup)}
-        onNeedFolder={(then) => setAfterFolder(() => then)} /> : null}
+        onNeedFolder={withFolder} /> : null}
       {tab === "explore" ? (
         <Explore params={params} recent={recent} following={following} onSearch={search}>
           {creator ? <PostFeed source="creator" name={creator} {...handlers} />

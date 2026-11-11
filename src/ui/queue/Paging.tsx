@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Paging exactly as Stash's lists do it: a page-size dropdown in the toolbar (markup from
-// ui/v2.5/src/components/List/ListFilter.tsx) and, under the list, Stash's own PaginationIndex
-// ("1-40 of 120") and Pagination buttons, which Stash exposes to plugins.
+// ui/v2.5/src/components/List/ListFilter.tsx) and Stash's own Pagination buttons above and below the list, with
+// its PaginationIndex ("1-40 of 120") above, which Stash exposes to plugins.
 import React from "react";
 import { PAGE_SIZES } from "../lib/sort.ts";
 import { ConfirmDialog } from "../ConfirmDialog.tsx";
@@ -40,31 +40,48 @@ interface PagerProps {
   onChange: (page: number) => void;
 }
 
-/** Index line and page buttons under a list; Stash's components when loaded, plain buttons otherwise. */
-export function Pager({ page, perPage, total, onChange }: PagerProps) {
-  const { Pagination, PaginationIndex } = PluginApi.components;
-  const { Button, ButtonGroup } = PluginApi.libraries.Bootstrap;
-  const pages = Math.max(1, Math.ceil(total / perPage));
-  if (total === 0) return null;
-  if (Pagination && PaginationIndex) {
-    return (
-      <>
-        <PaginationIndex itemsPerPage={perPage} currentPage={page} totalItems={total} />
-        <Pagination itemsPerPage={perPage} currentPage={page} totalItems={total} onChangePage={onChange} />
-      </>
-    );
-  }
-  const first = (page - 1) * perPage + 1;
+/** Stash's own pager is in its list code, which v0.32 and later load only when one of Stash's lists is opened. */
+function useStashPager(): "loading" | "stash" | "plain" {
+  const { useLoadComponents } = PluginApi.hooks;
+  const [lists] = React.useState(() => PluginApi.loadableComponents?.Images ? [PluginApi.loadableComponents.Images] : null);
+  const loading: boolean = useLoadComponents && lists ? useLoadComponents(lists) : false; // the same call every render
+  if (loading) return "loading";
+  return PluginApi.components.Pagination && PluginApi.components.PaginationIndex ? "stash" : "plain";
+}
+
+/** Page buttons above and below a list, with the index line ("1-40 of 120") above, laid out as Stash's lists are
+ *  (ui/v2.5/src/components/List/ItemList.tsx): Stash's components, or plain buttons if they can't be loaded. */
+export function Paged({ page, perPage, total, onChange, children }: PagerProps & { children: React.ReactNode }) {
+  const pager = useStashPager();
+  const stash = pager === "stash";
+  if (total === 0) return <>{children}</>;
+  if (pager === "loading") return <><div className="pagination-index-container" />{children}</>;
   return (
     <>
-      <div className="text-center text-muted">{first}-{Math.min(page * perPage, total)} of {total}</div>
-      {pages > 1 ? (
-        <ButtonGroup className="pagination">
-          <Button variant="secondary" disabled={page <= 1} onClick={() => onChange(page - 1)}>‹</Button>
-          <Button variant="secondary" disabled>{page} / {pages}</Button>
-          <Button variant="secondary" disabled={page >= pages} onClick={() => onChange(page + 1)}>›</Button>
-        </ButtonGroup>
-      ) : null}
+      <div className="pagination-index-container">
+        <PageButtons stash={stash} page={page} perPage={perPage} total={total} onChange={onChange} />
+        {stash ? <PluginApi.components.PaginationIndex itemsPerPage={perPage} currentPage={page} totalItems={total} />
+          : <span className="filter-container text-muted paginationIndex center-text">{(page - 1) * perPage + 1}-{Math.min(page * perPage, total)} of {total}</span>}
+      </div>
+      {children}
+      <div className="pagination-footer-container">
+        <div className="pagination-footer">
+          <PageButtons stash={stash} page={page} perPage={perPage} total={total} onChange={onChange} />
+        </div>
+      </div>
     </>
   );
+}
+
+function PageButtons({ stash, page, perPage, total, onChange }: PagerProps & { stash: boolean }) {
+  const { Button, ButtonGroup } = PluginApi.libraries.Bootstrap;
+  if (stash) return <PluginApi.components.Pagination itemsPerPage={perPage} currentPage={page} totalItems={total} onChangePage={onChange} />;
+  const pages = Math.max(1, Math.ceil(total / perPage));
+  return pages > 1 ? (
+    <ButtonGroup className="pagination">
+      <Button variant="secondary" disabled={page <= 1} onClick={() => onChange(page - 1)}>‹</Button>
+      <Button variant="secondary" disabled>{page} / {pages}</Button>
+      <Button variant="secondary" disabled={page >= pages} onClick={() => onChange(page + 1)}>›</Button>
+    </ButtonGroup>
+  ) : null;
 }

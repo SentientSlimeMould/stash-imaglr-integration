@@ -196,6 +196,15 @@ Official image `stashapp/stash:v0.31.1` (checked from its layers):
 - `register.route(path, FC)`, `register.component`, `patch.before/instead/after`.
 - `components` and `loadableComponents`: call `hooks.useLoadComponents` before using lazy ones.
 - `hooks`: `useSpriteInfo`, `useToast`, `useLoadComponents`, …
+  - `Pagination` and `PaginationIndex` live in Stash's list code. From v0.32.0 they are in `components` only once
+    a Stash list has been opened, so load one first: `useLoadComponents([loadableComponents.Images])` (it keeps the
+    list it was first given, so calling it every render is safe). Stash lays a list out as
+    `div.pagination-index-container` (Pagination + PaginationIndex) above and
+    `div.pagination-footer-container > div.pagination-footer` (Pagination) below; the same markup gets its styles.
+  - `useLightbox(state)` returns `show({ images, initialIndex, showNavigation })`, with
+    `images: { id?, title?, paths: { image, thumbnail } }[]`. With an `id` it adds rating and O-counter controls for
+    that Stash image. Its footer always has a link to `/images/<id>` (`.Lightbox .image-link`), even without one.
+    `.Lightbox` has z-index 1040, under Bootstrap modals (1050): over a dialog it must be raised.
 - `utils`: `NavUtils`, `StashService.getClient()`.
 - `Event`: only `stash:location` is dispatched. Also check `window.location` at startup, because the first event can
   fire before plugins load.
@@ -252,6 +261,8 @@ Official image `stashapp/stash:v0.31.1` (checked from its layers):
 - Use router `Link`/`history` for navigation. Build API URLs from `<base href>`, never from `/`.
 
 **Mobile**
+- A second Bootstrap modal opened over another gets the same z-index (backdrop 1040, modal 1050), so the first
+  stays undimmed and looks live. The plugin's confirmations raise theirs (`ConfirmDialog`, `.imaglr-confirm`).
 - Bootstrap 4 breakpoints; Stash treats `max-width: 576px` as mobile and `pointer: coarse` as touch.
 - On phones the navbar is **fixed to the bottom** (48.75 px, body padded), so our bottom action bars must sit above it.
 - Toasts move to the bottom.

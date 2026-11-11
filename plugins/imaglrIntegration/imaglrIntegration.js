@@ -139,7 +139,7 @@
   // src/ui/ConfirmDialog.tsx
   function ConfirmDialog({ title, accept, variant = "primary", busy, disabled, onAccept, onCancel, children }) {
     const { Modal, Button } = PluginApi.libraries.Bootstrap;
-    return /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: () => void 0, keyboard: false }, /* @__PURE__ */ react_default.createElement(Modal.Header, null, /* @__PURE__ */ react_default.createElement(Modal.Title, null, title)), /* @__PURE__ */ react_default.createElement(Modal.Body, null, children), /* @__PURE__ */ react_default.createElement(Modal.Footer, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: onCancel, disabled: busy }, "Cancel"), /* @__PURE__ */ react_default.createElement(Button, { variant, onClick: onAccept, disabled: busy || disabled }, accept)));
+    return /* @__PURE__ */ react_default.createElement(Modal, { show: true, onHide: () => void 0, keyboard: false, className: "imaglr-confirm", backdropClassName: "imaglr-confirm-backdrop" }, /* @__PURE__ */ react_default.createElement(Modal.Header, null, /* @__PURE__ */ react_default.createElement(Modal.Title, null, title)), /* @__PURE__ */ react_default.createElement(Modal.Body, null, children), /* @__PURE__ */ react_default.createElement(Modal.Footer, null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: onCancel, disabled: busy }, "Cancel"), /* @__PURE__ */ react_default.createElement(Button, { variant, onClick: onAccept, disabled: busy || disabled }, accept)));
   }
 
   // src/ui/discover/ReblogDialog.tsx
@@ -656,6 +656,16 @@
     }
     return { inS: Math.round(a * 1e3) / 1e3, outS: Math.round(b * 1e3) / 1e3 };
   }
+  function stepFrame(t, fps, step) {
+    const frame = Math.max(0, Math.round(t * fps) + step);
+    return Math.floor(frame / fps * 1e3 + 1e-6) / 1e3;
+  }
+  function frameRateFromTimes(times) {
+    const gaps = times.slice(1).map((t, i) => t - times[i]).filter((g) => g > 1e-3);
+    if (gaps.length < 8) return null;
+    const fps = 1 / Math.min(...gaps);
+    return fps >= 1 && fps <= 240 ? Math.round(fps * 1e3) / 1e3 : null;
+  }
 
   // src/ui/lib/gif.ts
   var LONG_GIF_SECONDS = 15;
@@ -783,10 +793,11 @@
     const r = Math.round(seconds * 10) / 10;
     return r === 0 ? "\xB10 s" : `${r > 0 ? "+" : "\u2212"}${Math.abs(r).toFixed(1)} s`;
   }
-  function TimeRow({ label, value, disabled, onSet, onNudge, onType }) {
+  function TimeRow({ label, value, disabled, fps, onSet, onNudge, onFrame, onType }) {
     const { Button, Form } = PluginApi.libraries.Bootstrap;
-    const [text, setText] = react_default.useState(fmtTime(value));
-    react_default.useEffect(() => setText(fmtTime(value)), [value]);
+    const [text, setText] = react_default.useState(fmtTime(value, 2));
+    react_default.useEffect(() => setText(fmtTime(value, 2)), [value]);
+    const frameTitle = fps ? void 0 : "Play the video for a moment first, to find its frame rate";
     return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-time-row" }, /* @__PURE__ */ react_default.createElement(Form.Label, { className: "imaglr-time-label" }, label), /* @__PURE__ */ react_default.createElement(
       Form.Control,
       {
@@ -797,11 +808,11 @@
         onChange: (e) => setText(e.target.value),
         onBlur: () => {
           const t = parseTime(text);
-          if (t === null) setText(fmtTime(value));
+          if (t === null) setText(fmtTime(value, 2));
           else onType(t);
         }
       }
-    ), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-time-buttons" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onNudge(-1), "aria-label": `${label} back 1 second` }, "\u22121s"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onNudge(-0.1), "aria-label": `${label} back a tenth` }, "\u22120.1"), /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", disabled, onClick: onSet }, "Set here"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onNudge(0.1), "aria-label": `${label} forward a tenth` }, "+0.1"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onNudge(1), "aria-label": `${label} forward 1 second` }, "+1s")));
+    ), /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-time-buttons" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onNudge(-1), "aria-label": `${label} back 1 second` }, "\u22121s"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled: disabled || !fps, title: frameTitle, onClick: () => onFrame(-1), "aria-label": `${label} back 1 frame` }, "\u22121 frame"), /* @__PURE__ */ react_default.createElement(Button, { variant: "primary", disabled, onClick: onSet }, "Set here"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled: disabled || !fps, title: frameTitle, onClick: () => onFrame(1), "aria-label": `${label} forward 1 frame` }, "+1 frame"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onNudge(1), "aria-label": `${label} forward 1 second` }, "+1s")));
   }
   function formatHeader(v, estimate, edge) {
     if (v.format !== "video") {
@@ -860,6 +871,22 @@
     react_default.useEffect(() => {
       loadPlayback(sceneId, imageId).then(setPlayback, (e) => setError(e.message));
     }, [sceneId, imageId]);
+    const [measuredFps, setMeasuredFps] = react_default.useState(null);
+    const fps = sourceFps && sourceFps > 0 ? sourceFps : measuredFps;
+    react_default.useEffect(() => {
+      const v = video.current;
+      if (fps || !v || !v.requestVideoFrameCallback || !v.cancelVideoFrameCallback) return;
+      const times = [];
+      let handle = 0;
+      const seen = (_now, meta) => {
+        times.push(meta.mediaTime);
+        const found2 = frameRateFromTimes(times.slice(-30));
+        if (found2) setMeasuredFps(found2);
+        else handle = v.requestVideoFrameCallback(seen);
+      };
+      handle = v.requestVideoFrameCallback(seen);
+      return () => v.cancelVideoFrameCallback(handle);
+    }, [fps, playback]);
     react_default.useEffect(() => {
       const onResize = () => measure();
       window.addEventListener("resize", onResize);
@@ -877,9 +904,29 @@
       onChange({ ...value, inS: t.inS, outS: t.outS });
       if (video.current) video.current.currentTime = moved === "in" ? t.inS : Math.max(t.inS, t.outS - 1);
     }
+    function trimFrame(moved, step) {
+      if (!fps) return;
+      const t = clampTrim(
+        moved === "in" ? stepFrame(value.inS, fps, step) : value.inS,
+        moved === "out" ? stepFrame(value.outS, fps, step) : value.outS,
+        duration,
+        moved
+      );
+      onChange({ ...value, inS: t.inS, outS: t.outS });
+      const v = video.current;
+      if (v) {
+        v.pause();
+        v.currentTime = moved === "in" ? t.inS + 0.5 / fps : Math.max(t.inS, t.outS - 0.5 / fps);
+      }
+    }
+    const previewShown = !!gifPreview && showGif;
+    react_default.useEffect(() => {
+      if (previewShown) video.current?.pause();
+    }, [previewShown]);
     function playClip() {
       const v = video.current;
       if (!v) return;
+      setShowGif(false);
       v.currentTime = value.inS;
       setLooping(true);
       v.play().catch(() => void 0);
@@ -915,7 +962,7 @@
     const estimate = videoEstimate(value.outS - value.inS, value.codec, outputEdge(sourceEdge, value.maxEdge), value.mute);
     const header = formatHeader(value, estimate, outputEdge(sourceEdge, value.maxEdge));
     const rect = overlayRect(size.w, size.h, size.vw, size.vh, value.crop.aspect, value.crop.position, value.crop.edges);
-    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-clip" }, error ? /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-danger" }, "Can't play this video: ", error) : null, /* @__PURE__ */ react_default.createElement("div", { ref: box, className: "imaglr-preview imaglr-video" }, gifPreview && showGif ? /* @__PURE__ */ react_default.createElement("img", { className: "imaglr-gif-preview", src: baseUrl() + gifPreview.url, alt: "The GIF as it will be sent" }) : null, playback ? /* @__PURE__ */ react_default.createElement(
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-clip" }, error ? /* @__PURE__ */ react_default.createElement("div", { className: "alert alert-danger" }, "Can't play this video: ", error) : null, /* @__PURE__ */ react_default.createElement("div", { ref: box, className: "imaglr-preview imaglr-video" }, previewShown ? /* @__PURE__ */ react_default.createElement("img", { className: "imaglr-gif-preview", src: baseUrl() + gifPreview.url, alt: "The GIF as it will be sent" }) : null, playback ? /* @__PURE__ */ react_default.createElement(
       "video",
       {
         ref: video,
@@ -925,7 +972,7 @@
         controls: true,
         preload: "metadata",
         muted: value.mute,
-        style: gifPreview && showGif ? { display: "none" } : void 0,
+        style: previewShown ? { display: "none" } : void 0,
         onLoadedMetadata: () => {
           if (video.current) video.current.currentTime = value.inS;
           measure();
@@ -936,14 +983,16 @@
         },
         onPause: () => setLooping(false)
       }
-    ) : null, rect.cropped && !(gifPreview && showGif) ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-crop", style: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } }) : null), value.format !== "video" ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-gif-bar" }, gifPreview ? /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted" }, "This is the ", FORMAT_LABELS[value.format], " that will be sent: ", gifPreview.note) : /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted" }, "Make the ", FORMAT_LABELS[value.format], " now to see exactly what will be sent."), /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-clip-actions" }, gifPreview ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setShowGif(!showGif) }, showGif ? "Show video" : `Show ${FORMAT_LABELS[value.format]}`) : null, /* @__PURE__ */ react_default.createElement(Button, { variant: gifPreview ? "secondary" : "primary", disabled: disabled || makingGif, onClick: onPreviewGif }, makingGif ? `Making the ${FORMAT_LABELS[value.format]}\u2026` : gifPreview ? "Make it again" : `Preview ${FORMAT_LABELS[value.format]}`))) : null, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-clip-summary" }, /* @__PURE__ */ react_default.createElement("span", null, fmtTime(value.inS), " \u2192 ", fmtTime(value.outS), " \xB7 ", /* @__PURE__ */ react_default.createElement("strong", null, (value.outS - value.inS).toFixed(1), " s")), /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-clip-actions" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: playClip }, "Play clip"), value.format !== "video" ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => playJoin() }, "Play the join") : null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onSaveStill(now()) }, "Save still"))), /* @__PURE__ */ react_default.createElement(
+    ) : null, rect.cropped && !previewShown ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-crop", style: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } }) : null), value.format !== "video" ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-gif-bar" }, gifPreview ? /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted" }, "This is the ", FORMAT_LABELS[value.format], " that will be sent: ", gifPreview.note) : /* @__PURE__ */ react_default.createElement("span", { className: "small text-muted" }, "Make the ", FORMAT_LABELS[value.format], " now to see exactly what will be sent."), /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-clip-actions" }, gifPreview ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => setShowGif(!showGif) }, showGif ? "Show video" : `Show ${FORMAT_LABELS[value.format]}`) : null, /* @__PURE__ */ react_default.createElement(Button, { variant: gifPreview ? "secondary" : "primary", disabled: disabled || makingGif, onClick: onPreviewGif }, makingGif ? `Making the ${FORMAT_LABELS[value.format]}\u2026` : gifPreview ? "Make it again" : `Preview ${FORMAT_LABELS[value.format]}`))) : null, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-clip-summary" }, /* @__PURE__ */ react_default.createElement("span", null, fmtTime(value.inS, 2), " \u2192 ", fmtTime(value.outS, 2), " \xB7 ", /* @__PURE__ */ react_default.createElement("strong", null, (value.outS - value.inS).toFixed(2), " s")), /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-clip-actions" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: playClip }, "Play clip"), value.format !== "video" ? /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", onClick: () => playJoin() }, "Play the join") : null, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled, onClick: () => onSaveStill(now()) }, "Save still"))), /* @__PURE__ */ react_default.createElement(
       TimeRow,
       {
         label: "In",
         value: value.inS,
         disabled,
+        fps,
         onSet: () => trim(now(), value.outS, "in"),
         onNudge: (d) => trim(value.inS + d, value.outS, "in"),
+        onFrame: (step) => trimFrame("in", step),
         onType: (t) => trim(t, value.outS, "in")
       }
     ), /* @__PURE__ */ react_default.createElement(
@@ -952,8 +1001,10 @@
         label: "Out",
         value: value.outS,
         disabled,
+        fps,
         onSet: () => trim(value.inS, now(), "out"),
         onNudge: (d) => trim(value.inS, value.outS + d, "out"),
+        onFrame: (step) => trimFrame("out", step),
         onType: (t) => trim(value.inS, t, "out")
       }
     ), /* @__PURE__ */ react_default.createElement(
@@ -1086,7 +1137,7 @@
     multiValueRemove: (base, state) => ({ ...base, color: state.isFocused ? base.color : "#333333" })
   };
   var toOption = (tag) => ({ value: tag, label: tag });
-  function TagInput({ tags, extra = [], lowercase, disabled, inputId, placeholder, onChange, onMessage }) {
+  function TagInput({ tags, extra = [], lowercase, disabled, inputId, placeholder, clearable = true, onChange, onMessage }) {
     const Select = PluginApi.libraries.ReactSelect.default;
     const [input, setInput] = react_default.useState("");
     const [found, setFound] = react_default.useState([]);
@@ -1128,7 +1179,7 @@
         className: "react-select tag-select imaglr-tag-select",
         classNamePrefix: "react-select",
         isMulti: true,
-        isClearable: true,
+        isClearable: clearable,
         isDisabled: disabled,
         closeMenuOnSelect: false,
         value: tags.map(toOption),
@@ -1153,7 +1204,17 @@
     const { Button } = PluginApi.libraries.Bootstrap;
     const [message, setMessage] = react_default.useState(null);
     const spare = spareSuggestions(suggestions, tags);
-    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags-header" }, /* @__PURE__ */ react_default.createElement("label", { htmlFor: "imaglr-tag-field" }, /* @__PURE__ */ react_default.createElement("strong", null, "imaglr tags")), /* @__PURE__ */ react_default.createElement("span", { className: tags.length >= MAX_TAGS ? "text-warning" : "text-muted" }, tags.length, " / ", MAX_TAGS)), auto === void 0 ? null : auto ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mb-1" }, "From the Stash tags and your tag rules; they keep up with changes until you edit them.") : /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mb-1" }, "Edited by you.", " ", onReset ? /* @__PURE__ */ react_default.createElement(Button, { variant: "link", size: "sm", className: "p-0 align-baseline imaglr-touch", disabled, onClick: onReset }, "Use the suggested tags again") : null), /* @__PURE__ */ react_default.createElement(
+    return /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags" }, /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-tags-header" }, /* @__PURE__ */ react_default.createElement("label", { htmlFor: "imaglr-tag-field" }, /* @__PURE__ */ react_default.createElement("strong", null, "imaglr tags")), /* @__PURE__ */ react_default.createElement("span", null, tags.length ? /* @__PURE__ */ react_default.createElement(
+      Button,
+      {
+        variant: "link",
+        size: "sm",
+        className: "p-0 mr-2 align-baseline imaglr-touch",
+        disabled,
+        onClick: () => onChange([])
+      },
+      "Clear all"
+    ) : null, /* @__PURE__ */ react_default.createElement("span", { className: tags.length >= MAX_TAGS ? "text-warning" : "text-muted" }, tags.length, " / ", MAX_TAGS))), auto === void 0 ? null : auto ? /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mb-1" }, "From the Stash tags and your tag rules; they keep up with changes until you edit them.") : /* @__PURE__ */ react_default.createElement("div", { className: "small text-muted mb-1" }, "Edited by you.", " ", onReset ? /* @__PURE__ */ react_default.createElement(Button, { variant: "link", size: "sm", className: "p-0 align-baseline imaglr-touch", disabled, onClick: onReset }, "Use the suggested tags again") : null), /* @__PURE__ */ react_default.createElement(
       TagInput,
       {
         inputId: "imaglr-tag-field",
@@ -1161,6 +1222,7 @@
         extra: spare.addable,
         lowercase,
         disabled,
+        clearable: false,
         onChange,
         onMessage: setMessage
       }
@@ -1192,20 +1254,21 @@
     const src = file.image ?? file.thumb;
     return /* @__PURE__ */ react_default.createElement("div", { ref: box, className: "imaglr-preview" }, src ? /* @__PURE__ */ react_default.createElement("img", { src: baseUrl() + src, alt: "", onLoad: (e) => measure(e.currentTarget) }) : null, rect.cropped ? /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-crop", style: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } }) : null);
   }
-  function FileStrip({ files, disabled, onArrange }) {
-    const { Link } = PluginApi.libraries.ReactRouterDOM;
+  function FileStrip({ files, disabled, onArrange, onView }) {
     const ids = files.map((f) => f.id);
     const move = (from, to) => {
       const next = [...ids];
       next.splice(to, 0, next.splice(from, 1)[0]);
       onArrange(next);
     };
-    return /* @__PURE__ */ react_default.createElement("ol", { className: "imaglr-strip" }, files.map((f, n) => /* @__PURE__ */ react_default.createElement("li", { key: f.id, className: "imaglr-strip-item", title: f.title }, stashLink(f) ? /* @__PURE__ */ react_default.createElement(Link, { to: stashLink(f), title: `${f.title} in Stash` }, f.thumb ? /* @__PURE__ */ react_default.createElement("img", { src: baseUrl() + f.thumb, alt: "" }) : null) : f.thumb ? /* @__PURE__ */ react_default.createElement("img", { src: baseUrl() + f.thumb, alt: "" }) : null, /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-strip-number" }, n + 1), disabled ? null : /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-strip-actions" }, /* @__PURE__ */ react_default.createElement("button", { type: "button", "aria-label": "Move earlier", disabled: n === 0, onClick: () => move(n, n - 1) }, "\u25C0"), /* @__PURE__ */ react_default.createElement("button", { type: "button", "aria-label": "Remove from this post", onClick: () => onArrange(ids.filter((i) => i !== f.id)) }, "\xD7"), /* @__PURE__ */ react_default.createElement("button", { type: "button", "aria-label": "Move later", disabled: n === files.length - 1, onClick: () => move(n, n + 1) }, "\u25B6")))));
+    return /* @__PURE__ */ react_default.createElement("ol", { className: "imaglr-strip" }, files.map((f, n) => /* @__PURE__ */ react_default.createElement("li", { key: f.id, className: "imaglr-strip-item", title: f.title }, f.thumb ?? f.image ? /* @__PURE__ */ react_default.createElement("button", { type: "button", className: "imaglr-strip-view", "aria-label": `View ${f.title}`, onClick: () => onView(n) }, /* @__PURE__ */ react_default.createElement("img", { src: baseUrl() + (f.thumb ?? f.image), alt: "" })) : null, /* @__PURE__ */ react_default.createElement("span", { className: "imaglr-strip-number" }, n + 1), disabled ? null : /* @__PURE__ */ react_default.createElement("div", { className: "imaglr-strip-actions" }, /* @__PURE__ */ react_default.createElement("button", { type: "button", "aria-label": "Move earlier", disabled: n === 0, onClick: () => move(n, n - 1) }, "\u25C0"), /* @__PURE__ */ react_default.createElement("button", { type: "button", "aria-label": "Remove from this post", onClick: () => onArrange(ids.filter((i) => i !== f.id)) }, "\xD7"), /* @__PURE__ */ react_default.createElement("button", { type: "button", "aria-label": "Move later", disabled: n === files.length - 1, onClick: () => move(n, n + 1) }, "\u25B6")))));
   }
   function Editor({ itemId, onClose }) {
     const { Modal, Button, Form, ButtonGroup, Alert, ProgressBar } = PluginApi.libraries.Bootstrap;
     const { Link } = PluginApi.libraries.ReactRouterDOM;
     const Toast = PluginApi.hooks.useToast();
+    const history = PluginApi.libraries.ReactRouterDOM.useHistory();
+    const showLightbox = PluginApi.hooks.useLightbox({});
     const [detail, setDetail] = react_default.useState(null);
     const [tags, setTags] = react_default.useState([]);
     const [caption, setCaption] = react_default.useState("");
@@ -1217,6 +1280,7 @@
     const [action, setAction] = react_default.useState(null);
     const [confirmPublish, setConfirmPublish] = react_default.useState(false);
     const [confirmRemove, setConfirmRemove] = react_default.useState(false);
+    const [confirmLeave, setConfirmLeave] = react_default.useState(null);
     const [confirmReblog, setConfirmReblog] = react_default.useState(false);
     const [tagsAuto, setTagsAuto] = react_default.useState(true);
     const [resetTags, setResetTags] = react_default.useState(false);
@@ -1401,7 +1465,19 @@
     }
     const kindLabel = item.kind === "set" ? "Files" : item.kind === "clip" ? "Clip" : item.kind === "still" ? "Still" : "Image";
     const sourceLink = item.kind === "set" ? null : stashLink(files[0] ?? {});
-    const itemName = item.kind === "set" ? `${files.length} files in one post` : sourceLink ? /* @__PURE__ */ react_default.createElement(Link, { to: sourceLink, title: item.kind === "clip" ? "Open the scene in Stash at this clip (its marker is on the Markers tab)" : "Open in Stash" }, item.source_title) : item.source_title;
+    const itemName = item.kind === "set" ? `${files.length} files in one post` : sourceLink ? /* @__PURE__ */ react_default.createElement(
+      Link,
+      {
+        to: sourceLink,
+        title: item.kind === "clip" ? "Open the scene in Stash at this clip (its marker is on the Markers tab)" : "Open in Stash",
+        onClick: (e) => {
+          if (!dirty) return;
+          e.preventDefault();
+          setConfirmLeave(sourceLink);
+        }
+      },
+      item.source_title
+    ) : item.source_title;
     return (
       // Like Stash's own dialogs (ModalComponent): clicking outside or pressing Escape does nothing;
       // leave with Cancel or the send button.
@@ -1424,7 +1500,13 @@
           },
           onSaveStill: saveStill
         }
-      ) : single ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(CropPreview, { file: files[0], crop }), /* @__PURE__ */ react_default.createElement(CropControls, { crop, disabled: locked, itemId: item.id, onChange: edit(setCrop) })) : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("p", { className: "text-muted mb-1" }, "Files in this post, in order:"), /* @__PURE__ */ react_default.createElement(FileStrip, { files, disabled: locked, onArrange: arrange }), locked ? null : /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0 mb-2 imaglr-touch", onClick: () => arrange([]) }, "Split into separate posts")), /* @__PURE__ */ react_default.createElement(
+      ) : single ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(CropPreview, { file: files[0], crop }), /* @__PURE__ */ react_default.createElement(CropControls, { crop, disabled: locked, itemId: item.id, onChange: edit(setCrop) })) : /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("p", { className: "text-muted mb-1" }, "Files in this post, in order:"), /* @__PURE__ */ react_default.createElement(FileStrip, { files, disabled: locked, onArrange: arrange, onView: (n) => showLightbox({
+        // Stash's own lightbox. Only the pictures, no Stash ids: its rating, O-counter and image link would
+        // act on Stash or leave the editor.
+        images: files.map((f) => ({ paths: { image: baseUrl() + (f.image ?? f.thumb ?? ""), thumbnail: baseUrl() + (f.thumb ?? f.image ?? "") } })),
+        initialIndex: n,
+        showNavigation: false
+      }) }), locked ? null : /* @__PURE__ */ react_default.createElement(Button, { variant: "link", className: "p-0 mb-2 imaglr-touch", onClick: () => arrange([]) }, "Split into separate posts")), /* @__PURE__ */ react_default.createElement(
         TagField,
         {
           tags,
@@ -1501,6 +1583,18 @@
         "The original post appears on ",
         blog.label,
         " straight away, with your caption and tags, and this comes off the page."
+      ) : null, confirmLeave ? /* @__PURE__ */ react_default.createElement(
+        ConfirmDialog,
+        {
+          title: "Leave without saving?",
+          accept: "Leave",
+          variant: "danger",
+          onAccept: () => history.push(confirmLeave),
+          onCancel: () => setConfirmLeave(null)
+        },
+        "This opens ",
+        item.kind === "clip" ? "the scene" : "the picture",
+        " in Stash, and the changes you've made here are lost. Save first to keep them."
       ) : null, confirmRemove ? /* @__PURE__ */ react_default.createElement(
         ConfirmDialog,
         {
@@ -1826,16 +1920,25 @@
       )
     ) : null);
   }
-  function Pager({ page, perPage, total, onChange }) {
-    const { Pagination, PaginationIndex } = PluginApi.components;
+  function useStashPager() {
+    const { useLoadComponents } = PluginApi.hooks;
+    const [lists] = react_default.useState(() => PluginApi.loadableComponents?.Images ? [PluginApi.loadableComponents.Images] : null);
+    const loading = useLoadComponents && lists ? useLoadComponents(lists) : false;
+    if (loading) return "loading";
+    return PluginApi.components.Pagination && PluginApi.components.PaginationIndex ? "stash" : "plain";
+  }
+  function Paged({ page, perPage, total, onChange, children }) {
+    const pager = useStashPager();
+    const stash = pager === "stash";
+    if (total === 0) return /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, children);
+    if (pager === "loading") return /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("div", { className: "pagination-index-container" }), children);
+    return /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("div", { className: "pagination-index-container" }, /* @__PURE__ */ react_default.createElement(PageButtons, { stash, page, perPage, total, onChange }), stash ? /* @__PURE__ */ react_default.createElement(PluginApi.components.PaginationIndex, { itemsPerPage: perPage, currentPage: page, totalItems: total }) : /* @__PURE__ */ react_default.createElement("span", { className: "filter-container text-muted paginationIndex center-text" }, (page - 1) * perPage + 1, "-", Math.min(page * perPage, total), " of ", total)), children, /* @__PURE__ */ react_default.createElement("div", { className: "pagination-footer-container" }, /* @__PURE__ */ react_default.createElement("div", { className: "pagination-footer" }, /* @__PURE__ */ react_default.createElement(PageButtons, { stash, page, perPage, total, onChange }))));
+  }
+  function PageButtons({ stash, page, perPage, total, onChange }) {
     const { Button, ButtonGroup } = PluginApi.libraries.Bootstrap;
+    if (stash) return /* @__PURE__ */ react_default.createElement(PluginApi.components.Pagination, { itemsPerPage: perPage, currentPage: page, totalItems: total, onChangePage: onChange });
     const pages = Math.max(1, Math.ceil(total / perPage));
-    if (total === 0) return null;
-    if (Pagination && PaginationIndex) {
-      return /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement(PaginationIndex, { itemsPerPage: perPage, currentPage: page, totalItems: total }), /* @__PURE__ */ react_default.createElement(Pagination, { itemsPerPage: perPage, currentPage: page, totalItems: total, onChangePage: onChange }));
-    }
-    const first = (page - 1) * perPage + 1;
-    return /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("div", { className: "text-center text-muted" }, first, "-", Math.min(page * perPage, total), " of ", total), pages > 1 ? /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "pagination" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled: page <= 1, onClick: () => onChange(page - 1) }, "\u2039"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled: true }, page, " / ", pages), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled: page >= pages, onClick: () => onChange(page + 1) }, "\u203A")) : null);
+    return pages > 1 ? /* @__PURE__ */ react_default.createElement(ButtonGroup, { className: "pagination" }, /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled: page <= 1, onClick: () => onChange(page - 1) }, "\u2039"), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled: true }, page, " / ", pages), /* @__PURE__ */ react_default.createElement(Button, { variant: "secondary", disabled: page >= pages, onClick: () => onChange(page + 1) }, "\u203A")) : null;
   }
 
   // src/ui/lib/sendAll.ts
@@ -2267,8 +2370,8 @@
         onRefresh: load2,
         onSendAll: matching.length ? () => setSendAll(selected.size ? [...selected] : matching.map((c) => c.id)) : void 0
       }
-    ), body, matching.length ? /* @__PURE__ */ react_default.createElement(
-      Pager,
+    ), /* @__PURE__ */ react_default.createElement(
+      Paged,
       {
         page: paged.page,
         perPage: controls.perPage,
@@ -2277,8 +2380,9 @@
           setPage(p);
           window.scrollTo({ top: 0 });
         }
-      }
-    ) : null, sendAll ? /* @__PURE__ */ react_default.createElement(SendAllDialog, { itemIds: sendAll, selected: selected.size > 0, onClose: (sent) => {
+      },
+      body
+    ), sendAll ? /* @__PURE__ */ react_default.createElement(SendAllDialog, { itemIds: sendAll, selected: selected.size > 0, onClose: (sent) => {
       setSendAll(null);
       if (sent) {
         setSelected(/* @__PURE__ */ new Set());
@@ -2443,18 +2547,19 @@
         onChange: updateControls,
         onRefresh: () => void load2()
       }
-    ), body, data && data.total > 0 ? /* @__PURE__ */ react_default.createElement(
-      Pager,
+    ), /* @__PURE__ */ react_default.createElement(
+      Paged,
       {
-        page: data.page,
+        page: data?.page ?? 1,
         perPage: controls.perPage,
-        total: data.total,
+        total: data?.total ?? 0,
         onChange: (p) => {
           setPage(p);
           window.scrollTo({ top: 0 });
         }
-      }
-    ) : null, openId ? /* @__PURE__ */ react_default.createElement(
+      },
+      body
+    ), openId ? /* @__PURE__ */ react_default.createElement(
       SentDialog,
       {
         itemId: openId,
@@ -3523,9 +3628,11 @@
     const [recent, setRecent] = react_default.useState(storedSearches);
     const [following, setFollowing] = react_default.useState([]);
     const [autoplay, setAutoplay] = react_default.useState(false);
+    const setupLoad = react_default.useRef(null);
+    if (!setupLoad.current) setupLoad.current = runOperation("save_setup").catch(() => null);
     react_default.useEffect(() => setVisited((v) => v.has(tab) ? v : new Set(v).add(tab)), [tab]);
     react_default.useEffect(() => {
-      runOperation("save_setup").then(setSetup, () => setSetup(null));
+      void setupLoad.current.then(setSetup);
     }, []);
     react_default.useEffect(() => {
       if (!blogId) return;
@@ -3544,7 +3651,13 @@
       onCreator: (name) => name && go({ tab: "explore", creator: name }, true),
       onTag: (tag2) => go({ tab: "explore", tag: tag2 }, true)
     };
-    async function startSave(post, ready = setup) {
+    async function withFolder(then) {
+      const s = setup ?? await setupLoad.current;
+      if (folderReady(s)) then();
+      else setAfterFolder(() => then);
+    }
+    async function startSave(post, chosen) {
+      const ready = chosen ?? setup ?? await setupLoad.current;
       if (!ready || !folderReady(ready)) {
         setPendingSave(post);
         return;
@@ -3610,7 +3723,7 @@
       {
         blogId,
         ready: folderReady(setup),
-        onNeedFolder: (then) => setAfterFolder(() => then),
+        onNeedFolder: withFolder,
         onFinished: () => setLikesKey((k) => k + 1)
       }
     ), /* @__PURE__ */ react_default.createElement(PostFeed, { key: likesKey, source: "likes", ...handlers })) : null, tab === "collections" ? /* @__PURE__ */ react_default.createElement(
@@ -3619,7 +3732,7 @@
         open: params.get("collection"),
         feed: handlers,
         ready: folderReady(setup),
-        onNeedFolder: (then) => setAfterFolder(() => then)
+        onNeedFolder: withFolder
       }
     ) : null, tab === "explore" ? /* @__PURE__ */ react_default.createElement(Explore, { params, recent, following, onSearch: search }, creator ? /* @__PURE__ */ react_default.createElement(PostFeed, { source: "creator", name: creator, ...handlers }) : tag ? /* @__PURE__ */ react_default.createElement(react_default.Fragment, null, /* @__PURE__ */ react_default.createElement("h4", { className: "imaglr-explore-title" }, "#", tag), /* @__PURE__ */ react_default.createElement(PostFeed, { source: "tag", tag, ...handlers })) : postId ? /* @__PURE__ */ react_default.createElement(SinglePost, { id: postId, ...handlers }) : /* @__PURE__ */ react_default.createElement("p", { className: "text-muted" }, "Find posts by tag, see everything a creator has posted, or paste a link to a post to save it.")) : null, pendingSave && setup ? /* @__PURE__ */ react_default.createElement(SaveFolderDialog, { setup, onCancel: () => setPendingSave(null), onDone: (s) => {
       setSetup(s);

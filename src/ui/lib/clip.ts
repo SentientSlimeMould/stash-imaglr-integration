@@ -57,3 +57,21 @@ export function clampTrim(inS: number, outS: number, duration: number | null, mo
   }
   return { inS: Math.round(a * 1000) / 1000, outS: Math.round(b * 1000) / 1000 };
 }
+
+/** The time one frame on from `t` (step 1) or back (step -1), on the video's frame grid: the start of that frame,
+ *  to the millisecond and rounded down, so the trim (ffmpeg's -ss, which starts at the first frame at or after the
+ *  time) begins on that frame and never the next. */
+export function stepFrame(t: number, fps: number, step: 1 | -1): number {
+  const frame = Math.max(0, Math.round(t * fps) + step);
+  return Math.floor((frame / fps) * 1000 + 1e-6) / 1000;
+}
+
+/** A video's frame rate from the media times of frames the browser presented in a row (requestVideoFrameCallback):
+ *  the shortest gap between two of them is one frame (longer ones are frames the screen skipped). Null until there
+ *  are enough to tell. */
+export function frameRateFromTimes(times: number[]): number | null {
+  const gaps = times.slice(1).map((t, i) => t - times[i]).filter((g) => g > 0.001);
+  if (gaps.length < 8) return null;
+  const fps = 1 / Math.min(...gaps);
+  return fps >= 1 && fps <= 240 ? Math.round(fps * 1000) / 1000 : null;
+}

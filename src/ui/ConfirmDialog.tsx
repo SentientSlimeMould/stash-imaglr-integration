@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // A confirmation like Stash's own (ModalComponent, as its delete dialogs use it): a small modal with a
-// title, the question, Cancel and one accept button. Replaces the browser's confirm() popup.
+// title, the question, Cancel and one accept button. Replaces the browser's confirm() popup. It often opens over
+// another dialog (the editor), which Bootstrap leaves undimmed: its own backdrop and position put it in front of
+// everything, and on phones it sits mid-screen so it can't be missed (styles.css, "Confirmations").
 import React from "react";
 
 interface Props {
@@ -17,7 +19,7 @@ interface Props {
 export function ConfirmDialog({ title, accept, variant = "primary", busy, disabled, onAccept, onCancel, children }: Props) {
   const { Modal, Button } = PluginApi.libraries.Bootstrap;
   return (
-    <Modal show onHide={() => undefined} keyboard={false}>
+    <Modal show onHide={() => undefined} keyboard={false} className="imaglr-confirm" backdropClassName="imaglr-confirm-backdrop">
       <Modal.Header>
         <Modal.Title>{title}</Modal.Title>
       </Modal.Header>
